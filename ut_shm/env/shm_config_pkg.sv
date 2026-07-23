@@ -16,9 +16,6 @@ package shm_config_pkg;
     parameter VEC_BYTE_N      = (VEC_W / 8);
     parameter VLM_DATA_BIT_W  = 256                   ;
     parameter VLM_DATA_BYTE_W = (VLM_DATA_BIT_W / 8)   ;
-    parameter VLM_SUPER_BANK_N = 4;
-    parameter VLM_RESERVATION_WRITE_PORT_N = 2;
-
-    // Deprecated compatibility alias. New code must use VLM_SUPER_BANK_N.
-    parameter VLM_SUB_BANK_N = VLM_SUPER_BANK_N;
+    parameter VLM_SUB_BANK_N  = 4;
+    parameter WRITE_PORT_N    = 2;
 endpackage
