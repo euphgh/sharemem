@@ -96,33 +96,6 @@ class vlm_reservation_scheduler extends uvm_component;
       vlm_busy_table_t            busy);
 
   //------------------------------------------------------------------------------
-  // @brief Returns the current external busy table for one direction.
-  //
-  // @param direction Read or write table to query.
-  // @return A copy of the selected external busy table.
-  //------------------------------------------------------------------------------
-  extern function vlm_busy_table_t get_external_busy(
-      vlm_reservation_direction_e direction);
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the current DUT-owned SHM busy table for one direction.
-  //
-  // @param direction Read or write table to query.
-  // @return A copy of the selected SHM busy table.
-  //------------------------------------------------------------------------------
-  extern function vlm_busy_table_t get_shm_busy(
-      vlm_reservation_direction_e direction);
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the final busy table for one reservation direction.
-  //
-  // @param direction Read or write table to query.
-  // @return A copy of external_busy OR shm_busy for the selected direction.
-  //------------------------------------------------------------------------------
-  extern function vlm_busy_table_t get_final_busy(
-      vlm_reservation_direction_e direction);
-
-  //------------------------------------------------------------------------------
   // @brief Reports whether one slot is occupied by an external source.
   //
   // @param direction Read or write table to query.
@@ -147,41 +120,6 @@ class vlm_reservation_scheduler extends uvm_component;
       vlm_reservation_direction_e direction,
       int unsigned                delay,
       int unsigned                sub_bank);
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the number of DUT records stored in one scheduler slot.
-  //
-  // @param direction Read or write table to query.
-  // @param delay     Relative delay index in the current scheduler window.
-  // @param sub_bank  Sub-bank index in the range zero through three.
-  // @return Number of records sharing the selected SHM slot.
-  //------------------------------------------------------------------------------
-  extern function int unsigned get_shm_record_count(
-      vlm_reservation_direction_e direction,
-      int unsigned                delay,
-      int unsigned                sub_bank);
-
-  //------------------------------------------------------------------------------
-  // @brief Copies all DUT records stored in one scheduler slot.
-  //
-  // @param direction Read or write table to query.
-  // @param delay     Relative delay index in the current scheduler window.
-  // @param sub_bank  Sub-bank index in the range zero through three.
-  // @param records   Output queue receiving a copy of the selected records.
-  // @post records is empty when the selected slot has no accepted reservation.
-  //------------------------------------------------------------------------------
-  extern function void get_shm_records(
-      vlm_reservation_direction_e direction,
-      int unsigned                delay,
-      int unsigned                sub_bank,
-      output vlm_shm_record_queue_t records);
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the cycle of the most recently processed transaction.
-  //
-  // @return Last transaction cycle copied from the shared clk_if snapshot.
-  //------------------------------------------------------------------------------
-  extern function longint unsigned get_current_cycle();
 
   `uvm_component_utils(vlm_reservation_scheduler)
 

@@ -107,43 +107,95 @@ class vlm_reservation_agent extends uvm_agent;
   //------------------------------------------------------------------------------
   extern function void set_config(vlm_reservation_agent_config cfg);
 
-  //------------------------------------------------------------------------------
-  // @brief Returns the configuration currently owned by this agent.
-  //
-  // @return Shared agent configuration handle, or null before configuration.
-  //------------------------------------------------------------------------------
-  extern function vlm_reservation_agent_config get_config();
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the monitor created by this agent.
-  //
-  // @return Monitor handle, or null before child construction completes.
-  //------------------------------------------------------------------------------
-  extern function vlm_reservation_monitor get_monitor();
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the scheduler created by this agent.
-  //
-  // @return Scheduler handle, or null before child construction completes.
-  //------------------------------------------------------------------------------
-  extern function vlm_reservation_scheduler get_scheduler();
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the checker created by this agent.
-  //
-  // @return Checker handle, or null when checker_enable is clear.
-  //------------------------------------------------------------------------------
-  extern function vlm_reservation_checker get_checker();
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the coverage collector created by this agent.
-  //
-  // @return Coverage handle, or null when coverage_enable is clear.
-  //------------------------------------------------------------------------------
-  extern function vlm_reservation_coverage get_coverage();
-
   `uvm_component_utils(vlm_reservation_agent)
 
 endclass : vlm_reservation_agent
+
+//------------------------------------------------------------------------------
+// vlm_reservation_agent method implementations
+//------------------------------------------------------------------------------
+
+function void vlm_reservation_agent::process_cycle(
+    const ref vlm_reservation_cycle_transaction_t transaction);
+  current_transaction        = transaction;
+  current_cycle_check_passed = 1'b1;
+
+  if (scheduler == null) begin
+    `uvm_fatal(
+        "VLM_RESERVATION_NO_SCHEDULER",
+        "process_cycle() requires a constructed reservation scheduler")
+    return;
+  end
+
+  if (reservation_checker != null) begin
+    current_cycle_check_passed =
+        reservation_checker.check_cycle(current_transaction);
+  end
+
+  scheduler.process_cycle(current_transaction);
+
+  if (coverage != null) begin
+    coverage.sample_cycle(
+        current_transaction,
+        current_cycle_check_passed);
+  end
+endfunction : process_cycle
+
+task vlm_reservation_agent::drive_busy();
+  if (cfg == null) begin
+    `uvm_fatal(
+        "VLM_RESERVATION_NO_CFG",
+        "drive_busy() requires a valid agent configuration")
+    return;
+  end
+
+  if (cfg.is_active == UVM_PASSIVE) begin
+    return;
+  end
+
+  if (reservation_vif == null) begin
+    `uvm_fatal(
+        "VLM_RESERVATION_NO_VIF",
+        "active drive_busy() requires reservation_vif")
+    return;
+  end
+
+  if (scheduler == null) begin
+    `uvm_fatal(
+        "VLM_RESERVATION_NO_SCHEDULER",
+        "active drive_busy() requires a reservation scheduler")
+    return;
+  end
+
+  reservation_vif.rbusy <= scheduler.final_busy[VLM_RESERVATION_READ];
+  reservation_vif.wbusy <= scheduler.final_busy[VLM_RESERVATION_WRITE];
+endtask : drive_busy
+
+task vlm_reservation_agent::main_phase(uvm_phase phase);
+  super.main_phase(phase);
+
+  if (monitor == null) begin
+    `uvm_fatal(
+        "VLM_RESERVATION_NO_MONITOR",
+        "main_phase requires a constructed reservation monitor")
+    return;
+  end
+
+  if (scheduler == null) begin
+    `uvm_fatal(
+        "VLM_RESERVATION_NO_SCHEDULER",
+        "main_phase requires a constructed reservation scheduler")
+    return;
+  end
+
+  // Establish a known initial value before the first sampled clock edge.
+  drive_busy();
+
+  forever begin
+    monitor.collect_cycle(current_transaction);
+    process_cycle(current_transaction);
+    drive_busy();
+  end
+endtask : main_phase
 
 `endif // VLM_RESERVATION_AGENT_SVH

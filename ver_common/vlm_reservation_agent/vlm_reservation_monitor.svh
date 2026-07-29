@@ -95,28 +95,6 @@ class vlm_reservation_monitor extends uvm_component;
       const ref vlm_reservation_raw_sample_t sample,
       output vlm_reservation_cycle_transaction_t transaction);
 
-  //------------------------------------------------------------------------------
-  // @brief Returns the most recently normalized transaction.
-  //
-  // @return A copy of current_transaction.
-  //------------------------------------------------------------------------------
-  extern function vlm_reservation_cycle_transaction_t
-      get_current_transaction();
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the number of cycles collected by this monitor.
-  //
-  // @return Collected cycle transaction count since component construction.
-  //------------------------------------------------------------------------------
-  extern function longint unsigned get_collected_cycle_count();
-
-  //------------------------------------------------------------------------------
-  // @brief Returns the number of X/Z input violations reported by the monitor.
-  //
-  // @return Interface input error count since component construction.
-  //------------------------------------------------------------------------------
-  extern function int unsigned get_input_error_count();
-
   `uvm_component_utils(vlm_reservation_monitor)
 
 endclass : vlm_reservation_monitor

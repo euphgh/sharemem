@@ -124,14 +124,6 @@ class vlm_reservation_checker extends uvm_component;
   extern function void check_mem_requests(
       const ref vlm_reservation_cycle_transaction_t transaction);
 
-  //------------------------------------------------------------------------------
-  // @brief Returns the total number of checker errors since construction.
-  //
-  // @return Sum of reservation, busy, MEM-match, dly-zero, and monitor-input
-  //         error-cycle counters.
-  //------------------------------------------------------------------------------
-  extern function int unsigned get_error_count();
-
   `uvm_component_utils(vlm_reservation_checker)
 
 endclass : vlm_reservation_checker

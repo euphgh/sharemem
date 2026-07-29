@@ -72,13 +72,6 @@ class vlm_reservation_coverage extends uvm_component;
       const ref vlm_reservation_cycle_transaction_t transaction,
       bit                                           cycle_check_passed);
 
-  //------------------------------------------------------------------------------
-  // @brief Returns the number of transactions presented to this collector.
-  //
-  // @return Sampled cycle transaction count since component construction.
-  //------------------------------------------------------------------------------
-  extern function longint unsigned get_sampled_cycle_count();
-
   `uvm_component_utils(vlm_reservation_coverage)
 
 endclass : vlm_reservation_coverage
