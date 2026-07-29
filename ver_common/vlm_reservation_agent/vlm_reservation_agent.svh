@@ -59,7 +59,7 @@ class vlm_reservation_agent extends uvm_agent;
   extern virtual function void build_phase(uvm_phase phase);
 
   //------------------------------------------------------------------------------
-  // @brief Connects config, monitor, scheduler, checker, and coverage APIs.
+  // @brief Connects config, monitor, scheduler, checker, and coverage state.
   //
   // @param phase UVM connect phase used to establish component relationships.
   // @post All constructed children use the same business interfaces and

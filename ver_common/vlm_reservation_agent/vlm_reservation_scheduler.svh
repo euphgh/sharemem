@@ -11,7 +11,7 @@
 //------------------------------------------------------------------------------
 class vlm_reservation_scheduler extends uvm_component;
 
-  // Agent configuration controlling active mode and external busy policy.
+  // Agent configuration assigned directly by the containing agent.
   vlm_reservation_agent_config cfg;
 
   // Shared cycle-number service obtained directly through UVM Config DB.
@@ -58,15 +58,6 @@ class vlm_reservation_scheduler extends uvm_component;
   //       configuration error has been reported.
   //------------------------------------------------------------------------------
   extern virtual function void build_phase(uvm_phase phase);
-
-  //------------------------------------------------------------------------------
-  // @brief Assigns the validated agent configuration used by the scheduler.
-  //
-  // @param cfg Configuration handle shared by the reservation agent.
-  // @pre cfg is non-null and remains valid for the scheduler lifetime.
-  // @post Subsequent scheduler API calls use the supplied configuration.
-  //------------------------------------------------------------------------------
-  extern function void set_config(vlm_reservation_agent_config cfg);
 
   //------------------------------------------------------------------------------
   // @brief Advances the schedule from one normalized cycle transaction.

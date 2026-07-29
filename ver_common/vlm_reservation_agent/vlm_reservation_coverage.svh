@@ -10,10 +10,10 @@
 //------------------------------------------------------------------------------
 class vlm_reservation_coverage extends uvm_component;
 
-  // Agent configuration controlling whether coverage sampling is enabled.
+  // Agent configuration assigned directly by the containing agent.
   vlm_reservation_agent_config cfg;
 
-  // Read-only scheduler handle providing busy source and slot occupancy data.
+  // Read-only scheduler handle assigned directly by the containing agent.
   vlm_reservation_scheduler scheduler;
 
   // Number of cycle transactions presented to coverage since construction.
@@ -40,25 +40,6 @@ class vlm_reservation_coverage extends uvm_component;
   extern function new(
       string        name = "vlm_reservation_coverage",
       uvm_component parent = null);
-
-  //------------------------------------------------------------------------------
-  // @brief Assigns the configuration controlling coverage enable behavior.
-  //
-  // @param cfg Configuration handle shared by the reservation agent.
-  // @pre cfg is non-null and remains valid for the collector lifetime.
-  // @post Subsequent samples honor cfg.coverage_enable.
-  //------------------------------------------------------------------------------
-  extern function void set_config(vlm_reservation_agent_config cfg);
-
-  //------------------------------------------------------------------------------
-  // @brief Assigns the scheduler used for read-only occupancy observations.
-  //
-  // @param scheduler Scheduler associated with the same reservation agent.
-  // @pre scheduler is non-null and corresponds to the sampled interfaces.
-  // @post Coverage queries use the supplied scheduler.
-  //------------------------------------------------------------------------------
-  extern function void set_scheduler(
-      vlm_reservation_scheduler scheduler);
 
   //------------------------------------------------------------------------------
   // @brief Samples one transaction and its checker result for coverage.
