@@ -28,12 +28,12 @@ API 优先使用 `extern function` 和 `extern task` 声明。
 
 ```systemverilog
 //------------------------------------------------------------------------------
-// @brief Coordinates cycle-accurate reservation sampling and busy updates.
+// @brief Samples reservation and MEM requests into one cycle transaction.
 //
-// Observes reservation and MEM request signals. It does not provide or check
-// MEM read data.
+// Checks four-state interface values and produces normalized two-state events.
+// It does not drive reservation busy or check MEM data.
 //------------------------------------------------------------------------------
-class vlm_reservation_cycle_controller extends uvm_component;
+class vlm_reservation_monitor extends uvm_component;
 ```
 
 ## 4. 成员变量注释
@@ -47,8 +47,8 @@ class vlm_reservation_cycle_controller extends uvm_component;
 - 它属于配置、接口、子组件、调度状态还是统计信息。
 
 ```systemverilog
-// Monotonically increasing identifier assigned to each sampled active cycle.
-longint unsigned cycle_id;
+// Shared clock service obtained through UVM Config DB for cycle-number access.
+virtual clk_if clk_vif;
 
 // Read-only MEM interface used to observe request valid and address signals.
 virtual vlm_memory_interface memory_vif;
@@ -91,12 +91,12 @@ extern function bit is_external_busy(
 
 ```systemverilog
 //------------------------------------------------------------------------------
-// @brief Samples interfaces and coordinates one active verification cycle.
+// @brief Runs the reservation sample, check, schedule, and busy-drive loop.
 //
-// @param phase Active UVM run phase controlling the task lifetime.
+// @param phase UVM main phase controlling the reactive agent lifetime.
 // @post The next busy state is prepared without modifying MEM read data.
 //------------------------------------------------------------------------------
-extern virtual task run_phase(uvm_phase phase);
+extern virtual task main_phase(uvm_phase phase);
 ```
 
 ## 6. Class 布局

@@ -5,14 +5,17 @@
 // @brief Maintains the cycle-relative VLM reservation busy schedule.
 //
 // Separately tracks external and DUT-owned SHM busy slots for read and write
-// directions. It accepts sampled DUT reservations and provides the final busy
-// tables to the cycle controller. It does not inspect MEM read data or decide
-// whether an actual MEM request satisfies a reservation.
+// directions. It accepts legal known reservation events and prepares the next
+// final busy tables for the agent. It does not sample interfaces, drive busy,
+// inspect MEM data, or decide whether an actual MEM request satisfies a record.
 //------------------------------------------------------------------------------
 class vlm_reservation_scheduler extends uvm_component;
 
   // Agent configuration controlling active mode and external busy policy.
   vlm_reservation_agent_config cfg;
+
+  // Shared cycle-number service obtained directly through UVM Config DB.
+  virtual clk_if clk_vif;
 
   // External occupancy indexed by direction, relative delay, and sub bank.
   vlm_busy_table_t external_busy[VLM_RESERVATION_DIRECTION_N];
@@ -20,20 +23,21 @@ class vlm_reservation_scheduler extends uvm_component;
   // DUT-owned occupancy indexed by direction, relative delay, and sub bank.
   vlm_busy_table_t shm_busy[VLM_RESERVATION_DIRECTION_N];
 
-  // Final busy values exposed to the DUT as external_busy OR shm_busy.
+  // Final busy values exposed as external_busy OR shm_busy.
   vlm_busy_table_t final_busy[VLM_RESERVATION_DIRECTION_N];
 
   // Accepted DUT reservations grouped by direction, delay, and sub bank.
   // Each slot is a queue because different BANKs may legally share one slot.
-  vlm_shm_record_queue_t shm_records[VLM_RESERVATION_DIRECTION_N][VTAB_D][VLM_SUB_BANK_N];
+  vlm_shm_record_queue_t
+      shm_records[VLM_RESERVATION_DIRECTION_N][VTAB_D][VLM_SUB_BANK_N];
 
-  // Absolute cycle represented by delay index zero in the current tables.
+  // Cycle snapshot associated with the most recently processed transaction.
   longint unsigned current_cycle;
 
-  // Total number of DUT reservation records accepted since the last reset.
+  // Total number of DUT reservation records accepted since construction.
   longint unsigned accepted_record_count;
 
-  // Total number of external slots generated since the last reset.
+  // Total number of external busy slots generated since construction.
   longint unsigned external_slot_count;
 
   //------------------------------------------------------------------------------
@@ -47,6 +51,15 @@ class vlm_reservation_scheduler extends uvm_component;
       uvm_component parent = null);
 
   //------------------------------------------------------------------------------
+  // @brief Obtains the shared clk_if from UVM Config DB.
+  //
+  // @param phase UVM build phase used to resolve component dependencies.
+  // @post clk_vif refers to the environment clock service or a fatal
+  //       configuration error has been reported.
+  //------------------------------------------------------------------------------
+  extern virtual function void build_phase(uvm_phase phase);
+
+  //------------------------------------------------------------------------------
   // @brief Assigns the validated agent configuration used by the scheduler.
   //
   // @param cfg Configuration handle shared by the reservation agent.
@@ -56,25 +69,19 @@ class vlm_reservation_scheduler extends uvm_component;
   extern function void set_config(vlm_reservation_agent_config cfg);
 
   //------------------------------------------------------------------------------
-  // @brief Clears busy tables, reservation records, cycle state, and counters.
+  // @brief Advances the schedule from one normalized cycle transaction.
   //
-  // @post All external and SHM slots are free and no record remains pending.
-  //------------------------------------------------------------------------------
-  extern function void reset_state();
-
-  //------------------------------------------------------------------------------
-  // @brief Updates scheduler state from one atomically sampled active cycle.
+  // Consumes due records, advances the busy window, admits legal reservations,
+  // applies the configured external policy, and prepares final_busy for the
+  // next cycle. Known but illegal events are not committed to scheduler state.
   //
-  // Accepts legal DUT reservations with dly greater than zero, advances the
-  // busy window, applies the configured external busy policy, and prepares the
-  // final busy tables for the next active cycle.
-  //
-  // @param sample Reservation and MEM request snapshot for the current cycle.
-  // @pre sample.cycle_id identifies the current scheduler cycle.
-  // @post final_busy contains the next busy values requested by the controller.
+  // @param transaction Two-state reservation/MEM transaction for one cycle.
+  // @pre transaction.cycle equals the current shared clk_if cycle.
+  // @post current_cycle equals transaction.cycle and final_busy is prepared
+  //       for the agent's next busy drive.
   //------------------------------------------------------------------------------
   extern function void process_cycle(
-      const ref vlm_reservation_cycle_sample_t sample);
+      const ref vlm_reservation_cycle_transaction_t transaction);
 
   //------------------------------------------------------------------------------
   // @brief Replaces one direction's directed external busy table.
@@ -107,7 +114,7 @@ class vlm_reservation_scheduler extends uvm_component;
       vlm_reservation_direction_e direction);
 
   //------------------------------------------------------------------------------
-  // @brief Returns the final busy table driven for one reservation direction.
+  // @brief Returns the final busy table for one reservation direction.
   //
   // @param direction Read or write table to query.
   // @return A copy of external_busy OR shm_busy for the selected direction.
@@ -168,6 +175,13 @@ class vlm_reservation_scheduler extends uvm_component;
       int unsigned                delay,
       int unsigned                sub_bank,
       output vlm_shm_record_queue_t records);
+
+  //------------------------------------------------------------------------------
+  // @brief Returns the cycle of the most recently processed transaction.
+  //
+  // @return Last transaction cycle copied from the shared clk_if snapshot.
+  //------------------------------------------------------------------------------
+  extern function longint unsigned get_current_cycle();
 
   `uvm_component_utils(vlm_reservation_scheduler)
 

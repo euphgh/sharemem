@@ -4,9 +4,9 @@
 //------------------------------------------------------------------------------
 // @brief Defines the coverage-facing API for reservation scheduling behavior.
 //
-// Receives the same atomic cycle sample used by scheduler and checker and
+// Receives the same normalized transaction used by scheduler and checker and
 // observes scheduler ownership state. The current API-shape stage declares no
-// covergroups and does not influence scheduler or checker state.
+// covergroups and does not influence checker, scheduler, or busy-drive state.
 //------------------------------------------------------------------------------
 class vlm_reservation_coverage extends uvm_component;
 
@@ -16,7 +16,7 @@ class vlm_reservation_coverage extends uvm_component;
   // Read-only scheduler handle providing busy source and slot occupancy data.
   vlm_reservation_scheduler scheduler;
 
-  // Number of active cycles presented to the coverage API since reset.
+  // Number of cycle transactions presented to coverage since construction.
   longint unsigned sampled_cycle_count;
 
   // Number of legal cycles containing multiple BANKs in one SHM slot.
@@ -25,8 +25,11 @@ class vlm_reservation_coverage extends uvm_component;
   // Number of reservation attempts blocked by external busy ownership.
   longint unsigned external_block_count;
 
-  // Number of unsupported dly-zero reservation requests observed.
+  // Number of unsupported dly-zero reservation events observed.
   longint unsigned dly_zero_sample_count;
+
+  // Number of cycle transactions containing monitor input errors.
+  longint unsigned input_error_cycle_count;
 
   //------------------------------------------------------------------------------
   // @brief Constructs the reservation coverage component.
@@ -50,36 +53,29 @@ class vlm_reservation_coverage extends uvm_component;
   //------------------------------------------------------------------------------
   // @brief Assigns the scheduler used for read-only occupancy observations.
   //
-  // @param scheduler Scheduler associated with the sampled reservation agent.
-  // @pre scheduler is non-null and corresponds to the same cycle controller.
+  // @param scheduler Scheduler associated with the same reservation agent.
+  // @pre scheduler is non-null and corresponds to the sampled interfaces.
   // @post Coverage queries use the supplied scheduler.
   //------------------------------------------------------------------------------
   extern function void set_scheduler(
       vlm_reservation_scheduler scheduler);
 
   //------------------------------------------------------------------------------
-  // @brief Clears coverage-facing counters and transient sample state.
+  // @brief Samples one transaction and its checker result for coverage.
   //
-  // @post No counter retains observations from before the reset.
-  //------------------------------------------------------------------------------
-  extern function void reset_state();
-
-  //------------------------------------------------------------------------------
-  // @brief Samples reservation behavior and scheduler ownership for one cycle.
-  //
-  // @param sample             Atomic reservation and MEM request cycle sample.
+  // @param transaction       Normalized reservation and MEM cycle transaction.
   // @param cycle_check_passed Result returned by the checker for this cycle.
-  // @pre scheduler state and sample refer to the same cycle identifier.
-  // @post Coverage counters reflect all enabled observations in this cycle.
+  // @pre Scheduler state and transaction refer to the same cycle.
+  // @post Coverage-facing counters include all enabled cycle observations.
   //------------------------------------------------------------------------------
   extern function void sample_cycle(
-      const ref vlm_reservation_cycle_sample_t sample,
-      bit                                      cycle_check_passed);
+      const ref vlm_reservation_cycle_transaction_t transaction,
+      bit                                           cycle_check_passed);
 
   //------------------------------------------------------------------------------
-  // @brief Returns the number of active cycles presented to this collector.
+  // @brief Returns the number of transactions presented to this collector.
   //
-  // @return Sampled active-cycle count since the most recent reset.
+  // @return Sampled cycle transaction count since component construction.
   //------------------------------------------------------------------------------
   extern function longint unsigned get_sampled_cycle_count();
 

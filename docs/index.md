@@ -725,7 +725,7 @@ reservation busy，并只读观察 reservation 请求和实际 MEM 请求：
 ```Plain Text
 shm_env
 ├── vlm_reservation_agent
-│   ├── vlm_reservation_cycle_controller
+│   ├── vlm_reservation_monitor
 │   ├── vlm_reservation_scheduler
 │   ├── vlm_reservation_checker
 │   └── vlm_reservation_coverage
@@ -742,6 +742,15 @@ shm_env
 - `vlm_memory_interface`：只读观察 `mem_*vld/addr`，不驱动或检查
   `mem_rdata`。
 
+Agent 在 `main_phase` 中运行唯一的周期处理循环。Reservation monitor 原子采样
+两个业务 interface，完成四态检查并返回二态 cycle transaction；agent 随后同步
+调用 checker、scheduler 和 coverage，最后驱动下一周期 busy。核心路径不使用
+`run_phase`、TLM FIFO 或逐周期 sequence item。
+
+需要 cycle number 的 component 通过 Config DB 获取同一个 `virtual clk_if`。
+`clk_if.cycle_count` 从 0 开始并在每个时钟上升沿单调递增，不因 reset 清零；业务
+interface 仍使用原有普通 `clk`、`rst_n` 连接，不嵌套 `clk_if`。
+
 Scheduler 按 `<direction, delay, sub_bank_id>` 分别维护 external busy 与 SHM
 busy。不同 BANK 可以共享同一个 SHM slot；只有 external busy 与 SHM busy
 占用相同位置时才构成冲突。每个 SHM slot 使用 record queue 保存其中的所有
@@ -749,6 +758,9 @@ DUT reservation。
 
 当前设计配置不产生 `dly == 0` 请求；checker 检测到该请求时报告
 `UVM_ERROR`，并且不把它加入正常调度与 MEM 匹配模型。
+
+当前 reservation agent 代码框架暂不实现 reset 状态处理。接口 reset 规则仍由
+独立接口规范定义，后续补充 reset 验证时需要同步更新架构文档和 API。
 
 `vlm_memory_slv_agent` 保持独立，继续负责 memory model 和固定延迟
 `mem_rdata`。reservation agent 仅检查到期 reservation 与实际 MEM request 的

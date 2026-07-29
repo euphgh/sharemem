@@ -2,26 +2,27 @@
 `define VLM_RESERVATION_AGENT_SVH
 
 //------------------------------------------------------------------------------
-// @brief Contains the VLM reservation scheduler, checker, and cycle controller.
+// @brief Coordinates VLM reservation sampling, checking, scheduling, and busy.
 //
-// Owns the reservation-side verification components and shares one config
-// object across them. In active mode it drives reservation busy; it observes
-// MEM request valid and address through a read-only interface and never drives
-// or checks MEM read data.
+// Owns the reservation-side monitor, scheduler, checker, and coverage
+// components. Its main_phase is the only core cycle-processing loop: it obtains
+// one normalized transaction from the monitor, invokes the other components in
+// a deterministic order, and drives final reservation busy in active mode. It
+// observes MEM request valid and address but never drives or checks MEM data.
 //------------------------------------------------------------------------------
 class vlm_reservation_agent extends uvm_agent;
 
-  // Shared configuration defining interfaces, mode, and component enables.
+  // Shared configuration defining business interfaces, mode, and enables.
   vlm_reservation_agent_config cfg;
 
-  // Reservation interface owned by this agent for request sampling and busy.
+  // Reservation interface observed for requests and driven for busy.
   virtual vlm_reservation_interface reservation_vif;
 
-  // Read-only MEM interface used only for actual request timing and addresses.
+  // Read-only MEM interface used only for actual request valid and addresses.
   virtual vlm_memory_interface memory_vif;
 
-  // Sole component responsible for common cycle sampling and busy drive timing.
-  vlm_reservation_cycle_controller cycle_controller;
+  // Component owning four-state sampling and two-state normalization.
+  vlm_reservation_monitor monitor;
 
   // Component maintaining external/SHM busy tables and accepted DUT records.
   vlm_reservation_scheduler scheduler;
@@ -31,6 +32,12 @@ class vlm_reservation_agent extends uvm_agent;
 
   // Component exposing the reservation functional coverage sampling API.
   vlm_reservation_coverage coverage;
+
+  // Most recent normalized transaction returned by the monitor.
+  vlm_reservation_cycle_transaction_t current_transaction;
+
+  // Checker pass/fail result associated with current_transaction.
+  bit current_cycle_check_passed;
 
   //------------------------------------------------------------------------------
   // @brief Constructs the VLM reservation agent.
@@ -46,18 +53,50 @@ class vlm_reservation_agent extends uvm_agent;
   // @brief Builds enabled child components and obtains agent configuration.
   //
   // @param phase UVM build phase used to construct the agent hierarchy.
-  // @post Controller and scheduler are available; checker and coverage are
+  // @post Monitor and scheduler are available; checker and coverage are
   //       constructed according to their enable fields in cfg.
   //------------------------------------------------------------------------------
   extern virtual function void build_phase(uvm_phase phase);
 
   //------------------------------------------------------------------------------
-  // @brief Connects config, scheduler, checker, coverage, and controller APIs.
+  // @brief Connects config, monitor, scheduler, checker, and coverage APIs.
   //
   // @param phase UVM connect phase used to establish component relationships.
-  // @post All constructed child components refer to the same config and cycle.
+  // @post All constructed children use the same business interfaces and
+  //       scheduler state owner.
   //------------------------------------------------------------------------------
   extern virtual function void connect_phase(uvm_phase phase);
+
+  //------------------------------------------------------------------------------
+  // @brief Runs the single reservation reactive loop in UVM main phase.
+  //
+  // @param phase UVM main phase controlling the agent task lifetime.
+  // @post Each collected transaction is checked, scheduled, covered, and
+  //       followed by a final busy drive when the agent is active.
+  //------------------------------------------------------------------------------
+  extern virtual task main_phase(uvm_phase phase);
+
+  //------------------------------------------------------------------------------
+  // @brief Processes one normalized transaction in deterministic component order.
+  //
+  // Calls the checker before scheduler mutation, then updates the scheduler and
+  // samples coverage using the same transaction and checker result.
+  //
+  // @param transaction Two-state reservation/MEM transaction for one cycle.
+  // @post current_cycle_check_passed records the checker result and scheduler
+  //       final busy is prepared for drive_busy().
+  //------------------------------------------------------------------------------
+  extern function void process_cycle(
+      const ref vlm_reservation_cycle_transaction_t transaction);
+
+  //------------------------------------------------------------------------------
+  // @brief Drives scheduler final busy values onto the reservation interface.
+  //
+  // @pre scheduler final busy tables represent the next interface cycle.
+  // @post In active mode, read and write busy outputs contain scheduler final
+  //       busy; passive mode leaves interface outputs untouched.
+  //------------------------------------------------------------------------------
+  extern task drive_busy();
 
   //------------------------------------------------------------------------------
   // @brief Assigns an explicit configuration before child construction.
@@ -74,6 +113,13 @@ class vlm_reservation_agent extends uvm_agent;
   // @return Shared agent configuration handle, or null before configuration.
   //------------------------------------------------------------------------------
   extern function vlm_reservation_agent_config get_config();
+
+  //------------------------------------------------------------------------------
+  // @brief Returns the monitor created by this agent.
+  //
+  // @return Monitor handle, or null before child construction completes.
+  //------------------------------------------------------------------------------
+  extern function vlm_reservation_monitor get_monitor();
 
   //------------------------------------------------------------------------------
   // @brief Returns the scheduler created by this agent.

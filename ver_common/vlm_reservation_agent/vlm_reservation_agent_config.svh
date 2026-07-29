@@ -2,23 +2,25 @@
 `define VLM_RESERVATION_AGENT_CONFIG_SVH
 
 //------------------------------------------------------------------------------
-// @brief Configures the VLM reservation scheduler/checker agent.
+// @brief Configures the VLM reservation reactive agent.
 //
-// Carries both virtual interfaces, active/passive mode, component enables, and
-// the external busy policy. It does not contain runtime scheduler state.
+// Carries the reservation and read-only MEM virtual interfaces, active/passive
+// mode, component enables, and external busy policy. The shared clk_if is
+// supplied directly to cycle-aware components through UVM Config DB and is not
+// stored in this object.
 //------------------------------------------------------------------------------
 class vlm_reservation_agent_config extends uvm_object;
 
-  // Reservation interface driven and observed by the active agent.
+  // Reservation interface observed for requests and driven for busy in active mode.
   virtual vlm_reservation_interface reservation_vif;
 
-  // Read-only MEM interface used to observe actual request valid and address.
+  // Read-only MEM interface used only for actual request valid and address.
   virtual vlm_memory_interface memory_vif;
 
   // Selects whether the agent drives busy or operates as a passive observer.
   uvm_active_passive_enum is_active = UVM_ACTIVE;
 
-  // Enables protocol and reservation-to-MEM checks when set.
+  // Enables reservation protocol and reservation-to-MEM checks when set.
   bit checker_enable = 1'b1;
 
   // Enables reservation functional coverage sampling when set.
@@ -28,11 +30,10 @@ class vlm_reservation_agent_config extends uvm_object;
   vlm_external_busy_mode_e external_busy_mode =
       VLM_EXTERNAL_BUSY_ALL_FREE;
 
-  // Random-mode occupancy target in percent, constrained by API contract to
-  // the inclusive range zero through one hundred.
+  // Random-mode external occupancy target in the inclusive range 0 through 100.
   int unsigned external_busy_percent = 0;
 
-  // Directed read/write external busy tables indexed by direction.
+  // Directed external busy tables indexed by read/write direction.
   vlm_busy_table_t directed_external_busy[VLM_RESERVATION_DIRECTION_N];
 
   //------------------------------------------------------------------------------
@@ -43,7 +44,7 @@ class vlm_reservation_agent_config extends uvm_object;
   extern function new(string name = "vlm_reservation_agent_config");
 
   //------------------------------------------------------------------------------
-  // @brief Validates configuration values and required virtual interfaces.
+  // @brief Validates configuration values and required business interfaces.
   //
   // @return 1 when the configuration is internally consistent; otherwise 0.
   //------------------------------------------------------------------------------
