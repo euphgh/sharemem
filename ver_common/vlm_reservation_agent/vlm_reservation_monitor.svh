@@ -72,6 +72,45 @@ class vlm_reservation_monitor extends uvm_component;
   extern task collect_cycle(
       output vlm_reservation_cycle_transaction_t txn);
 
+  //------------------------------------------------------------------------------
+  // @brief Resets all per-cycle transaction fields before direct interface sampling.
+  //
+  // @param txn Transaction whose class handles and status are reset.
+  // @post Every request handle is null and input_error is cleared.
+  //------------------------------------------------------------------------------
+  extern protected function void initialize_transaction(
+      ref vlm_reservation_cycle_transaction_t txn);
+
+  //------------------------------------------------------------------------------
+  // @brief Normalizes the sampled four-state busy tables into two-state values.
+  //
+  // @param txn Transaction receiving observed read and write busy tables.
+  // @pre The caller is synchronized to reservation_vif.mon_cb.
+  // @post Each busy X/Z is reported, converted to zero, and reflected in input_error.
+  //------------------------------------------------------------------------------
+  extern protected function void collect_busy(
+      ref vlm_reservation_cycle_transaction_t txn);
+
+  //------------------------------------------------------------------------------
+  // @brief Converts sampled VLM reservation ports into nullable request handles.
+  //
+  // @param txn Transaction receiving per-BANK read and write reservation handles.
+  // @pre The caller is synchronized to reservation_vif.mon_cb.
+  // @post Fully known active ports own new request instances; all other handles remain null.
+  //------------------------------------------------------------------------------
+  extern protected function void collect_reservation_requests(
+      ref vlm_reservation_cycle_transaction_t txn);
+
+  //------------------------------------------------------------------------------
+  // @brief Converts sampled actual MEM ports into nullable request handles.
+  //
+  // @param txn Transaction receiving per-BANK actual read and write handles.
+  // @pre The caller is synchronized to memory_vif.mon_cb at the same clock edge.
+  // @post Fully known active ports own new request instances; all other handles remain null.
+  //------------------------------------------------------------------------------
+  extern protected function void collect_memory_requests(
+      ref vlm_reservation_cycle_transaction_t txn);
+
   `uvm_component_utils(vlm_reservation_monitor)
 
 endclass : vlm_reservation_monitor
@@ -124,206 +163,200 @@ task vlm_reservation_monitor::collect_cycle(output vlm_reservation_cycle_transac
   // The reservation monitor clocking block is the only timing control in the reactive processing path.
   @(reservation_vif.mon_cb);
 
-  sample_interfaces(current_raw);
-  normalize_sample(current_raw, current_txn);
+  initialize_transaction(current_txn);
+  current_txn.cycle = clk_vif.cycle_count;
+
+  // All helper functions read clocking-block values sampled at this same edge and consume no simulation time.
+  collect_busy(current_txn);
+  collect_reservation_requests(current_txn);
+  collect_memory_requests(current_txn);
 
   collected_cycle_count++;
   txn = current_txn;
 endtask : collect_cycle
 
-function void vlm_reservation_monitor::sample_interfaces(output vlm_reservation_raw_sample_t raw);
-  // Sampling without all interface handles would make the raw snapshot incomplete.
-  if (clk_vif == null || reservation_vif == null || memory_vif == null) begin
-    `uvm_fatal("VLM_RESERVATION_MONITOR_NOT_READY", "sample_interfaces() requires clk_vif and both business interfaces")
-    return;
+function void vlm_reservation_monitor::initialize_transaction(ref vlm_reservation_cycle_transaction_t txn);
+  // Clear every fixed read-port slot so inactive or invalid ports cannot retain a previous cycle's handle.
+  foreach (txn.rsv_rreq_array[bank]) begin
+    txn.rsv_rreq_array[bank] = null;
   end
 
-  raw.cycle = clk_vif.cycle_count;
-  raw.observed_busy[VLM_RESERVATION_READ] = reservation_vif.mon_cb.rbusy;
-  raw.observed_busy[VLM_RESERVATION_WRITE] = reservation_vif.mon_cb.wbusy;
+  // Clear both write reservation ports independently for every BANK.
+  foreach (txn.rsv_wreq_array[bank, port]) begin
+    txn.rsv_wreq_array[bank][port] = null;
+  end
 
-  raw.rreq = reservation_vif.mon_cb.rreq;
-  raw.raddr = reservation_vif.mon_cb.raddr;
-  raw.rdly = reservation_vif.mon_cb.rdly;
-  raw.wreq = reservation_vif.mon_cb.wreq;
-  raw.waddr = reservation_vif.mon_cb.waddr;
-  raw.wdly = reservation_vif.mon_cb.wdly;
+  // Clear actual MEM request handles independently for read and write directions.
+  foreach (txn.mem_rreq_array[bank]) begin
+    txn.mem_rreq_array[bank] = null;
+    txn.mem_wreq_array[bank] = null;
+  end
 
-  raw.mem_rvld = memory_vif.mon_cb.rvld;
-  raw.mem_raddr = memory_vif.mon_cb.raddr;
-  raw.mem_wvld = memory_vif.mon_cb.wvld;
-  raw.mem_waddr = memory_vif.mon_cb.waddr;
-endfunction : sample_interfaces
-
-function void vlm_reservation_monitor::normalize_sample(
-    const ref vlm_reservation_raw_sample_t raw,
-    output vlm_reservation_cycle_transaction_t txn);
-  bit payload_known;
-  vlm_reservation_event_t rsv;
-  vlm_memory_request_event_t mem_req;
-
-  txn.cycle = raw.cycle;
-  txn.rsv_events.delete();
-  txn.mem_req_events.delete();
   txn.input_error = 1'b0;
+endfunction : initialize_transaction
 
-  // Normalize every busy bit independently so an X/Z location is reported precisely and converted to zero.
+function void vlm_reservation_monitor::collect_busy(ref vlm_reservation_cycle_transaction_t txn);
+  logic busy_value;
+
+  // Normalize read and write busy tables independently because their resource ownership is independent.
   for (int unsigned direction = 0; direction < VLM_RESERVATION_DIRECTION_N; direction++) begin
-    // Visit each relative delay represented by the sampled busy window.
+    // Visit every relative delay represented by the sampled busy window.
     for (int unsigned delay = 0; delay < VTAB_D; delay++) begin
-      // Normalize each sub-bank bit independently to preserve the exact error location.
+      // Normalize each sub-bank bit separately so every X/Z location is diagnosed precisely.
       for (int unsigned sub_bank = 0; sub_bank < VLM_SUB_BANK_N; sub_bank++) begin
-        txn.observed_busy[direction][delay][sub_bank] =
-            raw.observed_busy[direction][delay][sub_bank] === 1'b1;
+        if (direction == VLM_RESERVATION_READ) begin
+          busy_value = reservation_vif.mon_cb.rbusy[delay][sub_bank];
+        end else begin
+          busy_value = reservation_vif.mon_cb.wbusy[delay][sub_bank];
+        end
 
-        // Busy X/Z is a monitor-owned interface violation; the two-state placeholder remains zero.
-        if ($isunknown(raw.observed_busy[direction][delay][sub_bank])) begin
+        txn.observed_busy[direction][delay][sub_bank] = busy_value === 1'b1;
+
+        // Busy X/Z is converted to zero only after the monitor records the four-state interface violation.
+        if ($isunknown(busy_value)) begin
           input_error_count++;
           txn.input_error = 1'b1;
           `uvm_error("VLM_RESERVATION_BUSY_XZ",
                      $sformatf("cycle %0d direction %0d delay %0d sub bank %0d busy contains X/Z",
-                               raw.cycle, direction, delay, sub_bank))
+                               txn.cycle, direction, delay, sub_bank))
         end
       end
     end
   end
+endfunction : collect_busy
 
-  // Convert each read reservation port only when its valid and active payload are fully known.
+function void vlm_reservation_monitor::collect_reservation_requests(
+    ref vlm_reservation_cycle_transaction_t txn);
+  bit payload_known;
+
+  // Convert each read reservation port only when request, address, and delay are fully known.
   for (int unsigned bank = 0; bank < BANK_N; bank++) begin
     // Unknown request valid cannot be interpreted as either an active event or an idle port.
-    if ($isunknown(raw.rreq[bank])) begin
+    if ($isunknown(reservation_vif.mon_cb.rreq[bank])) begin
       input_error_count++;
       txn.input_error = 1'b1;
       `uvm_error("VLM_RESERVATION_RREQ_XZ",
-                 $sformatf("cycle %0d read reservation bank %0d request contains X/Z", raw.cycle, bank))
+                 $sformatf("cycle %0d read reservation bank %0d request contains X/Z", txn.cycle, bank))
       continue;
     end
 
-    if (raw.rreq[bank] === 1'b1) begin
+    if (reservation_vif.mon_cb.rreq[bank] === 1'b1) begin
       payload_known = 1'b1;
 
-      // An active read reservation address must be fully known before creating a two-state event.
-      if ($isunknown(raw.raddr[bank])) begin
+      // An active read reservation address must be fully known before creating a request instance.
+      if ($isunknown(reservation_vif.mon_cb.raddr[bank])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         payload_known = 1'b0;
         `uvm_error("VLM_RESERVATION_RADDR_XZ",
-                   $sformatf("cycle %0d read reservation bank %0d address contains X/Z", raw.cycle, bank))
+                   $sformatf("cycle %0d read reservation bank %0d address contains X/Z", txn.cycle, bank))
       end
 
-      // An active read reservation delay must be fully known before creating a two-state event.
-      if ($isunknown(raw.rdly[bank])) begin
+      // An active read reservation delay must be fully known before creating a request instance.
+      if ($isunknown(reservation_vif.mon_cb.rdly[bank])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         payload_known = 1'b0;
         `uvm_error("VLM_RESERVATION_RDLY_XZ",
-                   $sformatf("cycle %0d read reservation bank %0d delay contains X/Z", raw.cycle, bank))
+                   $sformatf("cycle %0d read reservation bank %0d delay contains X/Z", txn.cycle, bank))
       end
 
       if (payload_known) begin
-        rsv.direction = VLM_RESERVATION_READ;
-        rsv.bank_id = bank;
-        rsv.write_port = 0;
-        rsv.address = raw.raddr[bank];
-        rsv.delay = raw.rdly[bank];
-        txn.rsv_events.push_back(rsv);
+        txn.rsv_rreq_array[bank] = new();
+        txn.rsv_rreq_array[bank].address = reservation_vif.mon_cb.raddr[bank];
+        txn.rsv_rreq_array[bank].delay = reservation_vif.mon_cb.rdly[bank];
       end
     end
   end
 
-  // Convert each write reservation port independently because both ports may be active in one cycle.
+  // Convert each write reservation port independently because both physical ports may be active.
   for (int unsigned bank = 0; bank < BANK_N; bank++) begin
-    // Each configured write reservation port can independently produce one event.
+    // Each configured write reservation port can independently produce one request handle.
     for (int unsigned port = 0; port < WRITE_PORT_N; port++) begin
-      // Unknown request valid cannot create a write reservation event.
-      if ($isunknown(raw.wreq[bank][port])) begin
+      // Unknown request valid cannot create a write reservation request instance.
+      if ($isunknown(reservation_vif.mon_cb.wreq[bank][port])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         `uvm_error("VLM_RESERVATION_WREQ_XZ",
                    $sformatf("cycle %0d write reservation bank %0d port %0d request contains X/Z",
-                             raw.cycle, bank, port))
+                             txn.cycle, bank, port))
         continue;
       end
 
-      if (raw.wreq[bank][port] === 1'b1) begin
+      if (reservation_vif.mon_cb.wreq[bank][port] === 1'b1) begin
         payload_known = 1'b1;
 
-        // An active write reservation address must be fully known before creating a two-state event.
-        if ($isunknown(raw.waddr[bank][port])) begin
+        // An active write reservation address must be fully known before creating a request instance.
+        if ($isunknown(reservation_vif.mon_cb.waddr[bank][port])) begin
           input_error_count++;
           txn.input_error = 1'b1;
           payload_known = 1'b0;
           `uvm_error("VLM_RESERVATION_WADDR_XZ",
                      $sformatf("cycle %0d write reservation bank %0d port %0d address contains X/Z",
-                               raw.cycle, bank, port))
+                               txn.cycle, bank, port))
         end
 
-        // An active write reservation delay must be fully known before creating a two-state event.
-        if ($isunknown(raw.wdly[bank][port])) begin
+        // An active write reservation delay must be fully known before creating a request instance.
+        if ($isunknown(reservation_vif.mon_cb.wdly[bank][port])) begin
           input_error_count++;
           txn.input_error = 1'b1;
           payload_known = 1'b0;
           `uvm_error("VLM_RESERVATION_WDLY_XZ",
                      $sformatf("cycle %0d write reservation bank %0d port %0d delay contains X/Z",
-                               raw.cycle, bank, port))
+                               txn.cycle, bank, port))
         end
 
         if (payload_known) begin
-          rsv.direction = VLM_RESERVATION_WRITE;
-          rsv.bank_id = bank;
-          rsv.write_port = port;
-          rsv.address = raw.waddr[bank][port];
-          rsv.delay = raw.wdly[bank][port];
-          txn.rsv_events.push_back(rsv);
+          txn.rsv_wreq_array[bank][port] = new();
+          txn.rsv_wreq_array[bank][port].address = reservation_vif.mon_cb.waddr[bank][port];
+          txn.rsv_wreq_array[bank][port].delay = reservation_vif.mon_cb.wdly[bank][port];
         end
       end
     end
   end
+endfunction : collect_reservation_requests
 
-  // Convert each BANK's actual read and write MEM ports into independent request events.
+function void vlm_reservation_monitor::collect_memory_requests(ref vlm_reservation_cycle_transaction_t txn);
+  // Convert each BANK's actual read and write MEM ports into independent nullable handles.
   for (int unsigned bank = 0; bank < BANK_N; bank++) begin
     // Unknown MEM read valid cannot be interpreted as an actual request.
-    if ($isunknown(raw.mem_rvld[bank])) begin
+    if ($isunknown(memory_vif.mon_cb.rvld[bank])) begin
       input_error_count++;
       txn.input_error = 1'b1;
       `uvm_error("VLM_RESERVATION_MEM_RVLD_XZ",
-                 $sformatf("cycle %0d MEM read bank %0d valid contains X/Z", raw.cycle, bank))
-    end else if (raw.mem_rvld[bank] === 1'b1) begin
-      // An active MEM read address must be fully known before creating a two-state event.
-      if ($isunknown(raw.mem_raddr[bank])) begin
+                 $sformatf("cycle %0d MEM read bank %0d valid contains X/Z", txn.cycle, bank))
+    end else if (memory_vif.mon_cb.rvld[bank] === 1'b1) begin
+      // An active MEM read address must be fully known before creating a request instance.
+      if ($isunknown(memory_vif.mon_cb.raddr[bank])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         `uvm_error("VLM_RESERVATION_MEM_RADDR_XZ",
-                   $sformatf("cycle %0d MEM read bank %0d address contains X/Z", raw.cycle, bank))
+                   $sformatf("cycle %0d MEM read bank %0d address contains X/Z", txn.cycle, bank))
       end else begin
-        mem_req.direction = VLM_RESERVATION_READ;
-        mem_req.bank_id = bank;
-        mem_req.address = raw.mem_raddr[bank];
-        txn.mem_req_events.push_back(mem_req);
+        txn.mem_rreq_array[bank] = new();
+        txn.mem_rreq_array[bank].address = memory_vif.mon_cb.raddr[bank];
       end
     end
 
     // Unknown MEM write valid cannot be interpreted as an actual request.
-    if ($isunknown(raw.mem_wvld[bank])) begin
+    if ($isunknown(memory_vif.mon_cb.wvld[bank])) begin
       input_error_count++;
       txn.input_error = 1'b1;
       `uvm_error("VLM_RESERVATION_MEM_WVLD_XZ",
-                 $sformatf("cycle %0d MEM write bank %0d valid contains X/Z", raw.cycle, bank))
-    end else if (raw.mem_wvld[bank] === 1'b1) begin
-      // An active MEM write address must be fully known before creating a two-state event.
-      if ($isunknown(raw.mem_waddr[bank])) begin
+                 $sformatf("cycle %0d MEM write bank %0d valid contains X/Z", txn.cycle, bank))
+    end else if (memory_vif.mon_cb.wvld[bank] === 1'b1) begin
+      // An active MEM write address must be fully known before creating a request instance.
+      if ($isunknown(memory_vif.mon_cb.waddr[bank])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         `uvm_error("VLM_RESERVATION_MEM_WADDR_XZ",
-                   $sformatf("cycle %0d MEM write bank %0d address contains X/Z", raw.cycle, bank))
+                   $sformatf("cycle %0d MEM write bank %0d address contains X/Z", txn.cycle, bank))
       end else begin
-        mem_req.direction = VLM_RESERVATION_WRITE;
-        mem_req.bank_id = bank;
-        mem_req.address = raw.mem_waddr[bank];
-        txn.mem_req_events.push_back(mem_req);
+        txn.mem_wreq_array[bank] = new();
+        txn.mem_wreq_array[bank].address = memory_vif.mon_cb.waddr[bank];
       end
     end
   end
-endfunction : normalize_sample
+endfunction : collect_memory_requests
 
 `endif // VLM_RESERVATION_MONITOR_SVH
