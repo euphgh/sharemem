@@ -74,20 +74,30 @@ module tb;
   );
 
   // Reservation interface connecting DUT requests and agent-driven busy.
-  vlm_reservation_interface reservation_vif();
+  vlm_reservation_interface reservation_vif(clk, rst_n);
 
   // MEM interface exposing DUT requests to the reservation monitor.
-  vlm_memory_interface memory_vif();
+  vlm_memory_interface memory_vif(clk, rst_n);
 
   always #5ns clk = ~clk;
 
-  assign reservation_vif.clk   = clk;
-  assign reservation_vif.rst_n = rst_n;
-  assign memory_vif.clk        = clk;
-  assign memory_vif.rst_n      = rst_n;
+  logic [BANK_N-1:0]         mem_rvld         ;
+  logic [BANK_N-1:0][BADDR_W-1:0] mem_raddr   ;
+  logic [BANK_N-1:0][255:0]  mem_rdata        ;
+  logic [BANK_N-1:0]         mem_wvld         ;
+  logic [BANK_N-1:0][BADDR_W-1:0] mem_waddr   ;
+  logic [BANK_N-1:0][31:0]   mem_wstrb        ;
+  logic [BANK_N-1:0][255:0]  mem_wdata        ;
 
-  // No memory slave is needed for compile-only elaboration.
-  assign memory_vif.rdata = '0;
+    //BANK REQUEST IO
+  logic [VTAB_D-1:0][3:0]    vlm_wbusy        ;
+  logic [VTAB_D-1:0][3:0]    vlm_rbusy        ;
+  logic [BANK_N-1:0][1:0]    vlm_wreq         ;
+  logic [BANK_N-1:0][1:0][BADDR_W-1:0] vlm_waddr ;
+  logic [BANK_N-1:0][1:0][$clog2(VTAB_D)-1:0] vlm_wdly ;
+  logic [BANK_N-1:0]         vlm_rreq         ;
+  logic [BANK_N-1:0][BADDR_W-1:0] vlm_raddr     ;
+  logic [BANK_N-1:0][$clog2(VTAB_D)-1:0] vlm_rdly;
 
   RpuShmTop #(
       .WARP_STEP (WARP_STEP),
@@ -123,22 +133,42 @@ module tb;
       .vack_id    (),
       .mack_done  (),
       .mack_id    (),
-      .mem_rvld   (memory_vif.rvld),
-      .mem_raddr  (memory_vif.raddr),
-      .mem_rdata  (memory_vif.rdata),
-      .mem_wvld   (memory_vif.wvld),
-      .mem_waddr  (memory_vif.waddr),
-      .mem_wstrb  (memory_vif.wstrb),
-      .mem_wdata  (memory_vif.wdata),
-      .vlm_wbusy  (reservation_vif.wbusy),
-      .vlm_rbusy  (reservation_vif.rbusy),
-      .vlm_wreq   (reservation_vif.wreq),
-      .vlm_waddr  (reservation_vif.waddr),
-      .vlm_wdly   (reservation_vif.wdly),
-      .vlm_rreq   (reservation_vif.rreq),
-      .vlm_raddr  (reservation_vif.raddr),
-      .vlm_rdly   (reservation_vif.rdly)
+      .mem_rvld   (mem_rvld),
+      .mem_raddr  (mem_raddr),
+      .mem_rdata  (mem_rdata),
+      .mem_wvld   (mem_wvld),
+      .mem_waddr  (mem_waddr),
+      .mem_wstrb  (mem_wstrb),
+      .mem_wdata  (mem_wdata),
+      .vlm_wbusy  (vlm_wbusy),
+      .vlm_rbusy  (vlm_rbusy),
+      .vlm_wreq   (vlm_wreq),
+      .vlm_waddr  (vlm_waddr),
+      .vlm_wdly   (vlm_wdly),
+      .vlm_rreq   (vlm_rreq),
+      .vlm_raddr  (vlm_raddr),
+      .vlm_rdly   (vlm_rdly)
   );
+
+  always @(*) begin
+    memory_vif.rvld = mem_rvld;
+    memory_vif.raddr = mem_raddr;
+    mem_rdata = memory_vif.rdata; 
+    memory_vif.wvld = mem_wvld;
+    memory_vif.waddr = mem_waddr;
+    memory_vif.wstrb = mem_wstrb;
+    memory_vif.wdata = mem_wdata;
+
+    vlm_wbusy = reservation_vif.wbusy; 
+    vlm_rbusy = reservation_vif.rbusy; 
+
+    reservation_vif.wreq = vlm_wreq;
+    reservation_vif.waddr = vlm_waddr;
+    reservation_vif.wdly = vlm_wdly;
+    reservation_vif.rreq = vlm_rreq;
+    reservation_vif.raddr = vlm_raddr;
+    reservation_vif.rdly = vlm_rdly;
+  end
 
   initial begin
     uvm_config_db#(virtual clk_if)::set(null, "uvm_test_top.agent.*", "clk_vif", clk_vif);

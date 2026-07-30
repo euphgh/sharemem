@@ -2,10 +2,10 @@ import shm_config_pkg::BANK_N;
 import shm_config_pkg::BADDR_W;
 import shm_config_pkg::VTAB_D;
 
-interface vlm_memory_interface();
-
-logic                   clk     ;
-logic                   rst_n   ;
+interface vlm_memory_interface(
+  input logic clk,
+  input logic rst_n
+);
 
 logic   [BANK_N-1:0]               rvld  ;
 logic   [BANK_N-1:0][BADDR_W-1:0]  raddr ;

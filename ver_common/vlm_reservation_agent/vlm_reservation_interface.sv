@@ -4,10 +4,10 @@ import shm_config_pkg::VTAB_D;
 import shm_config_pkg::VLM_SUB_BANK_N;
 import shm_config_pkg::WRITE_PORT_N;
 
-interface vlm_reservation_interface ();
-
-logic clk;
-logic rst_n;
+interface vlm_reservation_interface (
+  input logic clk, 
+  input logic rst_n
+);
 
 // Busy tables are driven by the reservation slave. Entry [delay][sub_bank]
 // describes whether that direction is occupied at the corresponding future
