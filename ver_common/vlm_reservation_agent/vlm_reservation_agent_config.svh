@@ -35,4 +35,13 @@ class vlm_reservation_agent_config extends uvm_object;
 
 endclass : vlm_reservation_agent_config
 
+function vlm_reservation_agent_config::new(string name = "vlm_reservation_agent_config");
+  super.new(name);
+endfunction : new
+
+function bit vlm_reservation_agent_config::validate();
+  // Both interfaces are mandatory because one cycle transaction combines reservation and MEM observations.
+  return reservation_vif != null && memory_vif != null;
+endfunction : validate
+
 `endif // VLM_RESERVATION_AGENT_CONFIG_SVH
