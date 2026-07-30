@@ -12,15 +12,6 @@ typedef enum bit {
 // Number of independently scheduled reservation directions.
 localparam int unsigned VLM_RESERVATION_DIRECTION_N = 2;
 
-//------------------------------------------------------------------------------
-// @brief Selects how the scheduler obtains external busy reservations.
-//------------------------------------------------------------------------------
-typedef enum bit [1:0] {
-  VLM_EXTERNAL_BUSY_ALL_FREE = 2'b00,
-  VLM_EXTERNAL_BUSY_DIRECTED = 2'b01,
-  VLM_EXTERNAL_BUSY_RANDOM   = 2'b10
-} vlm_external_busy_mode_e;
-
 // Two-state busy table indexed by relative delay and sub-bank identifier.
 typedef bit [VTAB_D-1:0][VLM_SUB_BANK_N-1:0] vlm_busy_table_t;
 
@@ -98,5 +89,32 @@ typedef struct {
   // Set when the monitor detects any unknown valid, active payload, or busy.
   bit input_error;
 } vlm_reservation_cycle_transaction_t;
+
+//------------------------------------------------------------------------------
+// @brief Summarizes checker outcomes for one normalized cycle transaction.
+//
+// The checker creates one result before the scheduler mutates its state. The
+// agent passes the result to coverage together with the same transaction and
+// pre-update scheduler view.
+//------------------------------------------------------------------------------
+typedef struct {
+  // Set when every checker category passes for the sampled cycle.
+  bit passed;
+
+  // Number of reservation protocol violations reported in this cycle.
+  int unsigned reservation_error_count;
+
+  // Number of scheduler busy-state violations reported in this cycle.
+  int unsigned busy_error_count;
+
+  // Number of reservation-to-MEM matching violations reported in this cycle.
+  int unsigned mem_match_error_count;
+
+  // Number of unsupported dly-zero reservations reported in this cycle.
+  int unsigned dly_zero_error_count;
+
+  // Number of MEM requests matched to their unique due records in this cycle.
+  int unsigned matched_mem_request_count;
+} vlm_reservation_check_result_t;
 
 `endif // VLM_RESERVATION_TYPES_SVH

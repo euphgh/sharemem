@@ -10,9 +10,6 @@
 //------------------------------------------------------------------------------
 class vlm_reservation_coverage extends uvm_component;
 
-  // Agent configuration assigned directly by the containing agent.
-  vlm_reservation_agent_config cfg;
-
   // Read-only scheduler handle assigned directly by the containing agent.
   vlm_reservation_scheduler scheduler;
 
@@ -44,14 +41,14 @@ class vlm_reservation_coverage extends uvm_component;
   //------------------------------------------------------------------------------
   // @brief Samples one transaction and its checker result for coverage.
   //
-  // @param txn                Normalized reservation and MEM cycle transaction.
-  // @param cycle_check_passed Result returned by the checker for this cycle.
+  // @param txn          Normalized reservation and MEM cycle transaction.
+  // @param check_result Detailed result returned by the checker for this cycle.
   // @pre Scheduler state and transaction refer to the same cycle.
   // @post Coverage-facing counters include all enabled cycle observations.
   //------------------------------------------------------------------------------
   extern function void sample_cycle(
       const ref vlm_reservation_cycle_transaction_t txn,
-      bit                                           cycle_check_passed);
+      const ref vlm_reservation_check_result_t      check_result);
 
   `uvm_component_utils(vlm_reservation_coverage)
 
