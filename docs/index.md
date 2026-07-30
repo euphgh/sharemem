@@ -747,6 +747,10 @@ Agent 在 `main_phase` 中运行唯一的周期处理循环。Reservation monito
 调用 checker、scheduler 和 coverage，最后驱动下一周期 busy。核心路径不使用
 `run_phase`、TLM FIFO 或逐周期 sequence item。
 
+Monitor 独立报告所有 X/Z；busy 中的 X/Z 在二态 transaction 中归一化为 0，并
+设置周期级 `input_error`。Transaction 不保存逐 bit known mask，checker 只处理
+二态语义，不重复报告 monitor 的四态错误。
+
 需要 cycle number 的 component 通过 Config DB 获取同一个 `virtual clk_if`。
 `clk_if.cycle_count` 从 0 开始并在每个时钟上升沿单调递增，不因 reset 清零；业务
 interface 仍使用原有普通 `clk`、`rst_n` 连接，不嵌套 `clk_if`。

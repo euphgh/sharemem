@@ -3,7 +3,7 @@
 |项目|内容|
 |---|---|
 |文档状态|验证代码实现基准|
-|版本|0.2|
+|版本|0.3|
 |日期|2026-07-29|
 |适用模块|`RpuShmTop`|
 
@@ -247,8 +247,9 @@ Checker 接收：
 - monitor 产生的当周期二态 transaction；
 - scheduler 提供的当周期只读状态视图。
 
-四态 X/Z 检查属于 monitor；checker 只处理 monitor 已规范化的二态数据和
-`input_error` 状态。
+四态 X/Z 检查完全属于 monitor。Checker 只处理 monitor 已规范化的二态数据，
+不重复报告或统计四态错误。`input_error` 只用于阻止 checker 把 X/Z 归一化产生的
+占位值解释为可靠接口值。
 
 Checker 不检查：
 
@@ -309,14 +310,15 @@ X/Z，不得传给 scheduler 或 coverage 作为合法协议数据。
 至少包含：
 
 - `cycle`：`clk_vif.cycle_count` 的采样快照；
-- read/write reservation event queue；
-- read/write MEM request event queue；
+- `rsv_events`：read/write reservation event queue；
+- `mem_req_events`：read/write MEM request event queue；
 - 当周期观察到的 read/write busy；
-- busy 每个位置的已知状态；
 - `input_error`：monitor 是否在该周期发现接口 X/Z。
 
 完整已知但语义非法的 reservation 仍进入 transaction，供 checker 报错和
 scheduler 拒绝。包含未知 valid 或未知有效 payload 的端口不生成二态事件。
+Busy 中的 X/Z 由 monitor 报错，并在 `observed_busy` 中归一化为 0；该 0 只是保证
+后续仿真确定性的占位值，不表示对应 slot 已确认空闲。
 
 该 transaction 由 agent 以 `const ref` 直接传给 checker、scheduler 和 coverage。
 核心路径不依赖 analysis port、TLM FIFO、subscriber 回调顺序或 sequence item
@@ -394,10 +396,11 @@ Monitor 必须检查：
 - req 为 1 的 reservation addr 和 dly 禁止包含 X/Z；
 - MEM valid 为 1 的 MEM address 禁止包含 X/Z；
 - req/valid 为 0 时，不检查对应 payload；
-- busy 中未知的位置必须在 transaction 的 known mask 中标记为未知，不能转换成
-  空闲状态。
+- busy 中的 X/Z 必须在 monitor 报错后归一化为 0，并设置 transaction 的
+  `input_error`。
 
 每个 X/Z 违例由 monitor 报告 `UVM_ERROR`，并增加 monitor input error 统计。
+Checker 不再保存 per-bit known mask，也不重复增加四态错误计数。
 
 ### 6.2 Reservation 合法性
 
@@ -406,8 +409,14 @@ Monitor 必须检查：
 - `1 <= dly < VTAB_D`；
 - 地址按 32 Byte 对齐；
 - `sub_bank_id = address[6:5]`；
-- 对应方向的最终 `busy[dly][sub_bank_id]` 已知且严格等于 0；
+- 当 `input_error == 0` 时，对应方向的二态 `observed_busy[dly][sub_bank_id]`
+  必须为 0；
+- active 模式下，scheduler 内部 external/SHM busy 的目标位置必须为空闲；
 - 同一 BANK、同一方向不存在另一笔相同到期周期的 reservation。
+
+当 `input_error == 1` 时，checker 跳过依赖 `observed_busy` 真实性的比较，但仍
+检查 scheduler 内部不变量以及所有完整已知的 reservation/MEM event。Scheduler
+不得把归一化后的 `observed_busy` 作为预约接收依据。
 
 不同 BANK 的 reservation 可以共享相同 `<direction, dly, sub_bank_id>`。
 
@@ -546,6 +555,9 @@ external busy 生成策略至少允许全空闲、定向和随机三种配置。
 - monitor、scheduler 和 checker 从 Config DB 获取统一的 `clk_vif`；
 - 没有 component 维护独立递增的 cycle counter；
 - monitor 原子采集两个业务 interface，并生成二态 cycle transaction；
+- monitor 报告所有 X/Z，把 busy 的 X/Z 归一化为 0，并设置 `input_error`；
+- transaction 不保存 per-bit busy known mask；
+- checker 只处理二态语义，不重复报告 monitor 的四态错误；
 - 核心 checker、scheduler、coverage 和 busy 驱动使用同步直接调用；
 - scheduler 能区分 external busy 与 SHM busy；
 - external busy 与 SHM busy 永不重叠；

@@ -66,13 +66,13 @@ class vlm_reservation_scheduler extends uvm_component;
   // applies the configured external policy, and prepares final_busy for the
   // next cycle. Known but illegal events are not committed to scheduler state.
   //
-  // @param transaction Two-state reservation/MEM transaction for one cycle.
-  // @pre transaction.cycle equals the current shared clk_if cycle.
-  // @post current_cycle equals transaction.cycle and final_busy is prepared
+  // @param txn Two-state reservation/MEM transaction for one cycle.
+  // @pre txn.cycle equals the current shared clk_if cycle.
+  // @post current_cycle equals txn.cycle and final_busy is prepared
   //       for the agent's next busy drive.
   //------------------------------------------------------------------------------
   extern function void process_cycle(
-      const ref vlm_reservation_cycle_transaction_t transaction);
+      const ref vlm_reservation_cycle_transaction_t txn);
 
   //------------------------------------------------------------------------------
   // @brief Replaces one direction's directed external busy table.

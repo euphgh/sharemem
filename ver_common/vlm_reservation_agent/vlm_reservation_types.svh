@@ -157,17 +157,14 @@ typedef struct {
   // Global clk_if cycle associated with all events in this transaction.
   longint unsigned cycle;
 
-  // Known two-state busy values observed at the reservation interface.
+  // Two-state busy values observed at the interface; monitor maps X/Z to zero.
   vlm_busy_table_t observed_busy[VLM_RESERVATION_DIRECTION_N];
 
-  // Per-bit mask identifying observed busy positions that contained no X/Z.
-  vlm_busy_table_t observed_busy_known[VLM_RESERVATION_DIRECTION_N];
-
   // Fully known read and write reservation events sampled in this cycle.
-  vlm_reservation_event_queue_t reservation_events;
+  vlm_reservation_event_queue_t rsv_events;
 
   // Fully known actual MEM read and write events sampled in this cycle.
-  vlm_memory_request_event_queue_t memory_request_events;
+  vlm_memory_request_event_queue_t mem_req_events;
 
   // Set when the monitor detects any unknown valid, active payload, or busy.
   bit input_error;

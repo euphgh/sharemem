@@ -34,9 +34,9 @@ class vlm_reservation_agent extends uvm_agent;
   vlm_reservation_coverage coverage;
 
   // Most recent normalized transaction returned by the monitor.
-  vlm_reservation_cycle_transaction_t current_transaction;
+  vlm_reservation_cycle_transaction_t current_txn;
 
-  // Checker pass/fail result associated with current_transaction.
+  // Checker pass/fail result associated with current_txn.
   bit current_cycle_check_passed;
 
   //------------------------------------------------------------------------------
@@ -82,12 +82,12 @@ class vlm_reservation_agent extends uvm_agent;
   // Calls the checker before scheduler mutation, then updates the scheduler and
   // samples coverage using the same transaction and checker result.
   //
-  // @param transaction Two-state reservation/MEM transaction for one cycle.
+  // @param txn Two-state reservation/MEM transaction for one cycle.
   // @post current_cycle_check_passed records the checker result and scheduler
   //       final busy is prepared for drive_busy().
   //------------------------------------------------------------------------------
   extern function void process_cycle(
-      const ref vlm_reservation_cycle_transaction_t transaction);
+      const ref vlm_reservation_cycle_transaction_t txn);
 
   //------------------------------------------------------------------------------
   // @brief Drives scheduler final busy values onto the reservation interface.
@@ -116,8 +116,8 @@ endclass : vlm_reservation_agent
 //------------------------------------------------------------------------------
 
 function void vlm_reservation_agent::process_cycle(
-    const ref vlm_reservation_cycle_transaction_t transaction);
-  current_transaction        = transaction;
+    const ref vlm_reservation_cycle_transaction_t txn);
+  current_txn                = txn;
   current_cycle_check_passed = 1'b1;
 
   if (scheduler == null) begin
@@ -129,14 +129,14 @@ function void vlm_reservation_agent::process_cycle(
 
   if (reservation_checker != null) begin
     current_cycle_check_passed =
-        reservation_checker.check_cycle(current_transaction);
+        reservation_checker.check_cycle(current_txn);
   end
 
-  scheduler.process_cycle(current_transaction);
+  scheduler.process_cycle(current_txn);
 
   if (coverage != null) begin
     coverage.sample_cycle(
-        current_transaction,
+        current_txn,
         current_cycle_check_passed);
   end
 endfunction : process_cycle
@@ -192,8 +192,8 @@ task vlm_reservation_agent::main_phase(uvm_phase phase);
   drive_busy();
 
   forever begin
-    monitor.collect_cycle(current_transaction);
-    process_cycle(current_transaction);
+    monitor.collect_cycle(current_txn);
+    process_cycle(current_txn);
     drive_busy();
   end
 endtask : main_phase

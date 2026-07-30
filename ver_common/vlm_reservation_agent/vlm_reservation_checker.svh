@@ -32,9 +32,6 @@ class vlm_reservation_checker extends uvm_component;
   // Number of unsupported dly-zero reservations observed since construction.
   int unsigned dly_zero_error_count;
 
-  // Number of cycle transactions containing monitor input errors.
-  int unsigned input_error_cycle_count;
-
   // Number of MEM requests successfully matched to unique due records.
   longint unsigned matched_mem_request_count;
 
@@ -60,50 +57,41 @@ class vlm_reservation_checker extends uvm_component;
   //------------------------------------------------------------------------------
   // @brief Runs all enabled checks for one normalized cycle transaction.
   //
-  // @param transaction Reservation, busy, and MEM request events for one cycle.
-  // @pre Scheduler still exposes its pre-update state for transaction.cycle.
+  // @param txn Reservation, busy, and MEM request events for one cycle.
+  // @pre Scheduler still exposes its pre-update state for txn.cycle.
   // @return 1 when all enabled checks pass for the cycle; otherwise 0.
   //------------------------------------------------------------------------------
   extern function bit check_cycle(
-      const ref vlm_reservation_cycle_transaction_t transaction);
-
-  //------------------------------------------------------------------------------
-  // @brief Accounts for interface errors already reported by the monitor.
-  //
-  // @param transaction Transaction containing the monitor input_error status.
-  // @post Transactions with input_error increment input_error_cycle_count.
-  //------------------------------------------------------------------------------
-  extern function void check_monitor_input_status(
-      const ref vlm_reservation_cycle_transaction_t transaction);
+      const ref vlm_reservation_cycle_transaction_t txn);
 
   //------------------------------------------------------------------------------
   // @brief Checks external/SHM ownership and observed final busy values.
   //
-  // @param transaction Transaction containing observed busy and known masks.
-  // @pre Scheduler exposes busy state for transaction.cycle.
+  // @param txn Transaction containing normalized observed busy values.
+  // @pre Scheduler exposes busy state for txn.cycle.
   // @post Busy-source and driven-value violations update busy_error_count.
   //------------------------------------------------------------------------------
   extern function void check_busy_state(
-      const ref vlm_reservation_cycle_transaction_t transaction);
+      const ref vlm_reservation_cycle_transaction_t txn);
 
   //------------------------------------------------------------------------------
   // @brief Checks all known read and write reservation events in one cycle.
   //
-  // @param transaction Transaction containing normalized reservation events.
+  // @param txn Transaction containing normalized reservation events.
   // @post Semantic violations update the corresponding checker counters.
   //------------------------------------------------------------------------------
   extern function void check_reservation_requests(
-      const ref vlm_reservation_cycle_transaction_t transaction);
+      const ref vlm_reservation_cycle_transaction_t txn);
 
   //------------------------------------------------------------------------------
   // @brief Checks actual MEM requests against records due in the sampled cycle.
   //
-  // @param transaction Transaction containing normalized MEM request events.
-  // @pre Scheduler delay-zero records represent transaction.cycle.
+  // @param txn Transaction containing normalized MEM request events.
+  // @pre Scheduler delay-zero records represent txn.cycle.
   // @post Missing, unexpected, duplicate, or mismatched requests are counted.
   //------------------------------------------------------------------------------
   extern function void check_mem_requests(
-      const ref vlm_reservation_cycle_transaction_t transaction);
+      const ref vlm_reservation_cycle_transaction_t txn);
 
   `uvm_component_utils(vlm_reservation_checker)
 
@@ -120,7 +108,6 @@ function vlm_reservation_checker::new(string name = "vlm_reservation_checker", u
   busy_error_count           = 0;
   mem_match_error_count      = 0;
   dly_zero_error_count       = 0;
-  input_error_cycle_count    = 0;
   matched_mem_request_count  = 0;
 endfunction : new
 
@@ -136,7 +123,7 @@ function void vlm_reservation_checker::build_phase(uvm_phase phase);
 endfunction : build_phase
 
 function bit vlm_reservation_checker::check_cycle(
-    const ref vlm_reservation_cycle_transaction_t transaction);
+    const ref vlm_reservation_cycle_transaction_t txn);
   longint unsigned error_count_before;
   longint unsigned error_count_after;
 
@@ -156,34 +143,23 @@ function bit vlm_reservation_checker::check_cycle(
     return 1'b0;
   end
 
-  error_count_before = reservation_error_count + busy_error_count + mem_match_error_count +
-                       dly_zero_error_count + input_error_cycle_count;
+  error_count_before = reservation_error_count + busy_error_count + mem_match_error_count + dly_zero_error_count;
 
-  check_monitor_input_status(transaction);
-  check_busy_state(transaction);
-  check_reservation_requests(transaction);
-  check_mem_requests(transaction);
+  check_busy_state(txn);
+  check_reservation_requests(txn);
+  check_mem_requests(txn);
 
-  error_count_after = reservation_error_count + busy_error_count + mem_match_error_count +
-                      dly_zero_error_count + input_error_cycle_count;
+  error_count_after = reservation_error_count + busy_error_count + mem_match_error_count + dly_zero_error_count;
 
   return error_count_after == error_count_before;
 endfunction : check_cycle
 
-function void vlm_reservation_checker::check_monitor_input_status(
-    const ref vlm_reservation_cycle_transaction_t transaction);
-  // The monitor has already reported each X/Z error; the checker only records that this cycle is invalid.
-  if (transaction.input_error) begin
-    input_error_cycle_count++;
-  end
-endfunction : check_monitor_input_status
-
 function void vlm_reservation_checker::check_busy_state(
-    const ref vlm_reservation_cycle_transaction_t transaction);
+    const ref vlm_reservation_cycle_transaction_t txn);
   bit expected_busy;
   bit has_records;
   bit record_is_valid;
-  vlm_shm_record_t record;
+  vlm_shm_record_t rec;
 
   // Busy checks require direct access to the scheduler-owned occupancy tables and reservation records.
   if (scheduler == null) begin
@@ -207,7 +183,7 @@ function void vlm_reservation_checker::check_busy_state(
           busy_error_count++;
           `uvm_error("VLM_RESERVATION_BUSY_OVERLAP",
                      $sformatf("cycle %0d direction %0d delay %0d sub bank %0d is owned by external and SHM busy",
-                               transaction.cycle, direction, delay, sub_bank))
+                               txn.cycle, direction, delay, sub_bank))
         end
 
         // The scheduler's final busy table must be exactly the OR of its two ownership tables.
@@ -215,7 +191,7 @@ function void vlm_reservation_checker::check_busy_state(
           busy_error_count++;
           `uvm_error("VLM_RESERVATION_FINAL_BUSY",
                      $sformatf("cycle %0d direction %0d delay %0d sub bank %0d final busy %0b, expected %0b",
-                               transaction.cycle, direction, delay, sub_bank,
+                               txn.cycle, direction, delay, sub_bank,
                                scheduler.final_busy[direction][delay][sub_bank], expected_busy))
         end
 
@@ -224,30 +200,28 @@ function void vlm_reservation_checker::check_busy_state(
           busy_error_count++;
           `uvm_error("VLM_RESERVATION_SHM_BUSY_RECORD",
                      $sformatf("cycle %0d direction %0d delay %0d sub bank %0d SHM busy %0b, record count %0d",
-                               transaction.cycle, direction, delay, sub_bank,
+                               txn.cycle, direction, delay, sub_bank,
                                scheduler.shm_busy[direction][delay][sub_bank],
                                scheduler.shm_records[direction][delay][sub_bank].size()))
         end
 
-        // In active mode, every known interface busy bit must equal the scheduler value driven by the agent.
-        if (cfg != null && cfg.is_active == UVM_ACTIVE &&
-            transaction.observed_busy_known[direction][delay][sub_bank] &&
-            transaction.observed_busy[direction][delay][sub_bank] != expected_busy) begin
+        // Monitor owns X/Z diagnosis; compare normalized busy only when every sampled input was valid.
+        if (!txn.input_error && cfg != null && cfg.is_active == UVM_ACTIVE &&
+            txn.observed_busy[direction][delay][sub_bank] != expected_busy) begin
           busy_error_count++;
           `uvm_error("VLM_RESERVATION_OBSERVED_BUSY",
                      $sformatf("cycle %0d direction %0d delay %0d sub bank %0d observed busy %0b, expected %0b",
-                               transaction.cycle, direction, delay, sub_bank,
-                               transaction.observed_busy[direction][delay][sub_bank], expected_busy))
+                               txn.cycle, direction, delay, sub_bank,
+                               txn.observed_busy[direction][delay][sub_bank], expected_busy))
         end
 
         // Validate that every queued record agrees with the direction, delay, and sub-bank indices of its slot.
-        foreach (scheduler.shm_records[direction][delay][sub_bank][record_index]) begin
-          record = scheduler.shm_records[direction][delay][sub_bank][record_index];
-          record_is_valid = record.bank_id < BANK_N && record.address[4:0] == 5'b0 &&
-                            record.address[6:5] == sub_bank &&
-                            record.due_cycle == transaction.cycle + delay &&
-                            ((direction == VLM_RESERVATION_READ && record.write_port == 0) ||
-                             (direction == VLM_RESERVATION_WRITE && record.write_port < WRITE_PORT_N));
+        foreach (scheduler.shm_records[direction][delay][sub_bank][rec_idx]) begin
+          rec = scheduler.shm_records[direction][delay][sub_bank][rec_idx];
+          record_is_valid = rec.bank_id < BANK_N && rec.address[4:0] == 5'b0 &&
+                            rec.address[6:5] == sub_bank && rec.due_cycle == txn.cycle + delay &&
+                            ((direction == VLM_RESERVATION_READ && rec.write_port == 0) ||
+                             (direction == VLM_RESERVATION_WRITE && rec.write_port < WRITE_PORT_N));
 
           // An invalid record means scheduler state no longer represents the reservation contract.
           if (!record_is_valid) begin
@@ -255,8 +229,8 @@ function void vlm_reservation_checker::check_busy_state(
             `uvm_error("VLM_RESERVATION_RECORD_SLOT",
                        $sformatf({"cycle %0d record %0d in direction %0d delay %0d sub bank %0d has bank %0d ",
                                   "port %0d address 0x%0h and due cycle %0d"},
-                                 transaction.cycle, record_index, direction, delay, sub_bank, record.bank_id,
-                                 record.write_port, record.address, record.due_cycle))
+                                 txn.cycle, rec_idx, direction, delay, sub_bank, rec.bank_id,
+                                 rec.write_port, rec.address, rec.due_cycle))
           end
         end
       end
@@ -265,13 +239,13 @@ function void vlm_reservation_checker::check_busy_state(
 endfunction : check_busy_state
 
 function void vlm_reservation_checker::check_reservation_requests(
-    const ref vlm_reservation_cycle_transaction_t transaction);
+    const ref vlm_reservation_cycle_transaction_t txn);
   bit event_is_valid;
   bit target_is_busy;
   int unsigned sub_bank;
-  vlm_reservation_event_t reservation;
-  vlm_reservation_event_t previous_reservation;
-  vlm_shm_record_t existing_record;
+  vlm_reservation_event_t rsv;
+  vlm_reservation_event_t prev_rsv;
+  vlm_shm_record_t existing_rec;
 
   // Reservation checks require scheduler state from before the current transaction is admitted.
   if (scheduler == null) begin
@@ -280,72 +254,69 @@ function void vlm_reservation_checker::check_reservation_requests(
   end
 
   // Validate every known reservation event produced by the monitor in this cycle.
-  foreach (transaction.reservation_events[event_index]) begin
-    reservation = transaction.reservation_events[event_index];
+  foreach (txn.rsv_events[rsv_idx]) begin
+    rsv = txn.rsv_events[rsv_idx];
     event_is_valid = 1'b1;
 
     // The BANK index must identify one of the physical DUT BANK ports.
-    if (reservation.bank_id >= BANK_N) begin
+    if (rsv.bank_id >= BANK_N) begin
       reservation_error_count++;
       event_is_valid = 1'b0;
       `uvm_error("VLM_RESERVATION_BANK_ID",
                  $sformatf("cycle %0d reservation %0d has invalid bank ID %0d",
-                           transaction.cycle, event_index, reservation.bank_id))
+                           txn.cycle, rsv_idx, rsv.bank_id))
     end
 
     // Read reservations use port zero; write reservations must identify one of the configured write ports.
-    if ((reservation.direction == VLM_RESERVATION_READ &&
-         reservation.write_port != 0) ||
-        (reservation.direction == VLM_RESERVATION_WRITE &&
-         reservation.write_port >= WRITE_PORT_N)) begin
+    if ((rsv.direction == VLM_RESERVATION_READ && rsv.write_port != 0) ||
+        (rsv.direction == VLM_RESERVATION_WRITE && rsv.write_port >= WRITE_PORT_N)) begin
       reservation_error_count++;
       event_is_valid = 1'b0;
       `uvm_error("VLM_RESERVATION_WRITE_PORT",
                  $sformatf("cycle %0d reservation %0d direction %0d has invalid write port %0d",
-                           transaction.cycle, event_index, reservation.direction, reservation.write_port))
+                           txn.cycle, rsv_idx, rsv.direction, rsv.write_port))
     end
 
     // The current verification profile rejects dly zero instead of entering normal scheduling and matching.
-    if (reservation.delay == 0) begin
+    if (rsv.delay == 0) begin
       dly_zero_error_count++;
       `uvm_error("VLM_RESERVATION_DLY_ZERO",
                  $sformatf("cycle %0d reservation %0d uses unsupported dly == 0",
-                           transaction.cycle, event_index))
+                           txn.cycle, rsv_idx))
       continue;
     end
 
     // Delay encodings outside the scheduler window cannot be used to index busy or record state.
-    if (reservation.delay >= VTAB_D) begin
+    if (rsv.delay >= VTAB_D) begin
       reservation_error_count++;
       `uvm_error("VLM_RESERVATION_DLY_RANGE",
                  $sformatf("cycle %0d reservation %0d delay %0d is outside [1, %0d]",
-                           transaction.cycle, event_index, reservation.delay, VTAB_D - 1))
+                           txn.cycle, rsv_idx, rsv.delay, VTAB_D - 1))
       continue;
     end
 
     // Every reservation represents one 32-byte MEM beat and therefore requires a 32-byte-aligned address.
-    if (reservation.address[4:0] != 5'b0) begin
+    if (rsv.address[4:0] != 5'b0) begin
       reservation_error_count++;
       event_is_valid = 1'b0;
       `uvm_error("VLM_RESERVATION_ALIGNMENT",
                  $sformatf("cycle %0d reservation %0d address 0x%0h is not 32-byte aligned",
-                           transaction.cycle, event_index, reservation.address))
+                           txn.cycle, rsv_idx, rsv.address))
     end
 
-    sub_bank = reservation.address[6:5];
+    sub_bank = rsv.address[6:5];
     target_is_busy = cfg != null && cfg.is_active == UVM_ACTIVE &&
-                     (scheduler.external_busy[reservation.direction][reservation.delay][sub_bank] |
-                      scheduler.shm_busy[reservation.direction][reservation.delay][sub_bank]);
+                     (scheduler.external_busy[rsv.direction][rsv.delay][sub_bank] |
+                      scheduler.shm_busy[rsv.direction][rsv.delay][sub_bank]);
 
-    // A reservation is legal only when its observed target slot is known and free from all existing owners.
-    if (!transaction.observed_busy_known[reservation.direction][reservation.delay][sub_bank] ||
-        transaction.observed_busy[reservation.direction][reservation.delay][sub_bank] ||
+    // Ignore normalized busy when monitor found X/Z; scheduler ownership remains authoritative in active mode.
+    if ((!txn.input_error && txn.observed_busy[rsv.direction][rsv.delay][sub_bank]) ||
         target_is_busy) begin
       reservation_error_count++;
       event_is_valid = 1'b0;
       `uvm_error("VLM_RESERVATION_TARGET_BUSY",
                  $sformatf("cycle %0d reservation %0d direction %0d delay %0d sub bank %0d is not known free",
-                           transaction.cycle, event_index, reservation.direction, reservation.delay, sub_bank))
+                           txn.cycle, rsv_idx, rsv.direction, rsv.delay, sub_bank))
     end
 
     if (!event_is_valid) begin
@@ -353,37 +324,35 @@ function void vlm_reservation_checker::check_reservation_requests(
     end
 
     // Compare against earlier events to detect two current-cycle reservations due on the same BANK port.
-    for (int previous_index = 0; previous_index < event_index; previous_index++) begin
-      previous_reservation = transaction.reservation_events[previous_index];
+    for (int prev_idx = 0; prev_idx < rsv_idx; prev_idx++) begin
+      prev_rsv = txn.rsv_events[prev_idx];
 
-      if (previous_reservation.delay > 0 &&
-          previous_reservation.delay < VTAB_D &&
-          previous_reservation.bank_id == reservation.bank_id &&
-          previous_reservation.direction == reservation.direction &&
-          previous_reservation.delay == reservation.delay) begin
+      if (prev_rsv.delay > 0 &&
+          prev_rsv.delay < VTAB_D &&
+          prev_rsv.bank_id == rsv.bank_id &&
+          prev_rsv.direction == rsv.direction &&
+          prev_rsv.delay == rsv.delay) begin
         // One BANK has only one actual MEM request port per direction and cannot retire both reservations.
         reservation_error_count++;
         `uvm_error("VLM_RESERVATION_BANK_DUE_CONFLICT",
                    $sformatf("cycle %0d reservations %0d and %0d make bank %0d direction %0d due together",
-                             transaction.cycle, previous_index, event_index,
-                             reservation.bank_id, reservation.direction))
+                             txn.cycle, prev_idx, rsv_idx, rsv.bank_id, rsv.direction))
       end
     end
 
     // Search every sub bank because same-BANK due conflicts are independent of the reserved sub bank.
     for (int unsigned existing_sub_bank = 0; existing_sub_bank < VLM_SUB_BANK_N; existing_sub_bank++) begin
       // Compare the new reservation with each previously accepted record at the same direction and delay.
-      foreach (scheduler.shm_records[reservation.direction][reservation.delay][existing_sub_bank][record_index]) begin
-        existing_record =
-            scheduler.shm_records[reservation.direction][reservation.delay][existing_sub_bank][record_index];
+      foreach (scheduler.shm_records[rsv.direction][rsv.delay][existing_sub_bank][rec_idx]) begin
+        existing_rec =
+            scheduler.shm_records[rsv.direction][rsv.delay][existing_sub_bank][rec_idx];
 
-        if (existing_record.bank_id == reservation.bank_id) begin
+        if (existing_rec.bank_id == rsv.bank_id) begin
           // A pending reservation already consumes this BANK's actual MEM request port in the due cycle.
           reservation_error_count++;
           `uvm_error("VLM_RESERVATION_PENDING_BANK_DUE_CONFLICT",
                      $sformatf("cycle %0d reservation %0d makes bank %0d direction %0d due at occupied cycle %0d",
-                               transaction.cycle, event_index, reservation.bank_id, reservation.direction,
-                               transaction.cycle + reservation.delay))
+                               txn.cycle, rsv_idx, rsv.bank_id, rsv.direction, txn.cycle + rsv.delay))
         end
       end
     end
@@ -391,14 +360,14 @@ function void vlm_reservation_checker::check_reservation_requests(
 endfunction : check_reservation_requests
 
 function void vlm_reservation_checker::check_mem_requests(
-    const ref vlm_reservation_cycle_transaction_t transaction);
+    const ref vlm_reservation_cycle_transaction_t txn);
   bit request_is_unique;
   int unsigned sub_bank;
-  int unsigned record_match_count;
-  int unsigned request_match_count;
-  vlm_memory_request_event_t memory_request;
-  vlm_memory_request_event_t other_request;
-  vlm_shm_record_t due_record;
+  int unsigned rec_match_count;
+  int unsigned req_match_count;
+  vlm_memory_request_event_t mem_req;
+  vlm_memory_request_event_t other_req;
+  vlm_shm_record_t due_rec;
 
   // MEM matching requires the complete set of scheduler records due in the sampled cycle.
   if (scheduler == null) begin
@@ -407,82 +376,82 @@ function void vlm_reservation_checker::check_mem_requests(
   end
 
   // Check that every observed MEM request consumes exactly one due reservation record.
-  foreach (transaction.memory_request_events[request_index]) begin
-    memory_request = transaction.memory_request_events[request_index];
+  foreach (txn.mem_req_events[req_idx]) begin
+    mem_req = txn.mem_req_events[req_idx];
     request_is_unique = 1'b1;
 
     // The MEM event must identify one of the physical DUT BANK ports.
-    if (memory_request.bank_id >= BANK_N) begin
+    if (mem_req.bank_id >= BANK_N) begin
       mem_match_error_count++;
       `uvm_error("VLM_RESERVATION_MEM_BANK_ID",
                  $sformatf("cycle %0d MEM request %0d has invalid bank ID %0d",
-                           transaction.cycle, request_index, memory_request.bank_id))
+                           txn.cycle, req_idx, mem_req.bank_id))
       continue;
     end
 
     // Actual MEM requests use the same 32-byte beat alignment as their reservations.
-    if (memory_request.address[4:0] != 5'b0) begin
+    if (mem_req.address[4:0] != 5'b0) begin
       mem_match_error_count++;
       request_is_unique = 1'b0;
       `uvm_error("VLM_RESERVATION_MEM_ALIGNMENT",
                  $sformatf("cycle %0d MEM request %0d address 0x%0h is not 32-byte aligned",
-                           transaction.cycle, request_index, memory_request.address))
+                           txn.cycle, req_idx, mem_req.address))
     end
 
-    sub_bank = memory_request.address[6:5];
+    sub_bank = mem_req.address[6:5];
 
     // A legal actual request requires exclusive SHM ownership of its delay-zero sub-bank slot.
-    if (!scheduler.shm_busy[memory_request.direction][0][sub_bank] ||
-        scheduler.external_busy[memory_request.direction][0][sub_bank]) begin
+    if (!scheduler.shm_busy[mem_req.direction][0][sub_bank] ||
+        scheduler.external_busy[mem_req.direction][0][sub_bank]) begin
       mem_match_error_count++;
       request_is_unique = 1'b0;
       `uvm_error("VLM_RESERVATION_MEM_BUSY",
                  $sformatf("cycle %0d MEM request %0d direction %0d sub bank %0d lacks exclusive SHM busy",
-                           transaction.cycle, request_index, memory_request.direction, sub_bank))
+                           txn.cycle, req_idx, mem_req.direction, sub_bank))
     end
 
-    record_match_count = 0;
+    rec_match_count = 0;
     // Count exact due-record matches using direction, BANK, address, and current due cycle.
-    foreach (scheduler.shm_records[memory_request.direction][0][sub_bank][record_index]) begin
-      due_record = scheduler.shm_records[memory_request.direction][0][sub_bank][record_index];
+    foreach (scheduler.shm_records[mem_req.direction][0][sub_bank][rec_idx]) begin
+      due_rec = scheduler.shm_records[mem_req.direction][0][sub_bank][rec_idx];
 
-      if (due_record.bank_id == memory_request.bank_id &&
-          due_record.address == memory_request.address &&
-          due_record.due_cycle == transaction.cycle) begin
-        record_match_count++;
+      if (due_rec.bank_id == mem_req.bank_id &&
+          due_rec.address == mem_req.address &&
+          due_rec.due_cycle == txn.cycle) begin
+        rec_match_count++;
       end
     end
 
     // Zero matches indicate an unreserved request; multiple matches indicate ambiguous or duplicate records.
-    if (record_match_count != 1) begin
+    if (rec_match_count != 1) begin
       mem_match_error_count++;
       request_is_unique = 1'b0;
       `uvm_error("VLM_RESERVATION_MEM_TO_RECORD",
                  $sformatf("cycle %0d MEM request %0d direction %0d bank %0d address 0x%0h matched %0d records",
-                           transaction.cycle, request_index, memory_request.direction, memory_request.bank_id,
-                           memory_request.address, record_match_count))
+                           txn.cycle, req_idx, mem_req.direction, mem_req.bank_id,
+                           mem_req.address, rec_match_count))
     end
 
-    request_match_count = 0;
+    req_match_count = 0;
     // Count identical MEM events so one due record cannot be consumed more than once.
-    foreach (transaction.memory_request_events[other_request_index]) begin
-      other_request = transaction.memory_request_events[other_request_index];
+    foreach (txn.mem_req_events[other_idx]) begin
+      other_req = txn.mem_req_events[other_idx];
 
-      if (other_request.direction == memory_request.direction &&
-          other_request.bank_id == memory_request.bank_id &&
-          other_request.address == memory_request.address) begin
-        request_match_count++;
+      if (other_req.direction == mem_req.direction &&
+          other_req.bank_id == mem_req.bank_id &&
+          other_req.address == mem_req.address) begin
+        req_match_count++;
       end
     end
 
     // The normalized transaction must contain one and only one actual request for this matching key.
-    if (request_match_count != 1) begin
+    if (req_match_count != 1) begin
       mem_match_error_count++;
       request_is_unique = 1'b0;
       `uvm_error("VLM_RESERVATION_DUPLICATE_MEM",
                  $sformatf("cycle %0d direction %0d bank %0d address 0x%0h appears in %0d MEM request events",
-                           transaction.cycle, memory_request.direction, memory_request.bank_id,
-                           memory_request.address, request_match_count))
+                           txn.cycle, mem_req.direction, mem_req.bank_id,
+                           mem_req.address, req_match_count))
     end
 
     if (request_is_unique) begin
@@ -495,30 +464,30 @@ function void vlm_reservation_checker::check_mem_requests(
     // Visit every sub bank that can contain delay-zero records.
     for (int unsigned sub_bank = 0; sub_bank < VLM_SUB_BANK_N; sub_bank++) begin
       // Check each due record independently because multiple BANKs may legally share one SHM busy bit.
-      foreach (scheduler.shm_records[direction][0][sub_bank][record_index]) begin
-        due_record = scheduler.shm_records[direction][0][sub_bank][record_index];
-        request_match_count = 0;
+      foreach (scheduler.shm_records[direction][0][sub_bank][rec_idx]) begin
+        due_rec = scheduler.shm_records[direction][0][sub_bank][rec_idx];
+        req_match_count = 0;
 
         // Count actual requests matching this record's direction, BANK, address, and due cycle.
-        foreach (transaction.memory_request_events[request_index]) begin
-          memory_request = transaction.memory_request_events[request_index];
+        foreach (txn.mem_req_events[req_idx]) begin
+          mem_req = txn.mem_req_events[req_idx];
 
-          if (memory_request.direction == direction &&
-              memory_request.bank_id == due_record.bank_id &&
-              memory_request.address == due_record.address &&
-              due_record.due_cycle == transaction.cycle) begin
-            request_match_count++;
+          if (mem_req.direction == direction &&
+              mem_req.bank_id == due_rec.bank_id &&
+              mem_req.address == due_rec.address &&
+              due_rec.due_cycle == txn.cycle) begin
+            req_match_count++;
           end
         end
 
         // Missing or duplicate requests violate the reservation-to-MEM one-to-one relationship.
-        if (request_match_count != 1) begin
+        if (req_match_count != 1) begin
           mem_match_error_count++;
           `uvm_error("VLM_RESERVATION_RECORD_TO_MEM",
                      $sformatf({"cycle %0d due record %0d direction %0d sub bank %0d bank %0d address 0x%0h ",
-                                "matched %0d MEM requests"},
-                               transaction.cycle, record_index, direction, sub_bank, due_record.bank_id,
-                               due_record.address, request_match_count))
+                               "matched %0d MEM requests"},
+                               txn.cycle, rec_idx, direction, sub_bank, due_rec.bank_id,
+                               due_rec.address, req_match_count))
         end
       end
     end
