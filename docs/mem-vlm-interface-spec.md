@@ -3,8 +3,8 @@
 |项目|内容|
 |---|---|
 |文档状态|接口级验证基准|
-|版本|0.3|
-|日期|2026-07-23|
+|版本|0.4|
+|日期|2026-07-30|
 |适用模块|`RpuShmTop`|
 
 ## 1. 文档目的
@@ -292,13 +292,20 @@ busy 输入表示当前周期开始前已经存在的占用，不包含 DUT 在�
 相同到期周期的预约；checker 不得仅因该组合报告错误。
 
 只有 DUT reservation 与其他外部模块占用相同
-`<direction, due_cycle, sub_bank_id>` 时才构成资源冲突。验证 scheduler 必须区分
-external busy 与 DUT SHM busy，二者不得在同一位置同时有效。DUT 仍须对每笔
-reservation 独立检查其发出时看到的最终 busy。
+`<direction, due_cycle, sub_bank_id>` 时才构成 sub-bank 资源冲突。其他 sub bank
+的 external busy 不阻塞该 reservation。验证 scheduler 必须区分 external busy
+与 DUT SHM busy，二者不得在同一位置同时有效。DUT 仍须对每笔 reservation
+独立检查其发出时看到的最终 busy。
 
-每个 BANK 在每个方向只有一条实际 MEM 端口，因此同一 BANK、同一方向不能有两笔不同预约在同一周期到期。两条 `vlm_wreq[bank][0:1]` 可以同时有效，但若它们表示不同写事务，其 `due_cycle` 必须不同。
+DUT 自身还受 BANK MEM 端口数量限制。每个 BANK 在每个方向只有一条实际 MEM
+端口，因此同一 BANK、同一方向不能有两笔不同预约在同一周期到期；该 BANK
+冲突与两笔预约访问的 sub bank 是否相同无关。两条
+`vlm_wreq[bank][0:1]` 可以同时有效，但若它们表示不同写事务，其
+`due_cycle` 必须不同。
 
-读 busy 和写 busy 分离；在没有其他设计限制时，不能仅因一笔读预约和一笔写预约具有相同 `<dly, sub_bank_id>` 而报告冲突。
+读方向与写方向相互独立。同一 BANK 在同一周期允许分别产生一笔读请求和一笔写
+请求；同样，不能仅因一笔读预约和一笔写预约具有相同
+`<dly, sub_bank_id>` 而报告冲突。
 
 ### 4.6 VLM 禁止行为和检查规则
 
@@ -310,7 +317,7 @@ reservation 独立检查其发出时看到的最终 busy。
 |`VLM-004`|req 有效时，dly 禁止大于或等于 `VTAB_D`，即禁止使用编码空间中的无效值。|
 |`VLM-005`|req 有效时，对应地址必须 32 Byte 对齐。|
 |`VLM-006`|req 有效时，必须使用对应地址的 `[6:5]` 作为 `sub_bank_id`，并且 `busy[dly][sub_bank_id]` 必须严格等于 0。|
-|`VLM-007`|同一 BANK、同一方向禁止有两笔不同预约在同一周期到期，因为对应方向只有一条实际 MEM 端口。|
+|`VLM-007`|同一 BANK、同一方向禁止有两笔不同预约在同一周期到期，无论其 sub bank 是否相同，因为对应方向只有一条实际 MEM 端口。读写方向独立，同一 BANK 同周期各一笔读写预约不违反本规则。|
 |`VLM-008`|每笔预约必须在到期周期产生且只产生一笔同 BANK、同地址、同方向的 MEM 请求。|
 |`VLM-009`|禁止提前或延后兑现预约。|
 |`VLM-010`|禁止重复发布同一笔预约。|
@@ -326,7 +333,8 @@ reservation 独立检查其发出时看到的最终 busy。
 
 ### 5.1 匹配键
 
-checker 必须为每笔有效 VLM 预约创建 pending record：
+验证模型必须为每笔被 scheduler 接受的 VLM 预约创建 pending record。逻辑匹配
+信息包括：
 
 ```text
 direction
@@ -334,8 +342,8 @@ bank_id
 address
 sub_bank_id = address[6:5]
 issue_cycle
-dly
-due_cycle = issue_cycle + dly
+issue_delay
+due_cycle = issue_cycle + issue_delay
 ```
 
 MEM 请求使用以下键与 pending record 匹配：

@@ -3,8 +3,8 @@
 |项目|内容|
 |---|---|
 |文档状态|验证代码实现基准|
-|版本|0.3|
-|日期|2026-07-29|
+|版本|0.4|
+|日期|2026-07-30|
 |适用模块|`RpuShmTop`|
 
 ## 1. 文档目的
@@ -53,7 +53,11 @@ reservation 可以具有相同的：
 不得仅因这种组合报告错误。
 
 同一 BANK、同一方向仍然不能有两笔不同 reservation 在同一周期到期，因为每个
-BANK 在每个方向只有一条实际 MEM 请求端口。
+BANK 在每个方向只有一条实际 MEM 请求端口。该 BANK 冲突与两笔 reservation
+访问的 sub bank 是否相同无关。
+
+读写方向相互独立。同一 BANK 在同一周期允许分别到期一笔读 reservation 和一笔
+写 reservation；checker 不得仅因这种跨方向组合报告 BANK 冲突。
 
 ### 2.3 external 与 SHM 的冲突
 
@@ -160,7 +164,7 @@ shm_env
 - 创建并连接 monitor、scheduler、checker 和 coverage；
 - 管理 active/passive 配置和 scheduler 配置；
 - 在唯一的 `main_phase` 循环中向 monitor 请求当周期 transaction；
-- 按固定顺序同步调用 checker、scheduler 和 coverage；
+- 按固定顺序同步调用 checker、coverage 和 scheduler；
 - 在 active 模式下把 scheduler 的最终 busy 驱动到 reservation interface；
 - 对外提供 reservation、busy、monitor 输入错误和 checker 错误统计接口。
 
@@ -221,7 +225,7 @@ Scheduler 提供：
 - `external_busy`；
 - `shm_busy`；
 - 最终 `vlm_rbusy` 和 `vlm_wbusy`；
-- `shm_records` 的只读状态视图；
+- 按 `<direction, relative_delay, bank_id>` 索引的 `shm_records` 只读状态视图；
 - 供 checker 和 coverage 使用的 busy 来源信息。
 
 Scheduler 只接受满足当前架构约束的 reservation。已知但语义非法的请求仍由
@@ -229,7 +233,8 @@ checker 报错，但 scheduler 不得把它写入调度状态。
 
 Scheduler 不接收 `mem_rdata`，不检查 MEM 数据，也不得根据 MEM 请求是否按时出现
 来延长、缩短或修正 reservation 的到期时间。Scheduler 不维护自行递增的 cycle
-counter；`current_cycle` 如被保存，只能是最近一次 transaction 的 cycle 快照。
+counter。若保存 `last_processed_cycle`，它只能是最近一次 transaction 的 cycle
+快照，不能作为 scheduler 数组当前相对 delay 的第二份独立计数器。
 
 ### 4.4 `vlm_reservation_checker`
 
@@ -280,7 +285,9 @@ Checker 不检查：
 正常 coverage，而不是错误或开放问题处理。
 
 Coverage 只通过同步 function API 采样，不启动 `run_phase` 或 `main_phase`，
-也不影响 scheduler、checker 或 busy 驱动状态。
+也不影响 scheduler、checker 或 busy 驱动状态。Agent 必须在 scheduler 更新前
+调用 coverage，使 transaction、checker 结果和 scheduler 只读视图都属于同一
+采样周期。
 
 ### 4.6 `vlm_memory_slv_agent`
 
@@ -296,29 +303,40 @@ Coverage 只通过同步 function API 采样，不启动 `run_phase` 或 `main_p
 
 ## 5. Transaction 与 Scheduler 状态模型
 
-### 5.1 四态 raw sample
+### 5.1 Monitor 四态采样边界
 
-Monitor 在采样边界内部使用四态 raw sample 保存接口原值。Raw sample 可以包含
-X/Z，不得传给 scheduler 或 coverage 作为合法协议数据。
+Monitor 在 `collect_cycle()` 中直接读取两个业务 interface 的 clocking-block
+采样值，完成四态检查并构造二态 transaction。本架构不定义或传递独立的
+`vlm_reservation_raw_sample_t`。
 
 对于 req/vld 为 0 的端口，对应 addr、dly 和数据为 don't-care，monitor 不检查
-这些 payload，也不把它们转换成有效事件。
+这些 payload，对应的 transaction class handle 保持 `null`。req/vld 或其有效
+payload 包含 X/Z 时，monitor 报告错误、设置 `input_error`，并同样保持对应
+handle 为 `null`。
 
 ### 5.2 二态 cycle transaction
 
-核心路径使用普通二态 struct，而不是 `uvm_sequence_item`。Cycle transaction
-至少包含：
+核心路径使用包含二态值和只读 class handle 的普通 struct，而不是
+`uvm_sequence_item`。Cycle transaction 至少包含：
 
 - `cycle`：`clk_vif.cycle_count` 的采样快照；
-- `rsv_events`：read/write reservation event queue；
-- `mem_req_events`：read/write MEM request event queue；
+- `rsv_rreq_array[BANK_N]`：每个 BANK 的读 reservation request handle；
+- `rsv_wreq_array[BANK_N][WRITE_PORT_N]`：每个 BANK、每个写端口的 reservation
+  request handle；
+- `mem_rreq_array[BANK_N]`：每个 BANK 的实际 MEM 读 request handle；
+- `mem_wreq_array[BANK_N]`：每个 BANK 的实际 MEM 写 request handle；
 - 当周期观察到的 read/write busy；
 - `input_error`：monitor 是否在该周期发现接口 X/Z。
 
-完整已知但语义非法的 reservation 仍进入 transaction，供 checker 报错和
-scheduler 拒绝。包含未知 valid 或未知有效 payload 的端口不生成二态事件。
-Busy 中的 X/Z 由 monitor 报错，并在 `observed_busy` 中归一化为 0；该 0 只是保证
-后续仿真确定性的占位值，不表示对应 slot 已确认空闲。
+非 `null` request handle 表示对应物理端口存在一笔完整已知的请求；`null` 表示
+该端口没有可供 checker 和 scheduler 处理的请求。完整已知但语义非法的
+reservation 仍创建 request instance，供 checker 报错和 scheduler 拒绝。包含
+未知 valid 或未知有效 payload 的端口不创建 instance。
+
+Request instance 由 monitor 创建，之后只读。Scheduler 不得保存或修改 monitor
+创建的 request instance；被接受的 reservation 必须转换成独立的
+`vlm_shm_record_t`。Busy 中的 X/Z 由 monitor 报错，并在 `observed_busy` 中
+归一化为 0；该 0 只是保证后续仿真确定性的占位值，不表示对应 slot 已确认空闲。
 
 该 transaction 由 agent 以 `const ref` 直接传给 checker、scheduler 和 coverage。
 核心路径不依赖 analysis port、TLM FIFO、subscriber 回调顺序或 sequence item
@@ -354,36 +372,44 @@ shm_busy[direction][delay][sub_bank_id]
 
 ### 5.4 SHM reservation record
 
-每笔被 scheduler 接受的 DUT reservation 使用以下 record：
+每笔被 scheduler 接受的 DUT reservation 使用以下只读 record：
 
 ```systemverilog
-typedef struct {
-    int unsigned            bank_id;
-    int unsigned            write_port;
-    bit [BADDR_W-1:0]       address;
-    longint unsigned        issue_cycle;
-    longint unsigned        due_cycle;
-} vlm_shm_record_t;
+class vlm_shm_record_t;
+    bit [BADDR_W-1:0] address;
+    longint unsigned  issue_cycle;
+    int unsigned      issue_delay;
+endclass
 ```
 
-Scheduler 按以下结构保存 record：
+Scheduler 按以下结构保存 nullable record handle：
 
 ```text
-shm_records[direction][delay][sub_bank_id][$]
+shm_records[direction][relative_delay][bank_id]
 ```
 
-其中每个数组元素是一个 record queue。queue 用于表示多个不同 BANK 合法共享
-同一个 SHM slot；不得把一个 slot 限制为只能保存一笔 DUT reservation。
+其中 direction、当前相对 delay 和 BANK 已由数组索引表达。`sub_bank_id` 从
+record 的 `address[6:5]` 派生。固定 `<direction, relative_delay, bank_id>` 只有
+一个 handle，因此从结构上保证同一 BANK、同一方向、同一到期周期最多保存一笔
+DUT reservation。不同 BANK 的 record 可以通过相同地址 sub-bank 位共享一个
+SHM busy bit。
 
-读 reservation 的 `write_port` 固定为 0。`sub_bank_id`、direction 和当前相对
-delay 已由数组索引表达，因此不重复存入 record。
+Record 中的 `issue_delay` 是 reservation 发出时的原始 delay，record 移动时
+保持不变。Checker 在 scheduler 更新前必须检查：
+
+```text
+record.issue_cycle + record.issue_delay
+==
+transaction.cycle + relative_delay
+```
 
 `shm_busy` 与 `shm_records` 必须满足：
 
 ```text
 shm_busy[direction][delay][sub_bank_id] == 1
-当且仅当
-shm_records[direction][delay][sub_bank_id] 非空
+当且仅当存在某个 bank_id，满足
+shm_records[direction][delay][bank_id] != null
+且 shm_records[direction][delay][bank_id].address[6:5] == sub_bank_id
 ```
 
 ## 6. 检查契约
@@ -412,7 +438,9 @@ Checker 不再保存 per-bit known mask，也不重复增加四态错误计数�
 - 当 `input_error == 0` 时，对应方向的二态 `observed_busy[dly][sub_bank_id]`
   必须为 0；
 - active 模式下，scheduler 内部 external/SHM busy 的目标位置必须为空闲；
-- 同一 BANK、同一方向不存在另一笔相同到期周期的 reservation。
+- 同一 BANK、同一方向不存在另一笔相同到期周期的 reservation，无论两笔请求的
+  sub bank 是否相同；
+- 同一 BANK 同周期各一笔读写 reservation 是合法的跨方向组合。
 
 当 `input_error == 1` 时，checker 跳过依赖 `observed_busy` 真实性的比较，但仍
 检查 scheduler 内部不变量以及所有完整已知的 reservation/MEM event。Scheduler
@@ -426,7 +454,7 @@ Checker 必须检查：
 
 - external busy 与 SHM busy 不重叠；
 - 实际驱动到接口的已知 busy 等于两类 busy 的 OR；
-- `shm_busy` 与 `shm_records` 的空/非空状态一致；
+- `shm_busy` 与所有 BANK record 按 `address[6:5]` 归约后的占用状态一致；
 - DUT reservation 不得占用 external busy 已占用的 slot。
 
 ### 6.4 MEM 请求匹配
@@ -438,10 +466,10 @@ shm_busy[direction][0][sub_bank_id] == 1
 external_busy[direction][0][sub_bank_id] == 0
 ```
 
-并且必须在以下 queue 中找到唯一匹配 record：
+并且必须在以下位置找到匹配 record：
 
 ```text
-shm_records[direction][0][sub_bank_id]
+shm_records[direction][0][bank_id]
 ```
 
 匹配键为：
@@ -468,9 +496,10 @@ Checker 必须同时保证：
 1. agent 调用 `monitor.collect_cycle()`；
 2. monitor 等待并原子采样两个业务 interface，生成 transaction；
 3. agent 调用 checker，checker 使用 scheduler 更新前状态检查当前到期记录；
-4. agent 调用 scheduler，scheduler 消费到期记录、移动 busy 窗口、接收合法新
+4. agent 调用 coverage，传入相同 transaction、checker 结果和 scheduler
+   更新前状态；
+5. agent 调用 scheduler，scheduler 消费到期记录、移动 busy 窗口、接收合法新
    reservation，并生成下一周期 busy；
-5. agent 调用 coverage，传入相同 transaction 和 checker 结果；
 6. active agent 把 scheduler 的最终 busy 驱动到 reservation interface，供周期
    `N+1` 采样。
 
@@ -495,8 +524,8 @@ memory_vif -------> monitor                  |
           |      agent main_phase            |
           |        |       |       |         |
           |        v       v       v         |
-          |     checker scheduler coverage   |
-          |        ^       |       ^         |
+          |     checker coverage scheduler   |
+          |        ^       ^       |         |
           |        +-------+-------+         |
           |          scheduler view          |
           |                | final busy       |
@@ -512,10 +541,10 @@ reservation_vif <----------+                 |
 |monitor|agent|当周期二态 cycle transaction|
 |agent|checker|当周期 transaction|
 |scheduler|checker|更新前 external busy、SHM busy、SHM records 只读视图|
+|agent|coverage|当周期 transaction 和 checker 结果，在 scheduler 更新前采样|
+|scheduler|coverage|更新前 busy 来源和 SHM record 只读视图|
 |agent|scheduler|当周期 transaction|
 |scheduler|agent|下一周期最终 read/write busy|
-|agent|coverage|当周期 transaction 和 checker 结果|
-|scheduler|coverage|busy 来源和 slot 占用只读视图|
 
 `vlm_reservation_checker` 位于 `vlm_reservation_agent` 内，不再作为
 `shm_env` 中独立连接两个 monitor 的 checker。
@@ -555,13 +584,20 @@ external busy 生成策略至少允许全空闲、定向和随机三种配置。
 - monitor、scheduler 和 checker 从 Config DB 获取统一的 `clk_vif`；
 - 没有 component 维护独立递增的 cycle counter；
 - monitor 原子采集两个业务 interface，并生成二态 cycle transaction；
+- monitor 直接从 clocking-block 采样值构造 transaction，不保存独立 raw sample；
 - monitor 报告所有 X/Z，把 busy 的 X/Z 归一化为 0，并设置 `input_error`；
 - transaction 不保存 per-bit busy known mask；
+- transaction 使用固定 BANK/port 数组和 nullable request handle，不使用 event
+  queue；
 - checker 只处理二态语义，不重复报告 monitor 的四态错误；
 - 核心 checker、scheduler、coverage 和 busy 驱动使用同步直接调用；
+- coverage 在 scheduler 更新前采集当前 transaction 和 scheduler 状态；
 - scheduler 能区分 external busy 与 SHM busy；
 - external busy 与 SHM busy 永不重叠；
-- 一个 SHM slot 可以保存多笔不同 BANK 的 record；
+- `shm_records[direction][delay][bank]` 每个位置最多保存一个 record；
+- 多个不同 BANK 的 record 可以通过相同 `address[6:5]` 共享一个 SHM busy bit；
+- 同一 BANK、同一方向、同一到期周期最多接受一笔 reservation，跨读写方向不
+  构成该 BANK 冲突；
 - `dly == 0` 报告 `UVM_ERROR` 且不进入正常调度模型；
 - 每笔合法 MEM 请求能够匹配唯一的到期 SHM record；
 - 每笔到期 SHM record 能够匹配唯一的 MEM 请求；

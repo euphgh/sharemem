@@ -9,9 +9,9 @@ interface vlm_reservation_interface ();
 logic clk;
 logic rst_n;
 
-// Busy tables are driven by the reservation slave. Entry [delay][super_bank]
+// Busy tables are driven by the reservation slave. Entry [delay][sub_bank]
 // describes whether that direction is occupied at the corresponding future
-// cycle. The super-bank ID is bank_id[1:0].
+// cycle. The sub-bank ID is the reservation address field address[6:5].
 logic [VTAB_D-1:0][VLM_SUB_BANK_N-1:0] rbusy;
 logic [VTAB_D-1:0][VLM_SUB_BANK_N-1:0] wbusy;
 

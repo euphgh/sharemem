@@ -79,8 +79,8 @@ class vlm_reservation_agent extends uvm_agent;
   //------------------------------------------------------------------------------
   // @brief Processes one normalized transaction in deterministic component order.
   //
-  // Calls the checker before scheduler mutation, then updates the scheduler and
-  // samples coverage using the same transaction and checker result.
+  // Calls the checker and coverage before scheduler mutation, then updates the
+  // scheduler using the same transaction.
   //
   // @param txn Two-state reservation/MEM transaction for one cycle.
   // @post current_cycle_check_passed records the checker result and scheduler

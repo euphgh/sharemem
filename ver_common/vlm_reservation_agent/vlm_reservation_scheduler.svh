@@ -20,25 +20,27 @@ class vlm_reservation_scheduler extends uvm_component;
   // External occupancy indexed by direction, relative delay, and sub bank.
   vlm_busy_table_t external_busy[VLM_RESERVATION_DIRECTION_N];
 
-  // DUT-owned occupancy indexed by direction, relative delay, and sub bank.
+  // DUT-owned occupancy derived from record addresses by direction and delay.
   vlm_busy_table_t shm_busy[VLM_RESERVATION_DIRECTION_N];
 
-  // Final busy values exposed as external_busy OR shm_busy.
+  // Published busy values derived exactly as external_busy OR shm_busy.
   vlm_busy_table_t final_busy[VLM_RESERVATION_DIRECTION_N];
 
-  // Accepted DUT reservations grouped by direction, delay, and sub bank.
-  // Each slot is a queue because different BANKs may legally share one slot.
-  vlm_shm_record_queue_t
-      shm_records[VLM_RESERVATION_DIRECTION_N][VTAB_D][VLM_SUB_BANK_N];
+  // Accepted DUT reservations indexed by direction, relative delay, and BANK.
+  // One nullable handle per BANK enforces one due request per direction and BANK.
+  vlm_shm_record_t shm_records[VLM_RESERVATION_DIRECTION_N][VTAB_D][BANK_N];
 
-  // Cycle snapshot associated with the most recently processed transaction.
-  longint unsigned current_cycle;
+  // Indicates whether last_processed_cycle contains a valid transaction cycle.
+  bit has_processed_cycle;
+
+  // Cycle snapshot from the most recently processed transaction.
+  longint unsigned last_processed_cycle;
 
   // Total number of DUT reservation records accepted since construction.
   longint unsigned accepted_record_count;
 
-  // Total number of external busy slots generated since construction.
-  longint unsigned external_slot_count;
+  // Total number of newly generated external busy slots since construction.
+  longint unsigned generated_external_slot_count;
 
   //------------------------------------------------------------------------------
   // @brief Constructs the reservation scheduler component.
@@ -68,49 +70,11 @@ class vlm_reservation_scheduler extends uvm_component;
   //
   // @param txn Two-state reservation/MEM transaction for one cycle.
   // @pre txn.cycle equals the current shared clk_if cycle.
-  // @post current_cycle equals txn.cycle and final_busy is prepared
+  // @post last_processed_cycle equals txn.cycle and final_busy is prepared
   //       for the agent's next busy drive.
   //------------------------------------------------------------------------------
   extern function void process_cycle(
       const ref vlm_reservation_cycle_transaction_t txn);
-
-  //------------------------------------------------------------------------------
-  // @brief Replaces one direction's directed external busy table.
-  //
-  // @param direction Read or write table to update.
-  // @param busy      Directed external occupancy indexed by delay and sub bank.
-  // @pre No set bit in busy overlaps an accepted SHM reservation slot.
-  // @post Directed mode uses the supplied table for subsequent busy updates.
-  //------------------------------------------------------------------------------
-  extern function void set_directed_external_busy(
-      vlm_reservation_direction_e direction,
-      vlm_busy_table_t            busy);
-
-  //------------------------------------------------------------------------------
-  // @brief Reports whether one slot is occupied by an external source.
-  //
-  // @param direction Read or write table to query.
-  // @param delay     Relative delay index in the current scheduler window.
-  // @param sub_bank  Sub-bank index in the range zero through three.
-  // @return 1 when the selected external slot is occupied; otherwise 0.
-  //------------------------------------------------------------------------------
-  extern function bit is_external_busy(
-      vlm_reservation_direction_e direction,
-      int unsigned                delay,
-      int unsigned                sub_bank);
-
-  //------------------------------------------------------------------------------
-  // @brief Reports whether one slot contains at least one DUT reservation.
-  //
-  // @param direction Read or write table to query.
-  // @param delay     Relative delay index in the current scheduler window.
-  // @param sub_bank  Sub-bank index in the range zero through three.
-  // @return 1 when the selected SHM slot contains a record; otherwise 0.
-  //------------------------------------------------------------------------------
-  extern function bit is_shm_busy(
-      vlm_reservation_direction_e direction,
-      int unsigned                delay,
-      int unsigned                sub_bank);
 
   `uvm_component_utils(vlm_reservation_scheduler)
 

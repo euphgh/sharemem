@@ -743,9 +743,10 @@ shm_env
   `mem_rdata`。
 
 Agent 在 `main_phase` 中运行唯一的周期处理循环。Reservation monitor 原子采样
-两个业务 interface，完成四态检查并返回二态 cycle transaction；agent 随后同步
-调用 checker、scheduler 和 coverage，最后驱动下一周期 busy。核心路径不使用
-`run_phase`、TLM FIFO 或逐周期 sequence item。
+两个业务 interface，完成四态检查并直接返回二态 cycle transaction；agent 随后
+依次同步调用 checker、coverage 和 scheduler，最后驱动下一周期 busy。Coverage
+在 scheduler 更新前采集当前周期状态。核心路径不使用 `run_phase`、TLM FIFO
+或逐周期 sequence item。
 
 Monitor 独立报告所有 X/Z；busy 中的 X/Z 在二态 transaction 中归一化为 0，并
 设置周期级 `input_error`。Transaction 不保存逐 bit known mask，checker 只处理
@@ -756,9 +757,10 @@ Monitor 独立报告所有 X/Z；busy 中的 X/Z 在二态 transaction 中归一
 interface 仍使用原有普通 `clk`、`rst_n` 连接，不嵌套 `clk_if`。
 
 Scheduler 按 `<direction, delay, sub_bank_id>` 分别维护 external busy 与 SHM
-busy。不同 BANK 可以共享同一个 SHM slot；只有 external busy 与 SHM busy
-占用相同位置时才构成冲突。每个 SHM slot 使用 record queue 保存其中的所有
-DUT reservation。
+busy，并按 `<direction, delay, bank_id>` 保存 nullable DUT record。不同 BANK
+可以通过相同 `address[6:5]` 共享一个 SHM busy bit；只有 external busy 与 SHM
+busy 占用相同 sub-bank 位置时才构成跨模块冲突。同一 BANK、同一方向、同一到期
+周期最多接受一笔 reservation，无论其 sub bank 是否相同；读写方向相互独立。
 
 当前设计配置不产生 `dly == 0` 请求；checker 检测到该请求时报告
 `UVM_ERROR`，并且不把它加入正常调度与 MEM 匹配模型。
@@ -1073,7 +1075,11 @@ regression/ 目录下每个 lst 文件定义一个回归测试列表，每行一
 
     - 不同 BANK 可以在相同周期、相同方向访问相同 sub bank
 
-    - 只有 external busy 与 SHM busy 占用相同 `<direction, due_cycle, sub_bank_id>` 时构成冲突
+    - 跨模块冲突只发生在 external busy 与 SHM busy 占用相同 `<direction, due_cycle, sub_bank_id>` 时
+
+    - DUT 自身同一 BANK、同一方向的两笔预约禁止在同一周期到期，无论其 sub bank 是否相同
+
+    - 读写方向相互独立，同一 BANK 同周期各一笔读写预约不构成 BANK 冲突
 
     - 详细规则及禁止行为见 [RpuShmTop MEM/VLM 接口规范](mem-vlm-interface-spec.md)
 

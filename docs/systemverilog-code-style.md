@@ -122,9 +122,8 @@ API 声明放在 class 内。进入行为实现阶段后，再使用
 过多换行。超过 120 个字符时，应优先在参数、逻辑运算符或结构层次边界换行。
 
 对于作用域清晰、含义稳定且频繁出现的局部变量和 API 参数，可以使用常见简写，
-例如 `txn`、`rsv`、`req`、`rec`、`prev_rsv`、`rsv_events` 和
-`mem_req_events`。Class、typedef、interface 和公共配置字段仍应使用完整、稳定的
-名称；不得为不常见概念创造需要猜测的缩写。
+例如 `txn`、`rsv`、`req`、`rec` 和 `prev_rsv`。Class、typedef、interface 和
+公共配置字段仍应使用完整、稳定的名称；不得为不常见概念创造需要猜测的缩写。
 
 ## 7. Contract 与写作要求
 

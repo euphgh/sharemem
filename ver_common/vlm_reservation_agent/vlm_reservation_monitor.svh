@@ -24,9 +24,6 @@ class vlm_reservation_monitor extends uvm_component;
   // Shared cycle-number service obtained directly through UVM Config DB.
   virtual clk_if clk_vif;
 
-  // Most recent raw four-state values captured from the two interfaces.
-  vlm_reservation_raw_sample_t current_raw;
-
   // Most recent normalized two-state transaction returned to the agent.
   vlm_reservation_cycle_transaction_t current_txn;
 
@@ -65,34 +62,14 @@ class vlm_reservation_monitor extends uvm_component;
   extern function void set_config(vlm_reservation_agent_config cfg);
 
   //------------------------------------------------------------------------------
-  // @brief Waits for and returns one normalized reservation/MEM cycle.
+  // @brief Waits for, checks, and returns one normalized reservation/MEM cycle.
   //
   // @param txn Output receiving the two-state cycle transaction.
   // @pre clk_vif, reservation_vif, and memory_vif are non-null.
-  // @post txn.cycle is the clk_if cycle sampled with both interfaces.
+  // @post txn contains direct clocking-block samples normalized at the monitor's
+  //       four-state boundary, and txn.cycle identifies the sampling edge.
   //------------------------------------------------------------------------------
   extern task collect_cycle(
-      output vlm_reservation_cycle_transaction_t txn);
-
-  //------------------------------------------------------------------------------
-  // @brief Atomically captures four-state values from both business interfaces.
-  //
-  // @param raw Output receiving raw reservation, busy, and MEM request data.
-  // @pre The caller is synchronized to the reservation monitor clocking block.
-  // @post raw.cycle is a snapshot of clk_vif.cycle_count.
-  //------------------------------------------------------------------------------
-  extern function void sample_interfaces(
-      output vlm_reservation_raw_sample_t raw);
-
-  //------------------------------------------------------------------------------
-  // @brief Checks and converts one raw sample into a two-state transaction.
-  //
-  // @param raw Raw four-state values captured at one sampling edge.
-  // @param txn Output receiving normalized busy, known events, and status.
-  // @post Unknown active inputs are reported and do not create valid events.
-  //------------------------------------------------------------------------------
-  extern function void normalize_sample(
-      const ref vlm_reservation_raw_sample_t raw,
       output vlm_reservation_cycle_transaction_t txn);
 
   `uvm_component_utils(vlm_reservation_monitor)
