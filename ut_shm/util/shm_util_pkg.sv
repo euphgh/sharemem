@@ -1,4 +1,5 @@
-package shm_config_pkg;
+package shm_util_pkg;
+    `include "bit_rt_range.svh"
     parameter WARP_N          = 8                     ;
     parameter OTF_N           = 4                     ;
     parameter PRIO_W          = 4                     ;
