@@ -24,8 +24,8 @@ usage() {
   SHAREMEM_REMOTE_HOST  SSH 主机或别名，默认 chatgpt
   SHAREMEM_REMOTE_DIR   远端 HOME 下的仓库路径，默认 sharemem
 
-同步会保留远端 .git、构建目录和本地密码文件。默认删除远端多余的源码文件，
-使远端测试工作区与本地一致。
+同步会保留远端 .git，跳过本地 UVM resources、构建目录和密码文件。默认删除
+远端多余的源码文件，使远端测试工作区与本地一致。
 EOF
 }
 
@@ -86,6 +86,7 @@ rsync_args=(
     --itemize-changes
     --exclude=.git/
     --exclude=.venv/
+    --exclude=resources/
     --exclude=__pycache__/
     --exclude='*.pyc'
     --exclude=.DS_Store

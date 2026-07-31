@@ -5,20 +5,32 @@ package vlm_reservation_compile_test_pkg;
   import vlm_reservation_pkg::*;
 
   `include "uvm_macros.svh"
+  `include "vlm_memory_sequence_item.sv"
+  `include "vlm_memory_slv_agent_config.sv"
+  `include "vlm_memory_monitor.sv"
+  `include "vlm_memory_slv_driver.sv"
+  `include "vlm_memory_slv_sequencer.sv"
+  `include "vlm_memory_slv_agent.svh"
 
   //----------------------------------------------------------------------------
-  // @brief Builds one reservation agent connected to interfaces from tb.
+  // @brief Builds reservation and memory agents connected to interfaces from tb.
   //
   // This test only proves UVM construction and elaboration. It does not raise
   // an objection, drive requests, or require the DUT shell to produce behavior.
   //----------------------------------------------------------------------------
   class vlm_reservation_compile_test extends uvm_test;
 
-    // Interface-only configuration passed to the reservation agent.
-    vlm_reservation_agent_config cfg;
+    // Interface configuration passed to the reservation agent.
+    vlm_reservation_agent_config reservation_cfg;
 
-    // Reservation agent whose complete child hierarchy is elaborated.
-    vlm_reservation_agent agent;
+    // Activation policy passed to the VLM memory slave agent.
+    vlm_memory_slv_agent_config memory_cfg;
+
+    // Reservation agent whose complete child hierarchy is compiled.
+    vlm_reservation_agent reservation_agent;
+
+    // VLM memory slave agent whose complete child hierarchy is compiled.
+    vlm_memory_slv_agent memory_agent;
 
     //--------------------------------------------------------------------------
     // @brief Constructs the compile-only UVM test.
@@ -31,27 +43,33 @@ package vlm_reservation_compile_test_pkg;
     endfunction
 
     //--------------------------------------------------------------------------
-    // @brief Retrieves both interfaces and constructs the reservation agent.
+    // @brief Retrieves interfaces and constructs both VLM agents.
     //
     // @param phase UVM build phase used for configuration and construction.
-    // @post The agent receives one config containing both connected interfaces.
+    // @post Both agents receive their required configuration and interfaces.
     //--------------------------------------------------------------------------
     virtual function void build_phase(uvm_phase phase);
       super.build_phase(phase);
 
-      cfg = vlm_reservation_agent_config::type_id::create("cfg");
+      reservation_cfg = vlm_reservation_agent_config::type_id::create("reservation_cfg");
+      memory_cfg      = vlm_memory_slv_agent_config::type_id::create("memory_cfg");
 
       if (!uvm_config_db#(virtual vlm_reservation_interface)::get(this, "", "reservation_vif",
-                                                                 cfg.reservation_vif)) begin
+                                                                 reservation_cfg.reservation_vif)) begin
         `uvm_fatal("COMPILE_NO_RESERVATION_VIF", "compile test requires reservation_vif")
       end
 
-      if (!uvm_config_db#(virtual vlm_memory_interface)::get(this, "", "memory_vif", cfg.memory_vif)) begin
+      if (!uvm_config_db#(virtual vlm_memory_interface)::get(this, "", "memory_vif",
+                                                            reservation_cfg.memory_vif)) begin
         `uvm_fatal("COMPILE_NO_MEMORY_VIF", "compile test requires memory_vif")
       end
 
-      uvm_config_db#(vlm_reservation_agent_config)::set(this, "agent", "cfg", cfg);
-      agent = vlm_reservation_agent::type_id::create("agent", this);
+      uvm_config_db#(vlm_reservation_agent_config)::set(this, "reservation_agent", "cfg", reservation_cfg);
+      uvm_config_db#(vlm_memory_slv_agent_config)::set(this, "memory_agent", "cfg", memory_cfg);
+      uvm_config_db#(virtual vlm_memory_interface)::set(this, "memory_agent", "memory_vif", reservation_cfg.memory_vif);
+
+      reservation_agent = vlm_reservation_agent::type_id::create("reservation_agent", this);
+      memory_agent      = vlm_memory_slv_agent::type_id::create("memory_agent", this);
     endfunction
 
     `uvm_component_utils(vlm_reservation_compile_test)
@@ -171,7 +189,7 @@ module tb;
   end
 
   initial begin
-    uvm_config_db#(virtual clk_if)::set(null, "uvm_test_top.agent.*", "clk_vif", clk_vif);
+    uvm_config_db#(virtual clk_if)::set(null, "uvm_test_top.reservation_agent.*", "clk_vif", clk_vif);
     uvm_config_db#(virtual vlm_reservation_interface)::set(null, "uvm_test_top", "reservation_vif",
                                                           reservation_vif);
     uvm_config_db#(virtual vlm_memory_interface)::set(null, "uvm_test_top", "memory_vif", memory_vif);

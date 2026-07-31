@@ -10,6 +10,9 @@
 //------------------------------------------------------------------------------
 class vlm_memory_slv_agent extends uvm_agent;
 
+  // Component activation policy obtained through UVM Config DB.
+  vlm_memory_slv_agent_config cfg;
+
   // Shared VLM memory interface obtained through UVM Config DB.
   virtual vlm_memory_interface memory_vif;
 
@@ -33,10 +36,10 @@ class vlm_memory_slv_agent extends uvm_agent;
       uvm_component parent = null);
 
   //------------------------------------------------------------------------------
-  // @brief Obtains memory_vif and constructs the configured component hierarchy.
+  // @brief Obtains configuration and constructs the enabled component hierarchy.
   //
   // @param phase UVM build phase used to create the monitor and active children.
-  // @post The monitor exists; driver and sequencer exist only in active mode.
+  // @post Children selected by cfg exist and memory_vif is available.
   //------------------------------------------------------------------------------
   extern virtual function void build_phase(uvm_phase phase);
 
@@ -60,13 +63,21 @@ endfunction : new
 function void vlm_memory_slv_agent::build_phase(uvm_phase phase);
   super.build_phase(phase);
 
+  if (!uvm_config_db#(vlm_memory_slv_agent_config)::get(this, "", "cfg", cfg) || cfg == null) begin
+    `uvm_fatal("VLM_MEMORY_NO_CFG", "vlm_memory_slv_agent requires config object 'cfg'")
+  end
+
   if (!uvm_config_db#(virtual vlm_memory_interface)::get(this, "", "memory_vif", memory_vif)) begin
     `uvm_fatal("VLM_MEMORY_NO_VIF", "vlm_memory_slv_agent requires virtual interface 'memory_vif'")
   end
 
-  monitor = vlm_memory_monitor::type_id::create("monitor", this);
+  is_active = cfg.is_active;
 
-  if (get_is_active() == UVM_ACTIVE) begin
+  if (cfg.vlm_memory_mon_is_active == UVM_ACTIVE) begin
+    monitor = vlm_memory_monitor::type_id::create("monitor", this);
+  end
+
+  if (get_is_active() == UVM_ACTIVE && cfg.vlm_memory_slv_is_active == UVM_ACTIVE) begin
     sequencer = vlm_memory_slv_sequencer::type_id::create("sequencer", this);
     driver    = vlm_memory_slv_driver::type_id::create("driver", this);
   end
@@ -75,10 +86,11 @@ endfunction : build_phase
 function void vlm_memory_slv_agent::connect_phase(uvm_phase phase);
   super.connect_phase(phase);
 
-  // The monitor retains its existing public vif field until its own migration.
-  monitor.vlm_mon_vif = memory_vif;
+  if (monitor != null) begin
+    monitor.memory_vif = memory_vif;
+  end
 
-  if (get_is_active() == UVM_ACTIVE) begin
+  if (driver != null && sequencer != null) begin
     driver.memory_vif = memory_vif;
     driver.seq_item_port.connect(sequencer.seq_item_export);
   end

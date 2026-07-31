@@ -1,307 +1,183 @@
-`ifndef INC_vlm_memory_monitor_SV
-`define INC_vlm_memory_monitor_SV
+`ifndef VLM_MEMORY_MONITOR_SV
+`define VLM_MEMORY_MONITOR_SV
 
-//-------------------------------------------------------------------
-// Class: vlm_memory_monitor
+//------------------------------------------------------------------------------
+// @brief Publishes read and write transactions observed on the MEM interface.
 //
-//-------------------------------------------------------------------
-
+// Samples fully known VLM memory requests, collects fixed-latency read data,
+// and publishes typed transactions through separate read and write analysis
+// ports. It does not drive MEM data or perform reservation checks.
+//------------------------------------------------------------------------------
 class vlm_memory_monitor extends uvm_monitor;
-//-------------------------------------------------------------------
-// Data Members
-//-------------------------------------------------------------------
 
-int unsigned vlm_agent_id;
-int unsigned trans_cnt=0;
-int unsigned read_trans_cnt=0;
-int unsigned write_trans_cnt=0;
-int unsigned write_port_trans_cnt[16]='{16{0}};
+  // Total number of read and write transactions sampled by this monitor.
+  int unsigned transaction_count;
 
-vlm_sequence_item vlm_trans;
+  // Number of read transactions sampled by this monitor.
+  int unsigned read_transaction_count;
 
-string filename = "vlm.rtl";
-int    vlm_rtl_fp;
+  // Number of write transactions sampled by this monitor.
+  int unsigned write_transaction_count;
 
+  // Optional debug output filename used when +file_debug is present.
+  string debug_filename = "vlm_memory.rtl";
 
-//-------------------------------------------------------------------
-// Interface Instantiation
-//-------------------------------------------------------------------
-virtual vlm_memory_interface vlm_mon_vif;
+  // Optional debug output file descriptor; zero means no file is open.
+  int debug_file;
 
-//-------------------------------------------------------------------
-// Agent Configuration Instantiation
-//-------------------------------------------------------------------
+  // Read-only VLM memory interface assigned by the containing agent.
+  virtual vlm_memory_interface memory_vif;
 
-//-------------------------------------------------------------------
-// Coverage
-//-------------------------------------------------------------------
-//`include "vlm_vlm_covergroup.sv"
+  // Publishes completed MEM read transactions after their fixed-latency data.
+  uvm_analysis_port #(vlm_memory_sequence_item) read_analysis_port;
 
-//-------------------------------------------------------------------
-// Port Declaration
-//-------------------------------------------------------------------
-uvm_analysis_port #(vlm_sequence_item) rdvlm_analysis_port;
-uvm_analysis_port #(vlm_sequence_item) wrvlm_analysis_port;
+  // Publishes MEM write transactions sampled from the request cycle.
+  uvm_analysis_port #(vlm_memory_sequence_item) write_analysis_port;
 
-//-------------------------------------------------------------------
-// Methods
-//-------------------------------------------------------------------
+  //------------------------------------------------------------------------------
+  // @brief Constructs the VLM memory monitor and opens optional debug output.
+  //
+  // @param name   UVM component instance name.
+  // @param parent Parent component that owns this monitor.
+  //------------------------------------------------------------------------------
+  extern function new(
+      string        name = "vlm_memory_monitor",
+      uvm_component parent = null);
 
-// ------------------
-// Standard UVM Methods
-// ------------------
-extern function        new(string name= "vlm_memory_monitor", uvm_component parent);
-extern virtual function void build_phase(uvm_phase phase);
-extern virtual function void connect_phase(uvm_phase phase);
-extern virtual function void end_of_elaboration_phase(uvm_phase phase);
-extern virtual function void start_of_simulation_phase(uvm_phase phase);
-extern virtual task         run_phase(uvm_phase phase);
-extern virtual function void extract_phase(uvm_phase phase);
-extern virtual function void check_phase(uvm_phase phase);
-extern virtual function void report_phase(uvm_phase phase);
-extern virtual function void final_phase(uvm_phase phase);
+  //------------------------------------------------------------------------------
+  // @brief Constructs the read and write analysis ports.
+  //
+  // @param phase UVM build phase used to construct monitor ports.
+  //------------------------------------------------------------------------------
+  extern virtual function void build_phase(uvm_phase phase);
 
-// ------------------
-// User Defined APIs
-// ------------------
-extern task monitor_signals();
+  //------------------------------------------------------------------------------
+  // @brief Waits for reset release and continuously samples MEM transactions.
+  //
+  // @param phase UVM run phase controlling the monitor lifetime.
+  //------------------------------------------------------------------------------
+  extern virtual task run_phase(uvm_phase phase);
 
+  //------------------------------------------------------------------------------
+  // @brief Closes the optional debug output file.
+  //
+  // @param phase UVM final phase invoked after simulation activity completes.
+  //------------------------------------------------------------------------------
+  extern virtual function void final_phase(uvm_phase phase);
 
-// ------------------
-// UVM Factory Registration
-// ------------------
-`uvm_component_utils_begin(vlm_memory_monitor)
-// ------------------
-// Add field configurations
-// ------------------
-`uvm_field_int(vlm_agent_id, UVM_ALL_ON)
-// ------------------
-`uvm_component_utils_end
+  //------------------------------------------------------------------------------
+  // @brief Samples read and write request streams in parallel.
+  //
+  // @pre memory_vif is valid and reset has been released.
+  //------------------------------------------------------------------------------
+  extern protected task monitor_signals();
 
-endclass :vlm_memory_monitor
+  `uvm_component_utils(vlm_memory_monitor)
 
+endclass : vlm_memory_monitor
 
-//-------------------------------------------------------------------
-// Function: new
-//
-//-------------------------------------------------------------------
-
-function vlm_memory_monitor::new(string name = "vlm_memory_monitor", uvm_component parent);
+function vlm_memory_monitor::new(
+    string        name = "vlm_memory_monitor",
+    uvm_component parent = null);
   super.new(name, parent);
 
   if ($test$plusargs("file_debug")) begin
-    vlm_rtl_fp = $fopen(filename, "w");
+    debug_file = $fopen(debug_filename, "w");
   end
-
-endfunction :new
-
-
-//-------------------------------------------------------------------
-// Function: build_phase
-//
-// Create and configure of testbench structure
-//-------------------------------------------------------------------
+endfunction : new
 
 function void vlm_memory_monitor::build_phase(uvm_phase phase);
   super.build_phase(phase);
-  `uvm_info(get_type_name(), "In build_phase...!!", UVM_DEBUG);
-
-  // ------------------
-  // Port Construction
-  // ------------------
-  rdvlm_analysis_port = new("vlm_read___analysis_port", this);
-  wrvlm_analysis_port = new("vlm_write___analysis_port", this);
-
-  // ------------------
-  // Get configuration
-  // ------------------
-
-  // ------------------
-  // Construct children
-  // ------------------
-
-  // ------------------
-  // Configure children
-  // ------------------
-
-endfunction: build_phase
-
-
-//-------------------------------------------------------------------
-// Function: connect_phase
-//
-// Establish cross-component connections
-//-------------------------------------------------------------------
-
-function void vlm_memory_monitor::connect_phase(uvm_phase phase);
-  super.connect_phase(phase);
-  `uvm_info(get_type_name(), "In connect_phase...!!", UVM_DEBUG);
-endfunction: connect_phase
-
-
-//-------------------------------------------------------------------
-// Task: run_phase
-//
-// Stimulate the DUT
-//-------------------------------------------------------------------
+  read_analysis_port  = new("read_analysis_port", this);
+  write_analysis_port = new("write_analysis_port", this);
+endfunction : build_phase
 
 task vlm_memory_monitor::run_phase(uvm_phase phase);
   super.run_phase(phase);
-  `uvm_info(get_type_name(), "In run_phase...!!", UVM_DEBUG);
+
+  if (memory_vif == null) begin
+    `uvm_fatal("VLM_MEMORY_NO_VIF", "vlm_memory_monitor requires memory_vif")
+  end
+
+  wait (memory_vif.rst_n === 1'b1);
   monitor_signals();
-endtask: run_phase
-
-
-//-------------------------------------------------------------------
-// Function: end_of_elaboration_phase
-//
-// Fine-tune the testbench
-//-------------------------------------------------------------------
-
-function void vlm_memory_monitor::end_of_elaboration_phase(uvm_phase phase);
-  super.end_of_elaboration_phase(phase);
-  `uvm_info(get_type_name(), "In end_of_elaboration_phase...!!", UVM_DEBUG);
-endfunction: end_of_elaboration_phase
-
-
-//-------------------------------------------------------------------
-// Function: start_of_simulation_phase
-//
-// Get ready for DUT to be simulated
-//-------------------------------------------------------------------
-
-function void vlm_memory_monitor::start_of_simulation_phase(uvm_phase phase);
-  super.start_of_simulation_phase(phase);
-  `uvm_info(get_type_name(), "In start_of_simulation_phase...!!", UVM_DEBUG);
-endfunction: start_of_simulation_phase
-
-
-//-------------------------------------------------------------------
-// Function: extract_phase
-//
-// Extract data from different points of the verification environment
-//-------------------------------------------------------------------
-
-function void vlm_memory_monitor::extract_phase(uvm_phase phase);
-  super.extract_phase(phase);
-  `uvm_info(get_type_name(), "In extract_phase...!!", UVM_DEBUG);
-endfunction: extract_phase
-
-
-//-------------------------------------------------------------------
-// Function: check_phase
-//
-// Check for any unexpected conditions in the verification environment
-//-------------------------------------------------------------------
-
-function void vlm_memory_monitor::check_phase(uvm_phase phase);
-  super.check_phase(phase);
-  `uvm_info(get_type_name(), "In check_phase...!!", UVM_DEBUG);
-endfunction: check_phase
-
-
-//-------------------------------------------------------------------
-// Function: report_phase
-//
-// Report results of the test
-//-------------------------------------------------------------------
-
-function void vlm_memory_monitor::report_phase(uvm_phase phase);
-  super.report_phase(phase);
-  `uvm_info(get_type_name(), "In report phase...!!", UVM_DEBUG);
-endfunction: report_phase
-
-
-//-------------------------------------------------------------------
-// Function: final_phase
-//
-// Tie up loose ends. All Simulation activities are done.
-//
-// Closing files, Ending co-simulation engines etc.
-//-------------------------------------------------------------------
+endtask : run_phase
 
 function void vlm_memory_monitor::final_phase(uvm_phase phase);
   super.final_phase(phase);
-  `uvm_info(get_type_name(), "In final_phase...!!", UVM_DEBUG);
-endfunction: final_phase
 
-
-//-------------------------------------------------------------------
-// User Defined
-// Task: monitor_signals
-//
-// Monitor VLM sequence items.
-//-------------------------------------------------------------------
+  if (debug_file != 0) begin
+    $fclose(debug_file);
+    debug_file = 0;
+  end
+endfunction : final_phase
 
 task vlm_memory_monitor::monitor_signals();
-  wait (vlm_mon_vif.rst_n === 1);
-
   fork
+    forever begin
+      vlm_memory_sequence_item read_transaction;
 
-    // read
-    while(1) begin
-      vlm_memory_sequence_item vlm_read_trans;
+      @(memory_vif.mon_cb iff (|memory_vif.mon_cb.rvld) === 1'b1);
 
-      @(vlm_mon_vif.mon_cb iff (|vlm_mon_vif.mon_cb.vlm_rvld) === 1'b1);
-      `uvm_info(get_type_name(), $sformatf("monitor %0dth vlm_read_trans", read_trans_cnt), UVM_LOW)
+      read_transaction =
+          vlm_memory_sequence_item::type_id::create($sformatf("read_transaction_%0d", read_transaction_count));
+      read_transaction.vlm_read = 1'b1;
 
-      vlm_read_trans = vlm_memory_sequence_item::type_id::create($sformatf("rtl_vlm_read_trans[%0d]", write_trans_cnt));
-
-      vlm_read_trans.vlm_read = 1'b1;
-      for (int idx=0; idx<16; idx++) begin
-        vlm_read_trans.vlm_bken[idx] = vlm_mon_vif.mon_cb.vlm_rvld[idx];
-        vlm_read_trans.vlm_addr[idx] = vlm_mon_vif.mon_cb.vlm_raddr[idx];
+      for (int unsigned bank = 0; bank < BANK_N; bank++) begin
+        read_transaction.vlm_bken[bank] = memory_vif.mon_cb.rvld[bank];
+        read_transaction.vlm_addr[bank] = memory_vif.mon_cb.raddr[bank];
       end
 
       fork
         begin
+          automatic vlm_memory_sequence_item completed_transaction = read_transaction;
 
-          repeat(RPORT_DLY) @(vlm_mon_vif.mon_cb);
-
-          for (int idx=0; idx<16; idx++) begin
-            vlm_read_trans.vlm_data[idx] = vlm_mon_vif.mon_cb.vlm_rdata[idx];
-            vlm_read_trans.vlm_strb[idx] = '1;
+          repeat (RPORT_DLY) begin
+            @(memory_vif.mon_cb);
           end
 
-          if ($test$plusargs("file_debug")) begin
-            vlm_read_trans.write_file(vlm_rtl_fp);
+          for (int unsigned bank = 0; bank < BANK_N; bank++) begin
+            completed_transaction.vlm_data[bank] = memory_vif.mon_cb.rdata[bank];
+            completed_transaction.vlm_strb[bank] = '1;
           end
 
-          rdvlm_analysis_port.write(vlm_read_trans);
+          if (debug_file != 0) begin
+            completed_transaction.write_file(debug_file);
+          end
+
+          read_analysis_port.write(completed_transaction);
         end
       join_none
 
-      read_trans_cnt++;
-      trans_cnt++;
-
+      read_transaction_count++;
+      transaction_count++;
     end
 
-    // write
-    while(1) begin
-      vlm_memory_sequence_item vlm_write_trans;
+    forever begin
+      vlm_memory_sequence_item write_transaction;
 
-      @(vlm_mon_vif.mon_cb iff (|vlm_mon_vif.mon_cb.vlm_wvld) === 1'b1);
-      `uvm_info(get_type_name(), $sformatf("monitor %0dth vlm_write_trans", write_trans_cnt), UVM_LOW)
-      vlm_write_trans = vlm_memory_sequence_item::type_id::create($sformatf("rtl_vlm_write_trans[%0d]", write_trans_cnt));
+      @(memory_vif.mon_cb iff (|memory_vif.mon_cb.wvld) === 1'b1);
 
-      vlm_write_trans.vlm_read = 1'b0;
-      for (int idx=0; idx<16; idx++) begin
-        vlm_write_trans.vlm_bken[idx] = vlm_mon_vif.mon_cb.vlm_wvld[idx];
-        vlm_write_trans.vlm_addr[idx] = vlm_mon_vif.mon_cb.vlm_waddr[idx];
-        vlm_write_trans.vlm_strb[idx] = vlm_mon_vif.mon_cb.vlm_wstrb[idx];
-        vlm_write_trans.vlm_data[idx] = vlm_mon_vif.mon_cb.vlm_wdata[idx];
+      write_transaction =
+          vlm_memory_sequence_item::type_id::create($sformatf("write_transaction_%0d", write_transaction_count));
+      write_transaction.vlm_read = 1'b0;
+
+      for (int unsigned bank = 0; bank < BANK_N; bank++) begin
+        write_transaction.vlm_bken[bank] = memory_vif.mon_cb.wvld[bank];
+        write_transaction.vlm_addr[bank] = memory_vif.mon_cb.waddr[bank];
+        write_transaction.vlm_strb[bank] = memory_vif.mon_cb.wstrb[bank];
+        write_transaction.vlm_data[bank] = memory_vif.mon_cb.wdata[bank];
       end
 
-      if ($test$plusargs("file_debug")) begin
-        vlm_write_trans.write_file(vlm_rtl_fp);
+      if (debug_file != 0) begin
+        write_transaction.write_file(debug_file);
       end
 
-      wrvlm_analysis_port.write(vlm_write_trans);
-      write_trans_cnt++;
-      trans_cnt++;
+      write_analysis_port.write(write_transaction);
+      write_transaction_count++;
+      transaction_count++;
     end
   join
+endtask : monitor_signals
 
-endtask: monitor_signals
-
-`endif //INC_vlm_memory_monitor_SV
+`endif // VLM_MEMORY_MONITOR_SV

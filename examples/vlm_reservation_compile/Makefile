@@ -16,6 +16,9 @@ SOURCES := \
 	$(EXAMPLE_DIR)/tb.sv
 
 AGENT_HEADERS := $(wildcard $(REPO_ROOT)/ver_common/vlm_reservation_agent/*.svh)
+MEMORY_AGENT_FILES := \
+	$(wildcard $(REPO_ROOT)/ver_common/vlm_memory_agent/*.sv) \
+	$(wildcard $(REPO_ROOT)/ver_common/vlm_memory_agent/*.svh)
 
 .PHONY: all compile clean
 
@@ -23,11 +26,12 @@ all: compile
 
 compile: $(SIMV)
 
-$(SIMV): $(SOURCES) $(AGENT_HEADERS)
+$(SIMV): $(SOURCES) $(AGENT_HEADERS) $(MEMORY_AGENT_FILES)
 	mkdir -p $(BUILD_DIR)
 	cd $(BUILD_DIR) && \
 		$(VCS) -full64 -sverilog -ntb_opts $(UVM_VERSION) \
 			-timescale=1ns/1ps \
+			+incdir+$(REPO_ROOT)/ver_common/vlm_memory_agent \
 			+incdir+$(REPO_ROOT)/ver_common/vlm_reservation_agent \
 			$(SOURCES) \
 			-top tb \

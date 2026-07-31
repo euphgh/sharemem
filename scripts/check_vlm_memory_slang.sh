@@ -2,8 +2,7 @@
 #
 # 使用本机 slang 和 UVM 1.2 检查 VLM memory slave agent 组件。
 #
-# 当前 vlm_memory_monitor.sv 仍在独立迁移，因此这里提供仅包含 agent
-# 所需公开接口的临时 monitor 声明，专门检查 driver、sequencer 和 agent。
+# 检查 interface、transaction、config、monitor、driver、sequencer 和 agent。
 
 set -euo pipefail
 
@@ -52,6 +51,7 @@ required_files=(
     "$memory_agent_dir/vlm_memory_interface.sv"
     "$memory_agent_dir/vlm_memory_sequence_item.sv"
     "$memory_agent_dir/vlm_memory_slv_agent_config.sv"
+    "$memory_agent_dir/vlm_memory_monitor.sv"
     "$memory_agent_dir/vlm_memory_slv_driver.sv"
     "$memory_agent_dir/vlm_memory_slv_sequencer.sv"
     "$memory_agent_dir/vlm_memory_slv_agent.svh"
@@ -77,18 +77,7 @@ package vlm_memory_slang_test_pkg;
   `include "uvm_macros.svh"
   `include "vlm_memory_sequence_item.sv"
   `include "vlm_memory_slv_agent_config.sv"
-
-  // Temporary dependency boundary for the monitor's separate migration.
-  class vlm_memory_monitor extends uvm_monitor;
-    virtual vlm_memory_interface vlm_mon_vif;
-
-    function new(string name = "vlm_memory_monitor", uvm_component parent = null);
-      super.new(name, parent);
-    endfunction : new
-
-    `uvm_component_utils(vlm_memory_monitor)
-  endclass : vlm_memory_monitor
-
+  `include "vlm_memory_monitor.sv"
   `include "vlm_memory_slv_driver.sv"
   `include "vlm_memory_slv_sequencer.sv"
   `include "vlm_memory_slv_agent.svh"
