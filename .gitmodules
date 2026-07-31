@@ -1,0 +1,3 @@
+[submodule "ut_shm/util/sv-collection"]
+	path = ut_shm/util/sv-collection
+	url = git@github.com:euphgh/sv-collection.git
