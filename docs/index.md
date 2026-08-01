@@ -581,8 +581,8 @@ DUT 会将一笔 `shmins_sequence_item` 拆分为多笔 `vlm_memory_sequence_ite
 - 比对通过后，从 ref item 中移除已匹配的写地址与写数据；若 ref item 为空，则从队列中移除
 
 ```Verilog
-task shm_scoreboard::run_phase(uvm_phase phase);
-    super.run_phase(phase);
+task shm_scoreboard::main_phase(uvm_phase phase);
+    super.main_phase(phase);
     fork
         collect_ref();           // 从 reference 接收 ref item，放入队列
         scan_timeout_creq();     // 轮询队列，检测超时 ref item
@@ -745,7 +745,7 @@ shm_env
 Agent 在 `main_phase` 中运行唯一的周期处理循环。Reservation monitor 原子采样
 两个业务 interface，完成四态检查并直接返回二态 cycle transaction；agent 随后
 依次同步调用 checker、coverage 和 scheduler，最后驱动下一周期 busy。Coverage
-在 scheduler 更新前采集当前周期状态。核心路径不使用 `run_phase`、TLM FIFO
+在 scheduler 更新前采集当前周期状态。核心路径不使用 `main_phase`、TLM FIFO
 或逐周期 sequence item。
 
 Monitor 独立报告所有 X/Z；busy 中的 X/Z 在二态 transaction 中归一化为 0，并

@@ -369,13 +369,13 @@ task shm_scoreboard::configure_phase(uvm_phase phase);
 endtask: configure_phase
 
 //-----------------------------------------------------------------------------
-// Task: run_phase
+// Task: main_phase
 //-----------------------------------------------------------------------------
 // Stimulate the DUT
 //-----------------------------------------------------------------------------
 task shm_scoreboard::main_phase(uvm_phase phase);
-    super.run_phase(phase);
-    `uvm_info(get_type_name(), "In run_phase...!!", UVM_DEBUG);
+    super.main_phase(phase);
+    `uvm_info(get_type_name(), "In main_phase...!!", UVM_DEBUG);
 
     fork
         collect_ref();
@@ -383,6 +383,6 @@ task shm_scoreboard::main_phase(uvm_phase phase);
         compare_dut_with_ref();
     join_none
 
-endtask: run_phase
+endtask: main_phase
 
 `endif // INC_SHM_SCOREBOARD_SVH

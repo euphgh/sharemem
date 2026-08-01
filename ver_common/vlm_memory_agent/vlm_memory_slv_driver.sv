@@ -31,7 +31,7 @@ class vlm_memory_slv_driver extends uvm_driver #(vlm_memory_sequence_item);
   //
   // @param phase UVM run phase controlling the driver lifetime.
   //------------------------------------------------------------------------------
-  extern virtual task run_phase(uvm_phase phase);
+  extern virtual task main_phase(uvm_phase phase);
 
   //------------------------------------------------------------------------------
   // @brief Drives the MEM read-data output to a known reset value.
@@ -59,8 +59,8 @@ function vlm_memory_slv_driver::new(
   mem_port = new("mem_port", this);
 endfunction : new
 
-task vlm_memory_slv_driver::run_phase(uvm_phase phase);
-  super.run_phase(phase);
+task vlm_memory_slv_driver::main_phase(uvm_phase phase);
+  super.main_phase(phase);
 
   if (memory_vif == null) begin
     `uvm_fatal("VLM_MEMORY_NO_VIF", "vlm_memory_slv_driver requires memory_vif")
@@ -69,7 +69,7 @@ task vlm_memory_slv_driver::run_phase(uvm_phase phase);
   reset_signals();
   wait (memory_vif.rst_n === 1'b1);
   drive_signals();
-endtask : run_phase
+endtask : main_phase
 
 task vlm_memory_slv_driver::reset_signals();
   memory_vif.slv_cb.rdata <= '0;

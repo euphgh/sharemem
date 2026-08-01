@@ -1,0 +1,44 @@
+//================================================================================
+// File Name       : shmins_mst_sequencer
+// Author          : chao.ma
+// Copyright       : HX
+//================================================================================
+// NOTE: Please Don't Remove Any Comments or //--- Given Below
+//================================================================================
+
+`ifndef INC_SHMINS_MST_SEQUENCER_SV
+`define INC_SHMINS_MST_SEQUENCER_SV
+
+//-----------------------------------------------------------------------------
+// Class: shmins_mst_sequencer
+//-----------------------------------------------------------------------------
+class shmins_mst_sequencer extends uvm_sequencer #(shmins_sequence_item);
+
+    // Standard UVM Methods
+    extern function  new   (string name= "shmins_mst_sequencer", uvm_component parent);
+    extern function void  build_phase(uvm_phase phase);
+
+    // User Defined APIs
+
+    // UVM Factory Registration Macro
+    `uvm_component_utils(shmins_mst_sequencer)
+endclass: shmins_mst_sequencer
+
+//-----------------------------------------------------------------------------
+// Function: new
+//-----------------------------------------------------------------------------
+function shmins_mst_sequencer::new(string name = "shmins_mst_sequencer", uvm_component parent);
+    super.new(name, parent);
+endfunction: new
+
+//-----------------------------------------------------------------------------
+// Function: build_phase
+//-----------------------------------------------------------------------------
+// Create and configure of testbench structure
+//-----------------------------------------------------------------------------
+function void shmins_mst_sequencer::build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    `uvm_info(get_type_name(), "In build_phase...!!", UVM_DEBUG);
+endfunction: build_phase
+
+`endif //INC_SHMINS_MST_SEQUENCER_SV

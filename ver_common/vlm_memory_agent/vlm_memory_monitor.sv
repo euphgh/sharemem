@@ -56,7 +56,7 @@ class vlm_memory_monitor extends uvm_monitor;
   //
   // @param phase UVM run phase controlling the monitor lifetime.
   //------------------------------------------------------------------------------
-  extern virtual task run_phase(uvm_phase phase);
+  extern virtual task main_phase(uvm_phase phase);
 
   //------------------------------------------------------------------------------
   // @brief Closes the optional debug output file.
@@ -92,8 +92,8 @@ function void vlm_memory_monitor::build_phase(uvm_phase phase);
   write_analysis_port = new("write_analysis_port", this);
 endfunction : build_phase
 
-task vlm_memory_monitor::run_phase(uvm_phase phase);
-  super.run_phase(phase);
+task vlm_memory_monitor::main_phase(uvm_phase phase);
+  super.main_phase(phase);
 
   if (memory_vif == null) begin
     `uvm_fatal("VLM_MEMORY_NO_VIF", "vlm_memory_monitor requires memory_vif")
@@ -101,7 +101,7 @@ task vlm_memory_monitor::run_phase(uvm_phase phase);
 
   wait (memory_vif.rst_n === 1'b1);
   monitor_signals();
-endtask : run_phase
+endtask : main_phase
 
 function void vlm_memory_monitor::final_phase(uvm_phase phase);
   super.final_phase(phase);

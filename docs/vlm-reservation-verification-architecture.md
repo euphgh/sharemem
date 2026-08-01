@@ -117,7 +117,7 @@ transaction 中的 cycle 字段只是对 `clk_vif.cycle_count` 的当周期快�
 ### 2.6 UVM phase 与 reset 范围
 
 `vlm_reservation_agent` 的周期循环只运行在 `main_phase`。本架构不使用
-`run_phase` 启动 reservation monitor、scheduler、checker、coverage 或 busy
+`main_phase` 启动 reservation monitor、scheduler、checker、coverage 或 busy
 驱动逻辑。
 
 当前 API-shape 和首版行为实现暂不处理 reset：
@@ -206,7 +206,7 @@ Monitor 不负责：
 - 维护 external busy、SHM busy 或 reservation record；
 - 检查 MEM 数据。
 
-Monitor 不启动独立的 `run_phase` 或 `main_phase`。Agent 的 `main_phase` 调用
+Monitor 不启动独立的 `main_phase` 或 `main_phase`。Agent 的 `main_phase` 调用
 `collect_cycle()`；该 task 每次只采集一个周期。
 
 ### 4.3 `vlm_reservation_scheduler`
@@ -284,7 +284,7 @@ Checker 不检查：
 多 BANK 共享同一 `<direction, dly, sub_bank_id>` 是合法功能场景，必须作为
 正常 coverage，而不是错误或开放问题处理。
 
-Coverage 只通过同步 function API 采样，不启动 `run_phase` 或 `main_phase`，
+Coverage 只通过同步 function API 采样，不启动 `main_phase` 或 `main_phase`，
 也不影响 scheduler、checker 或 busy 驱动状态。Agent 必须在 scheduler 更新前
 调用 coverage，使 transaction、checker 结果和 scheduler 只读视图都属于同一
 采样周期。
@@ -580,7 +580,7 @@ external busy 生成策略至少允许全空闲、定向和随机三种配置。
 
 - `vlm_reservation_agent` 同时持有 reservation vif 和只读 memory vif；
 - 原 cycle controller 已替换为只负责采样和规范化的 reservation monitor；
-- agent 只在 `main_phase` 运行核心周期循环，不实现 reservation `run_phase`；
+- agent 只在 `main_phase` 运行核心周期循环，不实现 reservation `main_phase`；
 - monitor、scheduler 和 checker 从 Config DB 获取统一的 `clk_vif`；
 - 没有 component 维护独立递增的 cycle counter；
 - monitor 原子采集两个业务 interface，并生成二态 cycle transaction；
