@@ -1,5 +1,5 @@
-`ifndef INC_SHM_ENVIRONMENT_SV
-`define INC_SHM_ENVIRONMENT_SV
+`ifndef INC_SHM_ENVIRONMENT_SVH
+`define INC_SHM_ENVIRONMENT_SVH
 
 class shm_environment extends uvm_env;
 
@@ -90,4 +90,4 @@ function void shm_environment::connect_phase(uvm_phase phase);
 
 endfunction: connect_phase
 
-`endif //INC_SHM_ENVIRONMENT_SV
+`endif //INC_SHM_ENVIRONMENT_SVH

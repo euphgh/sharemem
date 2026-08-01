@@ -45,14 +45,8 @@ $TB_DIR/env/collection/libs/collection_pkg.sv
 # Env Sequence Item Package
 $TB_DIR/env/shm_seq_item_package.sv
 
-# Interface, Interface Wrapper Files
-# AUTO_GEN_FILELIST_AGENT_INTF_BEGIN
 $VER_CMN/uvc/shmins_agent/shmins_interface.sv
 $VER_CMN/uvc/vlm_agent/vlm_interface.sv
-# AUTO_GEN_FILELIST_AGENT_INTF_END
-
-# Macros Files
-$TB_DIR/env/shm_environment_macros.sv
 
 $TB_DIR/util/shm_util_package.sv
 
