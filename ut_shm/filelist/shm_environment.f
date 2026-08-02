@@ -6,8 +6,8 @@ $RPU_DIR/RhCommon/usr_ref.sv
 +incdir+$AXI_VIP_DIR/src/include/sverilog
 +incdir+$AXI_VIP_DIR/src/sverilog/vcs
 +incdir+$AXI_VIP_DIR/include/sverilog
-$AXI_VIP_DIR/include/sverilog/svt_axi_uvm.pkg
-$AXI_VIP_DIR/include/sverilog/svt_mem_uvm.pkg
+$AXI_VIP_DIR/include/sverilog/svt_axi.uvm.pkg
+$AXI_VIP_DIR/include/sverilog/svt_mem.uvm.pkg
 
 # define parameter
 $TB_DIR/env/shm_config_pkg.sv

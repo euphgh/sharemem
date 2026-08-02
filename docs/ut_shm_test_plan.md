@@ -1,12 +1,5 @@
 # ut\_shm 验证方案
 
-> VLM memory 数据接口与 VLM reservation 预约接口的接口级验证基准见
-> [RpuShmTop MEM/VLM 接口规范](mem-vlm-interface-spec.md)；reservation scheduler、
-> checker 和组件连接的代码实现基准见
-> [VLM Reservation 调度与协同验证架构](vlm-reservation-verification-architecture.md)。
-> 当前环境恢复到可编译、可启动状态的实施顺序与验收项见
-> [ut_shm 验证环境修复 TODO 与检查清单](ut-shm-environment-repair-checklist.md)。
-
 ## 1\. 概述
 
 ### 1\.0 验证环境架构图
@@ -24,9 +17,9 @@ RpuShmTop 模块是 RPU 中 Share Memory 的地址映射单元，负责将访存
 |接口|方向|功能描述|
 |---|---|---|
 |creq<br>|输入|接收访存指令。请求通道基于 credit 流控，无握手信号。<br>写请求携带写地址与写数据；<br>读请求仅携带读地址，不返回读数据|
-|vlm\_memory|双向|通过 RTL `mem_*` 端口向 16 个 BANK 发起实际物理读写请求。<br>写请求流程：DUT 发送目标写地址和写数据，完成写入<br>读请求流程：DUT 发送读地址 → 等待物理存储返回数据 → 将数据写回由 creq\_vaddr 指定的目标地址（详见第 3 章地址空间映射）|
+|mem|双向|向 16 个 BANK 发起物理读写请求。<br>写请求流程：DUT 发送目标写地址和写数据，完成写入<br>读请求流程：DUT 发送读地址 → 等待物理存储返回数据 → 将数据写回由 creq\_vaddr 指定的目标地址（详见第 3 章地址空间映射）|
 |ack|输出|返回指令完成状态。creq 中包含 ack 使能位，未使能时不返回 ack|
-|vlm\_reservation|双向|通过 RTL `vlm_*` 端口向调度模块预约未来若干周期内的 VLM memory 读写请求。调度模块返回 `vlm_rbusy`/`vlm_wbusy` 占用表|
+|vlm|双向|向调度模块预告未来 X 个时钟周期内的 DUT 的读写请求。调度模块返回 vlm\_rbusy/vlm\_wbusy 指示存储器忙闲状态。当前验证环境假设物理存储始终空闲|
 
 #### 地址术语定义
 
@@ -53,8 +46,7 @@ ut\_shm 验证环境基于 UVM 方法学构建，参考模型（Reference Model�
 |组件|类型|功能描述|
 |---|---|---|
 |shmins\_mst\_agent|UVM Agent|驱动 creq 输入事务，包含 driver 与 monitor|
-|vlm\_memory\_slv\_agent|UVM Agent|监测 `mem_*` 实际读写请求，并通过 slave driver 提供固定延迟读数据|
-|vlm\_reservation\_agent|UVM Agent|目标组件，待实现；周期精确地生成 `vlm_*busy`，并检查 busy、delay、sub bank 以及 reservation 与 MEM 请求的对应关系|
+|vlm\_slv\_agent|UVM Agent|采集 mem 接口读写事务，送入 scoreboard 比对|
 |shm\_reference|Reference Model|根据 creq 指令计算期望的读写地址与数据|
 |shm\_scoreboard|Scoreboard|比对 reference 与 DUT 的**写数据**，提供 DUT 读数据预期值|
 |shm\_env|UVM Environment|实例化各子组件，管理配置与 TLM 连接|
@@ -71,24 +63,7 @@ ut\_shm 验证环境基于 UVM 方法学构建，参考模型（Reference Model�
 |WARP|Warp（线程束）|线程集合，包含 16 个 THD|
 |Block|Block|硬件侧的WARP 集合，包含 8 个 WARP|
 |BANK|Bank|物理 SRAM 模块。多个 WARP 的同一编号线程共享同一 BANK，通过地址高位区分|
-|VLM memory interface|`vlm_memory_*`|实际访问物理 BANK 的数据接口；连接 DUT 的 `mem_*` 端口|
-|VLM reservation interface|`vlm_reservation_*`|为未来 VLM memory 访问预约时隙的调度接口；连接 DUT 的 `vlm_*` 端口|
-
-#### 验证组件命名迁移
-
-旧文档曾使用 `vlm_*` 同时表示实际 BANK 访问接口和 VLM 逻辑概念，容易与预约接口混淆。后续文档与新增代码统一采用以下命名：
-
-|历史名称|目标名称|含义|
-|---|---|---|
-|`vlm_interface`|`vlm_memory_interface`|实际 BANK 读写 interface|
-|`vlm_slv_agent`|`vlm_memory_slv_agent`|实际 BANK 读写 slave agent|
-|`vlm_slv_monitor`|`vlm_memory_monitor`|实际 BANK 读写 monitor|
-|`vlm_sequence_item`|`vlm_memory_sequence_item`|实际 BANK 读写 transaction|
-|无|`vlm_reservation_interface`|预约 interface|
-|无|`vlm_reservation_agent`|reservation scheduler/checker agent|
-|无|`vlm_reservation_sequence_item`|预约 transaction|
-
-RTL 端口名保持不变：`vlm_memory_interface` 连接 `mem_*`，`vlm_reservation_interface` 连接 `vlm_*`。历史代码在完成重命名前可能仍使用旧类名和旧路径；本文正文使用目标名称。
+|vlm\_\*|vlm\_monitor / vlm\_slv\_agent 等|访问物理 BANK 的验证接口，与 VLM（逻辑概念）不同|
 
 ### 2\.2 关键参数
 
@@ -475,29 +450,27 @@ baddr = {inv_index, inv_offs} + warp_index * WARP_STEP;
 
 3. **写回地址计算**：由 creq\_vaddr 直接计算得到
 
-### 4\.2 输出事务：vlm\_memory\_sequence\_item
+### 4\.2 输出事务：vlm\_sequence\_item
 
-#### 4\.2\.1 vlm\_memory\_interface
+#### 4\.2\.1 vlm\_interface
 
-`vlm_memory_interface` 建模 DUT 对 16 个 BANK 的实际读写操作。DUT 仅发送读写 valid 信号，写数据与 valid 同周期送出，读数据在固定延迟后返回。该 interface 连接 RTL 的 `mem_*` 端口。
-
-历史代码名为 `vlm_interface`，文件位于 `ver_common/uvc/vlm_slv_agent/vlm_interface.sv`；目标代码名为 `vlm_memory_interface`，后续代码迁移时应同步更新 agent、transaction 和引用路径。
+`vlm_interface` 建模对 16 个 BANK 的读写操作。master 侧仅发送读写 valid 信号，写数据与 valid 同一周期送入，读数据在指定延迟后返回。文件位于 `ver_common/uvc/vlm_slv_agent/vlm_interface.sv`。
 
 |信号|位宽|方向|说明|
 |---|---|---|---|
 |clk|1bit|输入|时钟信号|
 |rst\_n|1bit|输入|复位，低有效|
-|mem\_rvld|BANK\_N \(16bit\)|输入|读请求有效信号，每 bit 对应一个 BANK|
-|mem\_raddr|BADDR\_W × BANK\_N|输入|每 BANK 的读地址|
-|mem\_rdata|256 × BANK\_N|输出|每 BANK 的读返回数据（256bit = 32 Byte），数据在固定延迟后返回|
-|mem\_wvld|BANK\_N \(16bit\)|输入|写请求有效信号，每 bit 对应一个 BANK|
-|mem\_waddr|BADDR\_W × BANK\_N|输入|每 BANK 的写地址|
-|mem\_wstrb|32 × BANK\_N|输入|每 BANK 的写字节选通信号（32bit 对应 32 Byte）|
-|mem\_wdata|256 × BANK\_N|输入|每 BANK 的写数据（256bit = 32 Byte）|
+|vlm\_rvld|BANK\_N \(16bit\)|输入|读请求有效信号，每 bit 对应一个 BANK|
+|vlm\_raddr|BADDR\_W × BANK\_N|输入|每 BANK 的读地址|
+|vlm\_rdata|256 × BANK\_N|输出|每 BANK 的读返回数据（256bit = 32 Byte），数据在延迟后返回|
+|vlm\_wvld|BANK\_N \(16bit\)|输入|写请求有效信号，每 bit 对应一个 BANK|
+|vlm\_waddr|BADDR\_W × BANK\_N|输入|每 BANK 的写地址|
+|vlm\_wstrb|32 × BANK\_N|输入|每 BANK 的写字节选通信号（32bit 对应 32 Byte）|
+|vlm\_wdata|256 × BANK\_N|输入|每 BANK 的写数据（256bit = 32 Byte）|
 
-#### 4\.2\.2 vlm\_memory\_sequence\_item
+#### 4\.2\.2 vlm\_sequence\_item
 
-`vlm_memory_sequence_item` 基于 `vlm_memory_interface` 构建，将 DUT 的实际 BANK 读写信号封装为事务格式，供 memory model 和 scoreboard 使用。事务字段与 interface 信号一一对应，包含读写两个方向的完整信息。历史代码名为 `vlm_sequence_item`。
+`vlm_sequence_item` 基于 `vlm_interface` 构建，将 DUT 输出端口的读写信号封装为事务格式，供 scoreboard 使用。事务字段与 interface 信号一一对应，包含读写两个方向的完整信息。
 
 ### 4\.3 比对事务：shm\_wtrans\_item
 
@@ -548,17 +521,17 @@ baddr = {inv_index, inv_offs} + warp_index * WARP_STEP;
 
 > **说明**：当前仅实现写请求处理。读请求处理计划见 5\.2 节。
 
-#### 5\.1\.3 vlm\_memory\_slv\_agent
+#### 5\.1\.3 vlm\_slv\_agent
 
-`vlm_memory_slv_agent` 负责实际 BANK 访问接口：monitor 采集 `mem_*` 读写事务并送入 scoreboard，slave driver 根据 memory model 提供固定延迟读数据。历史代码名为 `vlm_slv_agent`。
+`vlm_slv_agent` 采集 mem 接口上的读写事务，送入 scoreboard 与 reference 数据进行比对。
 
-**vlm\_memory\_sequence\_item 采集**
+**vlm\_sequence\_item 采集**
 
-`vlm_memory_monitor` 基于 `vlm_memory_interface`（详见 4\.2\.1 节）将 DUT 的 BANK 数据端口信号转化为 `vlm_memory_sequence_item`。
+基于 `vlm_interface`（详见 4\.2\.1 节）构建的 monitor 将 DUT 的数据输出端口信号转化为 `vlm_sequence_item` 事务格式。
 
-**vlm\_memory2aa 转换工具**
+**vlm2aa 转换工具**
 
-`vlm_memory2aa` 工具类将 `vlm_memory_sequence_item` 的写数据转换为 Array of Associative Array 格式。历史代码名为 `vlm2aa`，文件位于 `ut_shm/env/util/vlm2aa.svh`，被 `ut_shm/env/shm_util_package.sv` include。使用者通过 `import shm_util_package::*` 导入。
+`vlm2aa` 工具类将 `vlm_sequence_item` 的写数据转换为 Array of Associative Array 格式。文件位于 `ut_shm/env/util/vlm2aa.svh`，被 `ut_shm/env/shm_util_package.sv` include。使用者通过 `import shm_util_package::*` 导入。
 
 转换规则：
 
@@ -566,7 +539,7 @@ baddr = {inv_index, inv_offs} + warp_index * WARP_STEP;
 
 - 内层 Associative Array 的 key 为字节级写地址（BADDR），value 为 1 Byte 写数据
 
-- 支持将多笔 `vlm_memory_sequence_item` 的写数据合并到同一个 Array of Associative Array 中
+- 支持将多笔 `vlm_sequence_item` 的写数据合并到同一个 Array of Associative Array 中
 
 #### 5\.1\.4 shm\_scoreboard
 
@@ -574,17 +547,17 @@ baddr = {inv_index, inv_offs} + warp_index * WARP_STEP;
 
 **原始比对算法**
 
-DUT 会将一笔 `shmins_sequence_item` 拆分为多笔 `vlm_memory_sequence_item` 写入物理存储，且两者之间无直接对应信号。因此比对策略为 **reference 等待 DUT**：
+DUT 会将一笔 `shmins_sequence_item` 拆分为多笔 `vlm_sequence_item` 写入物理存储，且两者之间无直接对应信号。因此比对策略为 **reference 等待 DUT**：
 
 - `shm_wtrans_item`（ref item）包含一笔 creq 指令的所有期望写地址与写数据
 
-- 若一笔 `vlm_memory_sequence_item` 转换后的 Array of Associative Array（rtl item）能够被某个 ref item **完全包含**，则该 rtl item 通过比对
+- 若一笔 `vlm_sequence_item` 转换后的 Array of Associative Array（rtl item）能够被某个 ref item **完全包含**，则该 rtl item 通过比对
 
 - 比对通过后，从 ref item 中移除已匹配的写地址与写数据；若 ref item 为空，则从队列中移除
 
 ```Verilog
-task shm_scoreboard::main_phase(uvm_phase phase);
-    super.main_phase(phase);
+task shm_scoreboard::run_phase(uvm_phase phase);
+    super.run_phase(phase);
     fork
         collect_ref();           // 从 reference 接收 ref item，放入队列
         scan_timeout_creq();     // 轮询队列，检测超时 ref item
@@ -609,8 +582,8 @@ endtask
 |---|---|---|
 |实例化位置|`shm_reference`|`shm_scoreboard`|
 |服务对象|Reference Model|Scoreboard / DUT|
-|触发操作|收到 creq 指令时，对 `ref_svt_mem` 执行对应的读写操作|收到 `vlm_memory_sequence_item` 时，对 `imp_svt_mem` 执行对应的读写操作|
-|读请求处理|从 `ref_svt_mem` 读取期望数据，用于后续写回计算|从 `imp_svt_mem` 读取数据，通过 TLM FIFO 返回给 `vlm_memory_slv_driver`，最终回传给 DUT|
+|触发操作|收到 creq 指令时，对 `ref_svt_mem` 执行对应的读写操作|收到 `vlm_sequence_item` 时，对 `imp_svt_mem` 执行对应的读写操作|
+|读请求处理|从 `ref_svt_mem` 读取期望数据，用于后续写回计算|从 `imp_svt_mem` 读取数据，通过 TLM FIFO 返回给 `vlm_slv_monitor`，最终回传给 DUT|
 |写请求处理|更新 `ref_svt_mem` 状态，记录期望的写数据|更新 `imp_svt_mem` 状态，维护 DUT 侧物理存储的实际状态|
 
 两者区分的原因：在 outstanding 和乱序场景下，reference 与 DUT 的物理存储数据在中间态不相等是正常现象。保持两份独立的存储模型可避免状态混淆。
@@ -625,11 +598,11 @@ endtask
 
 10. 将写回地址与数据封装到 `shm_wtrans_item` 的 `wmap` 中，由 `shm_scoreboard` 比对写回数据是否正确
 
-从 VLM memory interface 的角度，`shm_reference` 仅将写地址和写数据发送给 scoreboard 进行比对，不比对读取数据的正确性。
+从 mem 接口的角度，`shm_reference` 仅将写地址和写数据发送给 scoreboard 进行比对，不比对读取数据的正确性。
 
 **imp\_svt\_mem 端**
 
-收到 `vlm_memory_sequence_item` 后对 `imp_svt_mem` 执行读写操作。写请求时更新 `imp_svt_mem` 状态；读请求时从 `imp_svt_mem` 读取数据，由 `vlm_memory_slv_driver` 在固定延迟后驱动到 `mem_rdata`，最终回传给 DUT。
+收到 `vlm_sequence_item` 后对 `imp_svt_mem` 执行读写操作。写请求时更新 `imp_svt_mem` 状态；读请求时从 `imp_svt_mem` 读取数据，通过 TLM FIFO 返回给 `vlm_slv_monitor`，最终回传给 DUT。
 
 > **说明**：`imp_svt_mem` 读请求回传数据的具体实现方式尚未确定，该部分功能尚未开发。
 
@@ -639,7 +612,7 @@ endtask
 
 在 outstanding（多笔指令并行处理）场景下，原始比对算法存在以下问题：
 
-11. **合并写**：DUT 将多笔 outstanding 的 `shmins_sequence_item` 合并为一笔 `vlm_memory_sequence_item` 输出（已确认行为）
+11. **合并写**：DUT 将多笔 outstanding 的 `shmins_sequence_item` 合并为一笔 `vlm_sequence_item` 输出（已确认行为）
 
 12. **覆盖写**：多笔 outstanding 的 creq 指令对同一地址进行写操作时，DUT 可能仅输出最新的写数据（潜在问题，需与设计确认）
 
@@ -687,9 +660,9 @@ tmap_t trans_expired[$];   // 被更新 ref item 覆盖的地址
 
 **步骤 2：compare\_dut\_with\_ref（比对 DUT 输出）**
 
-当从 `vlm_memory_monitor` 接收到一笔 `vlm_memory_sequence_item`（rtl item）时：
+当从 `vlm_slv_monitor` 接收到一笔 `vlm_sequence_item`（rtl item）时：
 
-6. 将 rtl item 通过 `vlm_memory2aa` 转换为 Array of Associative Array
+6. 将 rtl item 通过 `vlm2aa` 转换为 Array of Associative Array
 
 7. 验证 rtl item 中的每个 `<bank_id, baddr, data>` 是否满足以下条件之一：
 
@@ -719,66 +692,6 @@ tmap_t trans_expired[$];   // 被更新 ref item 覆盖的地址
 
 改进算法涉及集合运算（交集、并集）与关联数组合并操作。为此开发了 `collection_pkg` 工具库，位于 `ut_shm/env/collection`，提供对 SystemVerilog 原生容器的遍历、合并与集合操作。使用时需 `import collection::*`。
 
-### 5\.4 VLM reservation 验证架构
-
-VLM reservation 验证使用统一的 `vlm_reservation_agent`。该 agent 主动驱动
-reservation busy，并只读观察 reservation 请求和实际 MEM 请求：
-
-```Plain Text
-shm_env
-├── vlm_reservation_agent
-│   ├── vlm_reservation_monitor
-│   ├── vlm_reservation_scheduler
-│   ├── vlm_reservation_checker
-│   └── vlm_reservation_coverage
-└── vlm_memory_slv_agent
-    ├── vlm_memory_monitor
-    ├── vlm_memory_slv_driver
-    └── vlm_memory_model
-```
-
-`vlm_reservation_agent` 同时持有：
-
-- `vlm_reservation_interface`：采集 `vlm_*req/addr/dly` 并驱动
-  `vlm_rbusy`、`vlm_wbusy`；
-- `vlm_memory_interface`：只读观察 `mem_*vld/addr`，不驱动或检查
-  `mem_rdata`。
-
-Agent 在 `main_phase` 中运行唯一的周期处理循环。Reservation monitor 原子采样
-两个业务 interface，完成四态检查并直接返回二态 cycle transaction；agent 随后
-依次同步调用 checker、coverage 和 scheduler，最后驱动下一周期 busy。Coverage
-在 scheduler 更新前采集当前周期状态。核心路径不使用 `main_phase`、TLM FIFO
-或逐周期 sequence item。
-
-Monitor 独立报告所有 X/Z；busy 中的 X/Z 在二态 transaction 中归一化为 0，并
-设置周期级 `input_error`。Transaction 不保存逐 bit known mask，checker 只处理
-二态语义，不重复报告 monitor 的四态错误。
-
-需要 cycle number 的 component 通过 Config DB 获取同一个 `virtual clk_if`。
-`clk_if.cycle_count` 从 0 开始并在每个时钟上升沿单调递增，不因 reset 清零；业务
-interface 仍使用原有普通 `clk`、`rst_n` 连接，不嵌套 `clk_if`。
-
-Scheduler 按 `<direction, delay, sub_bank_id>` 分别维护 external busy 与 SHM
-busy，并按 `<direction, delay, bank_id>` 保存 nullable DUT record。不同 BANK
-可以通过相同 `address[6:5]` 共享一个 SHM busy bit；只有 external busy 与 SHM
-busy 占用相同 sub-bank 位置时才构成跨模块冲突。同一 BANK、同一方向、同一到期
-周期最多接受一笔 reservation，无论其 sub bank 是否相同；读写方向相互独立。
-
-当前设计配置不产生 `dly == 0` 请求；checker 检测到该请求时报告
-`UVM_ERROR`，并且不把它加入正常调度与 MEM 匹配模型。
-
-当前 reservation agent 代码框架暂不实现 reset 状态处理。接口 reset 规则仍由
-独立接口规范定义，后续补充 reset 验证时需要同步更新架构文档和 API。
-
-`vlm_memory_slv_agent` 保持独立，继续负责 memory model 和固定延迟
-`mem_rdata`。reservation agent 仅检查到期 reservation 与实际 MEM request 的
-方向、BANK、地址和周期关系，不检查 MEM 数据。
-
-完整的组件职责、状态模型、连接关系和实现验收条件见
-[VLM Reservation 调度与协同验证架构](vlm-reservation-verification-architecture.md)。
-端口时序和禁止行为见
-[RpuShmTop MEM/VLM 接口规范](mem-vlm-interface-spec.md)。
-
 ## 6\. 代码仓库与组织
 
 ### 6\.1 ver\_common 仓库
@@ -789,9 +702,9 @@ ver\_common 仓库包含验证环境的通用组件，供多个 ut\_\* 项目共
 
 |模块类型|内容|文件路径|
 |---|---|---|
-|interface|`shmins_interface`、`vlm_memory_interface`、`vlm_reservation_interface` 等|`ver_common/uvc/*/`|
+|interface|`shmins_interface`、`vlm_interface` 等|`ver_common/uvc/*/`|
 |sequence|sequence\_item、sequence、sequencer|`ver_common/uvc/*/sequence/`|
-|agent|`vlm_memory_slv_agent`、`vlm_reservation_agent` 等|`ver_common/uvc/*/`|
+|agent|driver 与 monitor|`ver_common/uvc/*/`|
 
 **shm 分支**
 
@@ -826,7 +739,7 @@ ut_shm/
 │   │   ├── shm_scoreboard.sv   # 比对引擎
 │   │   └── shm_wtrans_item.svh # 比对事务定义
 │   ├── collection/         # 集合运算工具库
-│   ├── util/               # 工具类（vlm_memory2aa 等）
+│   ├── util/               # 工具类（vlm2aa 等）
 │   └── shm_config_pkg.sv   # 参数定义
 ├── tc/                     # 测试用例定义（详见 7.3 节）
 │   ├── ut_shm.tc
@@ -1031,13 +944,9 @@ regression/ 目录下每个 lst 文件定义一个回归测试列表，每行一
 
 - outstanding scoreboard 改进算法调试
 
-- VLM memory interface 写请求采集与数据比对
-
 #### 7\.4\.2 待完成
 
 - ref\_svt\_mem / imp\_svt\_mem 实现与读请求（m2v）测试支持
-
-- `vlm_reservation_agent`、scheduler、checker 与 coverage 实现
 
 - CDV（Coverage Driven Verification）方法学集成
 
@@ -1065,24 +974,15 @@ regression/ 目录下每个 lst 文件定义一个回归测试列表，每行一
 
     - tmask/emask需要全为1
 
-- VLM reservation interface 验证
+- Vlm interface
 
-    - 当前设计配置禁止 `dly == 0`；checker 检测到时报告 `UVM_ERROR`
+    - vlm\_rreq: 表示未来第vlm\_rdly个周期是会发起一个mem\_rreq
 
-    - 每个 BANK 内含 4 个 sub bank，`sub_bank_id = bank_addr[6:5]`
+        - vlm\_rreq拉起的**同周期**vlm\_rbusy\[vlm\_rdly\]对应的sub bank必须为0
 
-    - 预约发出时，对应的 `busy[dly][address[6:5]]` 必须严格等于 0
+        - **下一周期**vlm\_rbusy\[vlm\_rdly \- 1\]对应sub bank为1
 
-    - `dly > 0` 的预约在下一周期反映为 `busy[dly-1][sub_bank_id]`
+    - Sub bank分组：地址第两位分组，interleave
 
-    - 不同 BANK 可以在相同周期、相同方向访问相同 sub bank
+    - 
 
-    - 跨模块冲突只发生在 external busy 与 SHM busy 占用相同 `<direction, due_cycle, sub_bank_id>` 时
-
-    - DUT 自身同一 BANK、同一方向的两笔预约禁止在同一周期到期，无论其 sub bank 是否相同
-
-    - 读写方向相互独立，同一 BANK 同周期各一笔读写预约不构成 BANK 冲突
-
-    - 详细规则及禁止行为见 [RpuShmTop MEM/VLM 接口规范](mem-vlm-interface-spec.md)
-
-    - 组件与连接见 [VLM Reservation 调度与协同验证架构](vlm-reservation-verification-architecture.md)
