@@ -9,13 +9,17 @@ $RPU_DIR/RhCommon/usr_ref.sv
 $AXI_VIP_DIR/include/sverilog/svt_axi.uvm.pkg
 $AXI_VIP_DIR/include/sverilog/svt_mem.uvm.pkg
 
-# define parameter
+# Collection utility package
++incdir+$TB_DIR/util/sv-collection/libs
+$TB_DIR/util/sv-collection/libs/collection_pkg.sv
+
+# Shared parameters and utilities
++incdir+$TB_DIR/util
 $TB_DIR/util/shm_util_package.sv
 
 # Environment Directory
 +incdir+$TB_DIR
 +incdir+$TB_DIR/env
-+incdir+$TB_DIR/util
 
 # Environment Scoreboard Files Directory
 +incdir+$TB_DIR/env/scoreboards
@@ -39,9 +43,7 @@ $TB_DIR/util/shm_util_package.sv
 # Test Directory
 +incdir+$TB_DIR/env
 +incdir+$TB_DIR/env/scoreboards
-+incdir+$TB_DIR/env/collection/libs
 +incdir+$TB_DIR/env/tests
-$TB_DIR/env/collection/libs/collection_pkg.sv
 
 # Env Sequence Item Package
 $TB_DIR/env/shm_seq_item_package.sv

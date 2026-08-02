@@ -717,7 +717,7 @@ tmap_t trans_expired[$];   // 被更新 ref item 覆盖的地址
 
 #### 5\.3\.3 collection\_pkg 工具库
 
-改进算法涉及集合运算（交集、并集）与关联数组合并操作。为此开发了 `collection_pkg` 工具库，位于 `ut_shm/env/collection`，提供对 SystemVerilog 原生容器的遍历、合并与集合操作。使用时需 `import collection::*`。
+改进算法涉及集合运算（交集、并集）与关联数组合并操作。为此接入了位于 `ut_shm/util/sv-collection` 的 `collection_pkg` 工具库，提供对 SystemVerilog 原生容器的遍历、合并与集合操作。使用时需 `import collection::*`。
 
 ### 5\.4 VLM reservation 验证架构
 

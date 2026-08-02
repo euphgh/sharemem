@@ -152,16 +152,20 @@ P0 编译基线（2026-08-02）：
   - 远端 `make compile` 已成功解析 `shm_util_package.sv` 及其
     `bit_rt_range.svh`；首错推进到 `FLIST-01` 的旧 `collection_pkg.sv` 路径。
 
-- [ ] **UTIL-02：接入 `sv-collection`。**
+- [x] **UTIL-02：接入 `sv-collection`。**
   - 在 filelist 中先编译 `collection_pkg.sv`。
   - 修复 `collections::*` 为 `collection::*`。
   - 使用 collection 类型的源码显式 import `collection::*` 或所需符号。
   - 不把 `collection_pkg.sv` include 到 `shm_util_package` 内部。
+  - 远端 VCS 已成功越过 `collection_pkg.sv`，当前首错推进到
+    `shm_seq_item_package.sv` 缺少 `shmins_sequence_item.sv` include 路径。
 
-- [ ] **UTIL-03：解决缺失的 generated collection 头文件。**
+- [~] **UTIL-03：解决缺失的 generated collection 头文件。**
   - 当前若干 array utility 会 include `generated/*.svh`。
   - 决定是恢复受版本控制的生成文件，还是在构建目录生成并添加 include 路径。
   - 生成动作必须可重复，且 `make clean` 能清理构建产物。
+  - 已手动运行 generator，四个 `libs/generated/*.svh` 当前存在；package-only slang
+    检查通过。生成目录仍被子仓库 `.gitignore` 忽略，尚未接入可重复构建入口。
 
 - [ ] **FLIST-01：按当前仓库结构重写 `shm_environment.f`。**
   - 删除 `ver_common/uvc/*`、旧 `vlm_agent`、旧 sequence 目录和旧 collection 目录。

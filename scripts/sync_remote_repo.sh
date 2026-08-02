@@ -60,6 +60,16 @@ remote_host="${SHAREMEM_REMOTE_HOST:-chatgpt}"
 remote_dir="${SHAREMEM_REMOTE_DIR:-sharemem}"
 remote_dir="${remote_dir%/}"
 
+# Bound both SSH connection setup and established-but-stalled transfers. Batch
+# mode also prevents an authentication prompt from looking like a hung sync.
+ssh_args=(
+    -o BatchMode=yes
+    -o ConnectTimeout=10
+    -o ServerAliveInterval=10
+    -o ServerAliveCountMax=3
+)
+rsync_ssh_command='ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3'
+
 if [[ -z "$remote_host" ]]; then
     printf '错误：SHAREMEM_REMOTE_HOST 不能为空\n' >&2
     exit 2
@@ -75,8 +85,8 @@ esac
 printf -v remote_dir_quoted '%q' "$remote_dir"
 
 # 只允许同步到一个已经存在的 Git clone，防止路径配置错误时写入其他目录。
-if ! ssh -- "$remote_host" "test -d ${remote_dir_quoted}/.git"; then
-    printf '错误：远端仓库不存在或不是 Git clone：%s:%s\n' \
+if ! ssh "${ssh_args[@]}" -- "$remote_host" "test -d ${remote_dir_quoted}/.git"; then
+    printf '错误：SSH 连接失败，或远端目录不是 Git clone：%s:%s\n' \
         "$remote_host" "$remote_dir" >&2
     exit 1
 fi
@@ -84,7 +94,9 @@ fi
 rsync_args=(
     -az
     --itemize-changes
-    --exclude=.git/
+    --timeout=60
+    --rsh="$rsync_ssh_command"
+    --exclude=.git
     --exclude=.venv/
     --exclude=resources/
     --exclude=__pycache__/
@@ -109,9 +121,12 @@ fi
 printf '同步本地工作区：%s\n' "$repo_root"
 printf '远端测试仓库：%s:%s\n' "$remote_host" "$remote_dir"
 
-rsync "${rsync_args[@]}" \
+if ! rsync "${rsync_args[@]}" \
     "$repo_root/" \
-    "${remote_host}:${remote_dir}/"
+    "${remote_host}:${remote_dir}/"; then
+    printf '错误：同步失败；请检查 SSH 网络连接后重新运行，远端可能只收到部分文件\n' >&2
+    exit 1
+fi
 
 if ((dry_run)); then
     printf '预览完成，远端文件未修改\n'

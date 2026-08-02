@@ -4,7 +4,7 @@
 `include "shm_wtrans_item.svh"
 
 import shm_seq_item_package::vlm_sequence_item;
-import collections::*;
+import collection::*;
 // TLM Analysis Imp Declaration
 
 //-----------------------------------------------------------------------------
