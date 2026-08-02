@@ -46,7 +46,7 @@ typedef enum bit[1:0] {
   SPACE_BLK = 2'd2
 } creq_space_e;
 
-import shm_config_pkg::*;
+import shm_util_package::*;
 
 class shmins_sequence_item extends uvm_sequence_item;
   parameter WARP_ID_WIDTH_MAX = $clog2(4);

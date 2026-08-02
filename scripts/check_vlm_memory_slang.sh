@@ -47,7 +47,7 @@ if [[ ! -f "$uvm_src/uvm_pkg.sv" || ! -f "$uvm_src/uvm_macros.svh" ]]; then
 fi
 
 required_files=(
-    "$repo_root/ut_shm/env/shm_config_pkg.sv"
+    "$repo_root/ut_shm/util/shm_util_package.sv"
     "$memory_agent_dir/vlm_memory_interface.sv"
     "$memory_agent_dir/vlm_memory_sequence_item.sv"
     "$memory_agent_dir/vlm_memory_slv_agent_config.sv"
@@ -72,7 +72,7 @@ testbench="$build_dir/vlm_memory_slang_tb.sv"
 cat >"$testbench" <<'SYSTEMVERILOG'
 package vlm_memory_slang_test_pkg;
   import uvm_pkg::*;
-  import shm_config_pkg::*;
+  import shm_util_package::*;
 
   `include "uvm_macros.svh"
   `include "vlm_memory_sequence_item.sv"
@@ -113,7 +113,7 @@ printf '使用 UVM：%s\n' "$uvm_home"
     -I "$uvm_src" \
     -I "$memory_agent_dir" \
     "$uvm_src/uvm_pkg.sv" \
-    "$repo_root/ut_shm/env/shm_config_pkg.sv" \
+    "$repo_root/ut_shm/util/shm_util_package.sv" \
     "$memory_agent_dir/vlm_memory_interface.sv" \
     "$testbench" \
     "$@"

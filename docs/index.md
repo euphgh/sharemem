@@ -92,7 +92,7 @@ RTL 端口名保持不变：`vlm_memory_interface` 连接 `mem_*`，`vlm_reserva
 
 ### 2\.2 关键参数
 
-参数统一定义于 `shm_config_pkg.sv`，供 ver\_common、ut\_shm 及设计仓库共享。使用时需通过 `import shm_config_pkg::*` 导入。
+参数统一定义于 `ut_shm/util/shm_util_package.sv`，供 ver\_common、ut\_shm 及设计仓库共享。使用时需通过 `import shm_util_package::*` 导入。
 
 |参数|值|说明|
 |---|---|---|
@@ -827,7 +827,7 @@ ut_shm/
 │   │   └── shm_wtrans_item.svh # 比对事务定义
 │   ├── collection/         # 集合运算工具库
 │   ├── util/               # 工具类（vlm_memory2aa 等）
-│   └── shm_config_pkg.sv   # 参数定义
+│   └── shm_util_package.sv # 参数与通用工具定义
 ├── tc/                     # 测试用例定义（详见 7.3 节）
 │   ├── ut_shm.tc
 │   └── v2m/
@@ -841,7 +841,7 @@ ut\_shm 的目录结构与其他 ut\_\* 仓库保持一致，便于团队统一�
 
 ### 6\.3 参数管理
 
-参数统一定义于 `ut_shm/env/shm_config_pkg.sv`，作为一个 SystemVerilog package 供跨仓库共享。
+参数统一定义于 `ut_shm/util/shm_util_package.sv`，作为一个 SystemVerilog package 供跨仓库共享。
 
 **共享范围**
 
@@ -853,7 +853,7 @@ ut\_shm 的目录结构与其他 ut\_\* 仓库保持一致，便于团队统一�
 
 **使用规范**
 
-需要使用参数的文件通过 `import shm_config_pkg::*` 导入所有参数。建议与设计团队协商该 package 的维护归属，理想情况下由设计维护、验证引用，确保参数一致性。
+需要使用参数的文件通过 `import shm_util_package::*` 导入所有参数。建议与设计团队协商该 package 的维护归属，理想情况下由设计维护、验证引用，确保参数一致性。
 
 ## 7\. 测试方案
 

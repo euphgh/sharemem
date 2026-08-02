@@ -7,7 +7,7 @@ BUILD_DIR := $(EXAMPLE_DIR)/build
 SIMV := $(BUILD_DIR)/simv
 
 SOURCES := \
-	$(REPO_ROOT)/ut_shm/env/shm_config_pkg.sv \
+	$(REPO_ROOT)/ut_shm/util/shm_util_package.sv \
 	$(REPO_ROOT)/ver_common/clk_if.sv \
 	$(REPO_ROOT)/ver_common/vlm_memory_agent/vlm_memory_interface.sv \
 	$(REPO_ROOT)/ver_common/vlm_reservation_agent/vlm_reservation_interface.sv \

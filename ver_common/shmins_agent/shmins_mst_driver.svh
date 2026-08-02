@@ -5,7 +5,7 @@
 // Class: shmins_mst_driver
 //-----------------------------------------------------------------------------
 
-import shm_config_pkg::*;
+import shm_util_package::*;
 
 class shmins_mst_driver extends uvm_driver #(shmins_sequence_item);
 

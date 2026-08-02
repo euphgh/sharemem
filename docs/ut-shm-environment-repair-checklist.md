@@ -142,12 +142,15 @@ P0 编译基线（2026-08-02）：
 
 ### P1：修复参数、工具 package 和 filelist 主干
 
-- [ ] **UTIL-01：统一 package 名为 `shm_util_package`。**
+- [x] **UTIL-01：统一 package 名为 `shm_util_package`。**
   - 修改 `ut_shm/util/shm_util_package.sv` 的 package 声明。
   - 将 `shm_config_pkg::*`、`shm_util_pkg::*` 和旧的
     `shm_util_package::*` 使用点统一到最终名称。
   - 确认所有 interface、transaction、agent、environment 和 top 均从同一 package
     获取参数。
+  - 本地 `scripts/check_vlm_memory_slang.sh` 通过（0 error，UVM 源码有 2 个既有 warning）。
+  - 远端 `make compile` 已成功解析 `shm_util_package.sv` 及其
+    `bit_rt_range.svh`；首错推进到 `FLIST-01` 的旧 `collection_pkg.sv` 路径。
 
 - [ ] **UTIL-02：接入 `sv-collection`。**
   - 在 filelist 中先编译 `collection_pkg.sv`。

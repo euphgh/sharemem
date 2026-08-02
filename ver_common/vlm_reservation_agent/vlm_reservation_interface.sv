@@ -1,8 +1,8 @@
-import shm_config_pkg::BANK_N;
-import shm_config_pkg::BADDR_W;
-import shm_config_pkg::VTAB_D;
-import shm_config_pkg::VLM_SUB_BANK_N;
-import shm_config_pkg::WRITE_PORT_N;
+import shm_util_package::BANK_N;
+import shm_util_package::BADDR_W;
+import shm_util_package::VTAB_D;
+import shm_util_package::VLM_SUB_BANK_N;
+import shm_util_package::WRITE_PORT_N;
 
 interface vlm_reservation_interface (
   input logic clk, 

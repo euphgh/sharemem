@@ -1,7 +1,7 @@
 package vlm_reservation_pkg;
 
   import uvm_pkg::*;
-  import shm_config_pkg::*;
+  import shm_util_package::*;
 
   `include "uvm_macros.svh"
 

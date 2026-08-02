@@ -4,7 +4,7 @@ module shm_tb_top();
 //---------------------------------------------------------------------
 import uvm_pkg::*;
 import RpuCommon::*;
-import shm_config_pkg::*;
+import shm_util_package::*;
 
 // Importing User Defined Packages
 //---------------------------------------------------------------------

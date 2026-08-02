@@ -2,7 +2,6 @@
 `define INC_SHM_W_TRANS_SVH
 
 import shm_util_package::*;
-import shm_config_pkg::*;
 
 class shm_wtrans_item extends shmins_sequence_item;
     parameter int unsigned ELEM_MAX_N = VEC_BYTE_N;

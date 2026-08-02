@@ -10,11 +10,12 @@ $AXI_VIP_DIR/include/sverilog/svt_axi.uvm.pkg
 $AXI_VIP_DIR/include/sverilog/svt_mem.uvm.pkg
 
 # define parameter
-$TB_DIR/env/shm_config_pkg.sv
+$TB_DIR/util/shm_util_package.sv
 
 # Environment Directory
 +incdir+$TB_DIR
 +incdir+$TB_DIR/env
++incdir+$TB_DIR/util
 
 # Environment Scoreboard Files Directory
 +incdir+$TB_DIR/env/scoreboards
@@ -47,8 +48,6 @@ $TB_DIR/env/shm_seq_item_package.sv
 
 $VER_CMN/uvc/shmins_agent/shmins_interface.sv
 $VER_CMN/uvc/vlm_agent/vlm_interface.sv
-
-$TB_DIR/util/shm_util_package.sv
 
 # Env Package
 $TB_DIR/env/shm_env_package.sv

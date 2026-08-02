@@ -5,7 +5,7 @@
 // Class: shmins_monitor
 //-----------------------------------------------------------------------------
 
-import shm_config_pkg::*;
+import shm_util_package::*;
 
 class shmins_monitor extends uvm_monitor;
 

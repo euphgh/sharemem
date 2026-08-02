@@ -80,7 +80,7 @@ endpackage : vlm_reservation_compile_test_pkg
 
 module tb;
   import uvm_pkg::*;
-  import shm_config_pkg::*;
+  import shm_util_package::*;
   import vlm_reservation_compile_test_pkg::*;
 
   logic clk = 1'b0;

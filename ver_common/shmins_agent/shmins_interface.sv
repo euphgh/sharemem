@@ -1,4 +1,4 @@
-import shm_config_pkg::*;
+import shm_util_package::*;
 
 interface shmins_interface ();
 

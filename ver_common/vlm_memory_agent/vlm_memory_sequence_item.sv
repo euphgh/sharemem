@@ -6,7 +6,7 @@
 //
 //-------------------------------------------------------------------
 
-import shm_config_pkg::*;
+import shm_util_package::*;
 
 class vlm_memory_sequence_item extends uvm_sequence_item;
 

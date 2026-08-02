@@ -1,4 +1,4 @@
-package shm_util_pkg;
+package shm_util_package;
     `include "bit_rt_range.svh"
     parameter WARP_N          = 8                     ;
     parameter OTF_N           = 4                     ;
@@ -19,4 +19,4 @@ package shm_util_pkg;
     parameter VLM_DATA_BYTE_W = (VLM_DATA_BIT_W / 8)   ;
     parameter VLM_SUB_BANK_N  = 4;
     parameter WRITE_PORT_N    = 2;
-endpackage
+endpackage : shm_util_package

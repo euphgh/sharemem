@@ -2,8 +2,8 @@
 `define INC_VLM2AA_SVH
 
 import shm_seq_item_package::vlm_sequence_item;
-import shm_config_pkg::BANK_N;
-import shm_config_pkg::BADDR_W;
+import shm_util_package::BANK_N;
+import shm_util_package::BADDR_W;
 import collection::aa_array_util;
 import collection::aa_util;
 
