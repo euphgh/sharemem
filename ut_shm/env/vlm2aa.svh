@@ -1,7 +1,6 @@
 `ifndef INC_VLM2AA_SVH
 `define INC_VLM2AA_SVH
 
-import shm_seq_item_package::vlm_sequence_item;
 import shm_util_package::BANK_N;
 import shm_util_package::BADDR_W;
 import collection::aa_array_util;
@@ -14,7 +13,7 @@ class vlm2aa;
     typedef wmap_util::aa_array_t wmap_t;
 
     // apply this item write data to res(array of associate array)
-    static function bit trans(vlm_sequence_item vlm, ref wmap_t res);
+    static function bit trans(vlm_memory_sequence_item vlm, ref wmap_t res);
         bit has_overlap = 1'b0;
         for (int bk_id = 0; bk_id < BANK_N; bk_id ++) begin: bank_loop
             baddr_t base_baddr = vlm.vlm_addr[bk_id];

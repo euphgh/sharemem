@@ -3,7 +3,7 @@
 
 `include "shm_wtrans_item.svh"
 
-import shm_seq_item_package::vlm_sequence_item;
+import shm_seq_item_package::vlm_memory_sequence_item;
 import collection::*;
 // TLM Analysis Imp Declaration
 
@@ -14,8 +14,6 @@ class shm_scoreboard extends uvm_scoreboard;
 
     // Data Members
     //---------------------------------------------------------------------
-    //vlm_sequence_item rtl_vlm;
-    //vlm_sequence_item ref_vlm;
     parameter INFLIGHT_NUM = 8;
     parameter CLK_PERIOD   = 1;
 
@@ -24,19 +22,19 @@ class shm_scoreboard extends uvm_scoreboard;
     typedef vlm2aa::wmap_t wmap_t;
     typedef vlm2aa::baddr_t baddr_t;
 
-    typedef set_array_util#(DATA_T: baddr_t, SIZE: BANK_N) waddr_util;
+    typedef set_array_util#(baddr_t, BANK_N) waddr_util;
     typedef waddr_util::set_t waddr_set_t[BANK_N];
     // time map type
-    typedef aa_array_util#(SIZE: BANK_N, KEY_T: baddr_t, VAL_T: time) tmap_util;
+    typedef aa_array_util#(BANK_N, baddr_t, time) tmap_util;
     typedef tmap_util::aa_array_t tmap_t;
 
     // write aa of q array
-    typedef aa_of_q_array_util#(SIZE: BANK_N, KEY_T: baddr_t, VAL_T: byte) wmmap_util;
+    typedef aa_of_q_array_util#(BANK_N, baddr_t, byte) wmmap_util;
     typedef wmmap_util::aa_of_q_array_t wmmap_t;
-    typedef set_util#(KEY_T: byte) byte_set_util;
+    typedef set_util#(byte) byte_set_util;
     typedef byte_set_util::set_t byte_set_t;
 
-    typedef aa_value_adapter_array_util#(SIZE: BANK_N, KEY_T: baddr_t, VAL_T: byte) wmap_adapter_util;
+    typedef aa_value_adapter_array_util#(BANK_N, baddr_t, byte) wmap_adapter_util;
 
     wmap_t wmap_final;
     wmmap_t wmap_expired;
@@ -58,13 +56,13 @@ class shm_scoreboard extends uvm_scoreboard;
     svt_mem rtl_banks[BANK_N];
     shm_environment_config shm_environment_cfg;
 
-    uvm_analysis_export #(vlm_sequence_item) rtl_wrvlm_analysis_export;
-    local uvm_tlm_analysis_fifo #(vlm_sequence_item) rtl_wrvlm_analysis_fifo;
+    uvm_analysis_export #(vlm_memory_sequence_item) rtl_wrvlm_analysis_export;
+    local uvm_tlm_analysis_fifo #(vlm_memory_sequence_item) rtl_wrvlm_analysis_fifo;
 
     uvm_analysis_export #(shm_wtrans_item) ref_wrvlm_analysis_export;
     local uvm_tlm_analysis_fifo #(shm_wtrans_item) ref_wrvlm_analysis_fifo;
 
-    uvm_tlm_b_transport_imp #(vlm_sequence_item, shm_scoreboard) mem_imp;
+    uvm_tlm_b_transport_imp #(vlm_memory_sequence_item, shm_scoreboard) mem_imp;
 
     extern function        new(string name = "shm_scoreboard", uvm_component parent);
     extern virtual function void build_phase(uvm_phase phase);
@@ -82,7 +80,7 @@ class shm_scoreboard extends uvm_scoreboard;
 
     extern function void compare_with_old_trans(const ref shm_wtrans_item new_trans);
     extern function bit is_finished_ref_trans(int index);
-    extern virtual task b_transport(vlm_sequence_item trans, uvm_tlm_time delay);
+    extern virtual task b_transport(vlm_memory_sequence_item trans, uvm_tlm_time delay);
 
     `uvm_component_utils_begin(shm_scoreboard)
 
@@ -90,7 +88,7 @@ class shm_scoreboard extends uvm_scoreboard;
 
 endclass: shm_scoreboard
 
-task shm_scoreboard::b_transport(vlm_sequence_item trans, uvm_tlm_time delay);
+task shm_scoreboard::b_transport(vlm_memory_sequence_item trans, uvm_tlm_time delay);
     for(int unsigned bid = 0; bid < BANK_N; bid++) begin
         if (trans.vlm_bken[bid]) begin
             for (int unsigned byte_offs = 0; byte_offs < VLM_DATA_BYTE_W; byte_offs++) begin
@@ -178,7 +176,7 @@ endtask
 // compare dut w trans with ref, remove ref if dut match it
 task shm_scoreboard::compare_dut_with_ref();
     forever begin
-        vlm_sequence_item tr;
+        vlm_memory_sequence_item tr;
         wmap_t vlm_wmap;
         rtl_wrvlm_analysis_fifo.get(tr);
         if (tr.vlm_read) continue;

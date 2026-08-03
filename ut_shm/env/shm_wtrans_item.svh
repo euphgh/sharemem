@@ -9,8 +9,8 @@ class shm_wtrans_item extends shmins_sequence_item;
 
     typedef bit [MADDR_W-1:0] maddr_t;
     typedef vlm2aa::baddr_t baddr_t;
-    typedef bit rt_range#(W: MADDR_W) maddr_getter;
-    typedef bit rt_range#(W: BADDR_W) baddr_setter;
+    typedef bit_rt_range#(MADDR_W) maddr_getter;
+    typedef bit_rt_range#(BADDR_W) baddr_setter;
     typedef bit [$clog2(BANK_N)-1:0] bidx_t;
 
     typedef vlm2aa::wmap_util wmap_util;
@@ -178,7 +178,7 @@ class shm_wtrans_item extends shmins_sequence_item;
 
             // start map from unify addr to bank addr according to creq_space and creq_ilv_size
             foreach(elem_unify_addr[eidx]) begin
-                vlm_sequence_item out = new("golden_vlm_sequence_item");
+                vlm_memory_sequence_item out = new("golden_vlm_memory_sequence_item");
                 maddr_t elem_maddr = elem_unify_addr[eidx];
                 // data field from elem_madr
                 maddr_t inv_offs = maddr_getter::get_range(elem_maddr, inv_size-1, 0);

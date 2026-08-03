@@ -118,7 +118,7 @@ vlm_interface vlm_slv_intf();
     end
 
     initial begin
-        clck = 1'b0;
+        clk = 1'b0;
         forever #0.5 clk = ~clk;
     end
 endmodule: shm_tb_top

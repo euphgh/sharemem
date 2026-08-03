@@ -16,8 +16,6 @@ import shm_util_package::*;
 //-----------------------------------------------------------------------------
 class shm_reference extends uvm_component;
 
-    // Data Members
-    //---------------------------------------------------------------------
     int trans_cnt = 0;
 
     string filename = "vlm.ref";
@@ -26,23 +24,10 @@ class shm_reference extends uvm_component;
     typedef vlm2aa::baddr_t baddr_t;
     typedef bit [$clog2(BANK_N)-1:0] bidx_t;
 
-    // Interface Instantiation
-    //---------------------------------------------------------------------
-
-    // Environment Configuration Instantiation
-    //---------------------------------------------------------------------
     shm_environment_config shm_environment_cfg;
 
-    // Coverage
-    //---------------------------------------------------------------------
-
-    // Port Declaration
-    //---------------------------------------------------------------------
-
-    //AUTO_GEN_REF_TLM_OBJECT_BEGIN
     uvm_analysis_imp_shmins__reference #(shmins_sequence_item, shm_reference) shmins_analysis_export;
 
-    //AUTO_GEN_REF_TLM_OBJECT_END
     uvm_analysis_port #(shm_wtrans_item) wdata_ass_arr_port;
 
     extern function        new(string name="shm_reference", uvm_component parent);
@@ -53,7 +38,7 @@ class shm_reference extends uvm_component;
     //---------------------------------------------------------------------
     //AUTO_GEN_REF_TLM_EXTERN_BEGIN
     extern function void write_shmins__reference(shmins_sequence_item shmins_trans);
-    extern function void write_rdvlm__reference(vlm_sequence_item vlm_trans);
+    extern function void write_rdvlm__reference(vlm_memory_sequence_item vlm_trans);
 
     extern function void v2m_write_wmap(string label, int tidx, int eidx, int lidx, byte unsigned wdata, shm_wtrans_item item);
     extern function void write_wmap(string label, int tidx, int eidx, int lidx, bit wen, bidx_t bid, baddr_t baddr, byte unsigned wdata, shm_wtrans_item item);

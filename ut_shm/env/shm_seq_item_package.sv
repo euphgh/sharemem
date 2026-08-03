@@ -7,5 +7,6 @@ import shm_util_package::*;
 `include "shmins_sequence_item.svh"
 `include "shmins_enum_field.svh"
 `include "vlm_memory_sequence_item.svh"
+`include "vlm2aa.svh"
 
 endpackage : shm_seq_item_package
