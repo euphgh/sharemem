@@ -21,8 +21,6 @@ class shmins_unit_sequence extends shmins_mst_sequence;
     rand creq_itype_e       m_seq_itype          = LDST_V   ;
     rand creq_space_e       m_seq_space          = SPACE_LOC;
 
-    // Methods
-    //---------------------------------------------------------------------
     extern function void config_item(
         creq_rw_e       rw      = SHM_V2M  ,
         creq_dtype_e    dtype   = DTYP_32  ,
@@ -40,6 +38,8 @@ class shmins_unit_sequence extends shmins_mst_sequence;
     );
 
     extern function void plusargs_override_config();
+    extern function      new(string name= "shmins_unit_sequence");
+    extern virtual task  body();
 
     `uvm_object_utils_begin(shmins_unit_sequence)
 
@@ -113,7 +113,7 @@ task shmins_unit_sequence::body();
         `uvm_info(get_type_name(), $sformatf("shmins_unit_sequence::start %-dth shmins_trans!!", i), UVM_HIGH)
         `uvm_create(req);
         assert(req.randomize() with {
-            delay_cycle inside {m_seq_delay_min : m_seq_delay_max};
+            delay_cycle inside {[m_seq_delay_min : m_seq_delay_max]};
             if (m_seq_vtrans_en) {
                 creq_rw     == SHM_V2M;
                 creq_info   == '1;

@@ -17,45 +17,23 @@ $TB_DIR/util/sv-collection/libs/collection_pkg.sv
 +incdir+$TB_DIR/util
 $TB_DIR/util/shm_util_package.sv
 
-# Environment Directory
-+incdir+$TB_DIR
-+incdir+$TB_DIR/env
-
-# Environment Scoreboard Files Directory
-+incdir+$TB_DIR/env/scoreboards
-
 # Agents Directory
-# AUTO_GEN_FILELIST_AGENT_BEGIN
 +incdir+$VER_CMN/uvc/shmins_agent
-+incdir+$VER_CMN/uvc/vlm_agent
-# AUTO_GEN_FILELIST_AGENT_END
++incdir+$VER_CMN/uvc/shmins_agent/sequence
+$VER_CMN/uvc/shmins_agent/shmins_interface.sv
 
-# Agents Sequence Directory
-# AUTO_GEN_FILELIST_AGENT_SEQ_BEGIN
-+incdir+$VER_CMN/rpu_inst
-+incdir+$VER_CMN/uvc/sequences
-+incdir+$VER_CMN/shmins_agent/sequence
-+incdir+$VER_CMN/vlm_memory_agent
-# AUTO_GEN_FILELIST_AGENT_SEQ_END
++incdir+$VER_CMN/uvc/vlm_memory_agent
+$VER_CMN/uvc/vlm_memory_agent/vlm_memory_interface.sv
+
++incdir+$VER_CMN/uvc/vlm_reservation_agent
+$VER_CMN/uvc/vlm_reservation_agent/vlm_reservation_interface.sv
 
 # Environment Checkers Directory
-
-# Test Directory
 +incdir+$TB_DIR/env
-+incdir+$TB_DIR/env/scoreboards
-+incdir+$TB_DIR/env/tests
-
-# Env Sequence Item Package
 $TB_DIR/env/shm_seq_item_package.sv
-
-$VER_CMN/uvc/shmins_agent/shmins_interface.sv
-$VER_CMN/uvc/vlm_agent/vlm_interface.sv
-
-# Env Package
+$TB_DIR/env/shm_seq_package.sv
 $TB_DIR/env/shm_env_package.sv
 
-# Env Sequence Package
-$TB_DIR/env/shm_seq_package.sv
-
 # Env Test Package
++incdir+$TB_DIR/tests
 $TB_DIR/tests/shm_test_package.sv
