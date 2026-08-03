@@ -81,7 +81,7 @@ task shm_base_test::main_phase(uvm_phase phase);
     seq = shmins_mst_sequence::type_id::create("seq");
     seq.trans_num = trans_num;
     seq.set_starting_phase(phase);
-    seq.start(shm_env.shmins_mst_agt.shmins_mst_sqr);
+    seq.start(shm_env.shmins_mst_agt.sequencer);
     #100ns;
     phase.drop_objection(this);
 

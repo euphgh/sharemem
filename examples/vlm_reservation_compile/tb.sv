@@ -2,9 +2,18 @@
 
 package vlm_reservation_compile_test_pkg;
   import uvm_pkg::*;
-  import vlm_reservation_pkg::*;
+  import shm_util_package::*;
 
   `include "uvm_macros.svh"
+
+  `include "vlm_reservation_types.svh"
+  `include "vlm_reservation_agent_config.svh"
+  `include "vlm_reservation_scheduler.svh"
+  `include "vlm_reservation_checker.svh"
+  `include "vlm_reservation_coverage.svh"
+  `include "vlm_reservation_monitor.svh"
+  `include "vlm_reservation_agent.svh"
+
   `include "vlm_memory_sequence_item.svh"
   `include "vlm_memory_slv_agent_config.svh"
   `include "vlm_memory_monitor.svh"

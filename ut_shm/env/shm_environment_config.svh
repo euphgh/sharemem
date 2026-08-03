@@ -27,15 +27,15 @@ class shm_environment_config extends uvm_object;
 
     // Environment Agent Config Instantiation
     //---------------------------------------------------------------------
-    //AUTO_GEN_AGENT_CFG_OBJECT_BEGIN
     shmins_mst_agent_config shmins_mst_agent_cfg;
-    vlm_slv_agent_config vlm_slv_agent_cfg;
-    //AUTO_GEN_AGENT_CFG_OBJECT_END
-        extern function new(string name="shm_environment_config");
+    vlm_memory_slv_agent_config vlm_memory_slv_agent_cfg;
+    vlm_reservation_agent_config vlm_reservation_agent_cfg;
+
+    extern function new(string name = "shm_environment_config");
 
     // User Defined APIs
     //---------------------------------------------------------------------
-    extern function init();
+    extern function void init();
 
     // UVM Factory Registration
     //---------------------------------------------------------------------
@@ -45,18 +45,21 @@ class shm_environment_config extends uvm_object;
     `uvm_object_utils_end
 endclass: shm_environment_config
 
-function shm_environment_config::new(string name="shm_environment_config");
+function shm_environment_config::new(string name = "shm_environment_config");
     super.new(name);
 endfunction: new
 
-function shm_environment_config::init();
+function void shm_environment_config::init();
     shmins_mst_agent_cfg = shmins_mst_agent_config::type_id::create("shmins_mst_agent_cfg");
-    shmins_mst_agent_cfg.randomize();
-    vlm_slv_agent_cfg = vlm_slv_agent_config::type_id::create("vlm_slv_agent_cfg");
-    vlm_slv_agent_cfg.randomize();
+    vlm_memory_slv_agent_cfg =
+        vlm_memory_slv_agent_config::type_id::create("vlm_memory_slv_agent_cfg");
+    vlm_reservation_agent_cfg =
+        vlm_reservation_agent_config::type_id::create("vlm_reservation_agent_cfg");
     
-    shmins_mst_agent_cfg.shmins_mst_is_active = env_is_active;
-    vlm_slv_agent_cfg.vlm_slv_is_active = env_is_active;
- endfunction: init
+    shmins_mst_agent_cfg.is_active             = env_is_active;
+    shmins_mst_agent_cfg.shmins_mst_is_active  = env_is_active;
+    vlm_memory_slv_agent_cfg.is_active         = env_is_active;
+    vlm_memory_slv_agent_cfg.vlm_memory_slv_is_active = env_is_active;
+endfunction: init
 
 `endif // INC_SHM_ENVIRONMENT_CONFIG_SVH

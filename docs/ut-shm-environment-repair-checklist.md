@@ -67,11 +67,10 @@ P1～P5 中任何非文档修改前，仍需用户明确确认进入对应的环
 5. `clk_if`、`shmins_interface`、`vlm_memory_interface` 和
    `vlm_reservation_interface`。
 6. `shm_seq_item_package`。
-7. `vlm_reservation_pkg`。
+7. `shm_seq_package`。
 8. `shm_env_package`。
-9. `shm_seq_package`。
-10. `shm_test_package`。
-11. `shm_tb_top`。
+9. `shm_test_package`。
+10. `shm_tb_top`。
 
 目标 package 内容：
 
@@ -80,9 +79,8 @@ P1～P5 中任何非文档修改前，仍需用户明确确认进入对应的环
 | `collection` | `sv-collection` 工具类 |
 | `shm_util_package` | 公共参数、`bit_rt_range` 和 SHM 通用工具 |
 | `shm_seq_item_package` | SHMINS enum、`shmins_sequence_item`、enum 转换函数和 `vlm_memory_sequence_item` |
-| `vlm_reservation_pkg` | reservation types、config、scheduler、checker、coverage、monitor 和 agent |
-| `shm_env_package` | SHMINS agent、VLM memory agent、environment config、reference、scoreboard 和 environment |
 | `shm_seq_package` | SHMINS base/unit sequence |
+| `shm_env_package` | SHMINS agent、VLM memory agent、VLM reservation agent、environment config、reference、scoreboard 和 environment |
 | `shm_test_package` | base/unit test |
 
 ## 4. 修复 TODO
@@ -228,31 +226,43 @@ P2 验证结果（2026-08-03）：
 
 ### P3：迁移 agent、environment 和 package
 
-- [ ] **AGENT-01：修复 SHMINS agent 的编译级遗留问题。**
+- [x] **AGENT-01：修复 SHMINS agent 的编译级遗留问题。**
   - 统一所有 `shminus_*` 为 `shmins_*`。
   - 统一 monitor analysis port 的声明、构造、写入和连接名称。
   - 为类外定义的方法补齐类内 `extern` 声明。
   - 删除或修正无意义的生成式 debug 方法，但不改变必要的驱动和监测行为。
 
-- [ ] **AGENT-02：将 VLM memory agent 纳入 package。**
+- [x] **AGENT-02：将 VLM memory agent 纳入 package。**
   - `shm_seq_item_package` 提供 `vlm_memory_sequence_item`。
   - `shm_env_package` 按依赖顺序 include config、monitor、sequencer、driver 和 agent。
   - Config DB key 使用当前 agent API 的 `cfg` 和 `memory_vif`。
 
-- [ ] **AGENT-03：将 VLM reservation agent 纳入环境。**
-  - filelist 编译 `vlm_reservation_interface.sv` 和 `vlm_reservation_pkg.sv`。
-  - `shm_env_package` import `vlm_reservation_pkg::*`。
+- [x] **AGENT-03：将 VLM reservation agent 纳入环境。**
+  - filelist 编译 `vlm_reservation_interface.sv`；reservation 的 `.svh` 由
+    `shm_env_package` 按依赖顺序直接 include。
+  - 按当前集成方式删除独立的 `vlm_reservation_pkg.sv`，避免同一 class 被两个
+    package 重复定义。
   - environment 创建 `vlm_reservation_agent` 和 config。
   - config 同时持有 `reservation_vif` 与共享的 `memory_vif`。
   - scheduler、checker、coverage 和 monitor 获得正确的 `clk_vif`。
 
-- [ ] **ENV-01：重写 `shm_environment_config`。**
+AGENT-01～03 验证结果（2026-08-03）：
+
+- 本地最小 agent package slang：0 error，仅 UVM 1.2 既有 warning。
+- VLM memory agent 独立 slang：0 error，仅 UVM 1.2 既有 warning。
+- 远端 VCS 已解析 SHMINS、VLM memory 与 VLM reservation 的全部 agent 头文件；
+  当前首错推进到 `shm_wtrans_item.svh` 对未纳入 package 的 `vlm2aa::baddr_t`
+  引用，归入后续 `ENV-03`/`PKG-01`。
+- `vlm_reservation_pkg.sv` 已删除；主环境与 reservation compile example 均改为
+  按依赖顺序直接 include reservation `.svh`。
+
+- [x] **ENV-01：重写 `shm_environment_config`。**
   - 移除 `vlm_slv_agent_config` 和旧 `vlm_slv_*` 字段。
   - 增加 `vlm_memory_slv_agent_config` 与 `vlm_reservation_agent_config`。
   - 保留并规范 SHMINS active/passive 配置。
   - 必要 config 缺失时使用明确的 `UVM_FATAL`，避免报错后继续解引用 null。
 
-- [ ] **ENV-02：重写 `shm_environment` 的 build/connect。**
+- [~] **ENV-02：重写 `shm_environment` 的 build/connect。**
   - 创建 SHMINS、VLM memory 和 VLM reservation 三个 agent。
   - 创建 reference 与 scoreboard。
   - 通过 config object 和 Config DB 向子组件传递 virtual interface。
@@ -260,6 +270,8 @@ P2 验证结果（2026-08-03）：
   - VLM memory monitor write analysis port 连接 scoreboard。
   - VLM memory driver `mem_port` 连接 scoreboard `mem_imp`。
   - reference 输出连接 scoreboard 的 reference analysis export。
+  - build/connect 结构已完成并通过 stub 类型的本地 slang；真实 reference/scoreboard
+    仍受 `ENV-03` 的旧 transaction 类型阻塞，待该项完成后再做整包验收。
 
 - [ ] **ENV-03：修复 reference、scoreboard 和转换工具的类型。**
   - 将旧 `vlm_sequence_item` 替换为 `vlm_memory_sequence_item`。

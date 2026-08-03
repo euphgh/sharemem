@@ -39,7 +39,7 @@ class shmins_monitor extends uvm_monitor;
     //---------------------------------------------------------------------
     // Port Declaration
     //---------------------------------------------------------------------
-    uvm_analysis_port #(shmins_sequence_item) shmins__analysis_port;
+    uvm_analysis_port #(shmins_sequence_item) shmins_analysis_port;
 
     //---------------------------------------------------------------------
     // Standard UVM Methods
@@ -77,8 +77,7 @@ endfunction :new
 //-----------------------------------------------------------------------------
 function void shmins_monitor::build_phase(uvm_phase phase);
     super.build_phase(phase);
-    uvm_info(get_type_name(), "In build_phase...!!", UVM_DEBUG);
-    shmins__analysis_port = new("shmins__analysis_port", this);
+    shmins_analysis_port = new("shmins_analysis_port", this);
 endfunction : build_phase
 
 //-----------------------------------------------------------------------------

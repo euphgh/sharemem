@@ -21,10 +21,6 @@ class shmins_mst_driver extends uvm_driver #(shmins_sequence_item);
     //---------------------------------------------------------------------
     virtual shmins_interface shmins_mst_vif;
 
-    // Agent Configuration Instantiation
-    //---------------------------------------------------------------------
-    shmins_mst_agent_config shmins_mst_agent_cfg;
-
     // Constraints
     //---------------------------------------------------------------------
 
@@ -34,7 +30,6 @@ class shmins_mst_driver extends uvm_driver #(shmins_sequence_item);
     // Standard UVM Methods
     //---------------------------------------------------------------------
     extern function        new(string name= "shmins_mst_driver", uvm_component parent);
-    extern virtual function void build_phase(uvm_phase phase);
     extern virtual task     main_phase(uvm_phase phase);
 
     // User Defined APIs
@@ -58,34 +53,6 @@ function shmins_mst_driver::new(string name = "shmins_mst_driver", uvm_component
     super.new(name, parent);
     credit_sem = new(1);
 endfunction: new
-
-function void shmins_mst_driver::build_phase(uvm_phase phase);
-    super.build_phase(phase);
-    `uvm_info(get_type_name(), "In build_phase...!!", UVM_DEBUG);
-
-    //---------------------------------------------------------------------
-    // Get configuration
-    //---------------------------------------------------------------------
-
-    // Get Agent Configuration
-    if (!uvm_config_db#(shmins_mst_agent_config)::get(this, "", "shmins_mst_agent_config", shmins_mst_agent_cfg))
-    begin
-        `uvm_error(get_type_name(), "shmins_mst_agent_config object is not found in config db!");
-    end
-    else
-    begin
-        shmins_mst_agent_cfg.print();
-    end
-
-    //---------------------------------------------------------------------
-    // Construct children
-    //---------------------------------------------------------------------
-
-    //---------------------------------------------------------------------
-    // Configure children
-    //---------------------------------------------------------------------
-
-endfunction: build_phase
 
 task shmins_mst_driver::main_phase(uvm_phase phase);
     super.main_phase(phase);
@@ -160,7 +127,7 @@ task shmins_mst_driver::drive_signals(shmins_sequence_item trans);
         shmins_mst_vif.mst_cb.creq_prio[th_idx] <= trans.creq_prio[th_idx];
         shmins_mst_vif.mst_cb.creq_len [th_idx] <= trans.creq_len [th_idx];
         shmins_mst_vif.mst_cb.creq_vmsk[th_idx] <= trans.creq_vmsk[th_idx];
-        shmins_mst_vif.mst_cb.creq_offs[th_idx] <= trans.creq_offs[th_idx];
+        shmins_mst_vif.mst_cb.creq_offs[th_idx] <= trans.creq_offs(th_idx);
         shmins_mst_vif.mst_cb.creq_vdat[th_idx] <= trans.creq_vdat[th_idx];
     end
 

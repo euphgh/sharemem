@@ -34,7 +34,7 @@ repo_root="$(git -C "$script_dir/.." rev-parse --show-toplevel)"
 slang_bin="${SLANG:-slang}"
 uvm_home="${UVM_HOME:-$repo_root/resources/uvm-1.2}"
 uvm_src="$uvm_home/src"
-memory_agent_dir="$repo_root/ver_common/vlm_memory_agent"
+memory_agent_dir="$repo_root/ver_common/uvc/vlm_memory_agent"
 
 if ! command -v "$slang_bin" >/dev/null 2>&1; then
     printf '错误：找不到 slang：%s\n' "$slang_bin" >&2
