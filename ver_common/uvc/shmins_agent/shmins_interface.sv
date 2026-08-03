@@ -1,9 +1,9 @@
-import shm_util_package::*;
+interface shmins_interface (
+  input logic clk,
+  input logic rst_n
+);
 
-interface shmins_interface ();
-
-  logic                              clk      ;
-  logic                              rst_n    ;
+  import shm_util_package::*;
 
   // Instruction
   logic                              creq_vld ;
@@ -65,27 +65,6 @@ interface shmins_interface ();
     input  vack_id    ;
     input  mack_done  ;
     input  mack_id    ;
-  endclocking
-
-  clocking slv_cb @(posedge clk);
-    input  creq_vld   ;
-    output creq_rls   ;
-    input  creq_id    ;
-    input  creq_wpid  ;
-    input  creq_wpnum ;
-    input  creq_prio  ;
-    input  creq_len   ;
-    input  creq_typ   ;
-    input  creq_vaddr ;
-    input  creq_vmsk  ;
-    input  creq_base  ;
-    input  creq_offs  ;
-    input  creq_vdat  ;
-
-    output vack_done  ;
-    output vack_id    ;
-    output mack_done  ;
-    output mack_id    ;
   endclocking
 
 endinterface: shmins_interface

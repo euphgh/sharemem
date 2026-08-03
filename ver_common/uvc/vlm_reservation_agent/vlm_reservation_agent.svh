@@ -170,8 +170,8 @@ function void vlm_reservation_agent::drive_busy();
   end
 
   // Publish the scheduler's read and write tables together so the next edge observes one coherent window.
-  reservation_vif.rbusy <= scheduler.final_busy[VLM_RESERVATION_READ];
-  reservation_vif.wbusy <= scheduler.final_busy[VLM_RESERVATION_WRITE];
+  reservation_vif.slv_cb.rbusy <= scheduler.final_busy[VLM_RESERVATION_READ];
+  reservation_vif.slv_cb.wbusy <= scheduler.final_busy[VLM_RESERVATION_WRITE];
 endfunction : drive_busy
 
 `endif // INC_VLM_RESERVATION_AGENT_SVH

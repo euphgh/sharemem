@@ -1,13 +1,13 @@
+interface vlm_reservation_interface (
+  input logic clk,
+  input logic rst_n
+);
+
 import shm_util_package::BANK_N;
 import shm_util_package::BADDR_W;
 import shm_util_package::VTAB_D;
 import shm_util_package::VLM_SUB_BANK_N;
 import shm_util_package::WRITE_PORT_N;
-
-interface vlm_reservation_interface (
-  input logic clk, 
-  input logic rst_n
-);
 
 // Busy tables are driven by the reservation slave. Entry [delay][sub_bank]
 // describes whether that direction is occupied at the corresponding future
@@ -24,20 +24,6 @@ logic [BANK_N-1:0][$clog2(VTAB_D)-1:0] rdly;
 logic [BANK_N-1:0][WRITE_PORT_N-1:0] wreq;
 logic [BANK_N-1:0][WRITE_PORT_N-1:0][BADDR_W-1:0] waddr;
 logic [BANK_N-1:0][WRITE_PORT_N-1:0][$clog2(VTAB_D)-1:0] wdly;
-
-// DUT/master view: observe busy and drive reservations.
-clocking mst_cb @(posedge clk);
-  input  rbusy;
-  input  wbusy;
-
-  output rreq;
-  output raddr;
-  output rdly;
-
-  output wreq;
-  output waddr;
-  output wdly;
-endclocking
 
 // Passive monitor view: sample the complete interface atomically.
 clocking mon_cb @(posedge clk);

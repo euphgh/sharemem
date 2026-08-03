@@ -41,6 +41,8 @@ class shm_base_test extends uvm_test;
     extern virtual task     main_phase(uvm_phase phase);
     extern virtual function void report_phase(uvm_phase phase);
 
+    `uvm_component_utils(shm_base_test)
+
 endclass: shm_base_test
 
 function shm_base_test::new(string name = "shm_base_test", uvm_component parent);

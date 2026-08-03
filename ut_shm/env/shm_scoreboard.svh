@@ -3,8 +3,6 @@
 
 `include "shm_wtrans_item.svh"
 
-import shm_seq_item_package::vlm_memory_sequence_item;
-import collection::*;
 // TLM Analysis Imp Declaration
 
 //-----------------------------------------------------------------------------
@@ -153,7 +151,9 @@ task shm_scoreboard::scan_timeout_creq();
         foreach (ref_record_q[id]) begin: foreach_ref
             shm_wtrans_item tr = ref_record_q[id].tr;
             if (is_finished_ref_trans(id)) begin
-                string info_msg = $sformatf("ref record qid = %0d) all data is matched or expired: %x", ref_record_q[id].tr.creq_id);
+                string info_msg = $sformatf(
+                    "ref record qid = %0d: all data is matched or expired",
+                    ref_record_q[id].tr.creq_id);
                 info_msg = {info_msg, tr.sprint(), tmap_util::sprint(ref_record_q[id].expired), tmap_util::sprint(ref_record_q[id].matched)};
                 info_msg = {info_msg, "expired table: ", tmap_util::sprint(ref_record_q[id].expired), " "};
                 info_msg = {info_msg, "matched table: ", tmap_util::sprint(ref_record_q[id].matched), "\n"};
@@ -182,11 +182,11 @@ task shm_scoreboard::compare_dut_with_ref();
         if (tr.vlm_read) continue;
         for(int unsigned bid = 0; bid < BANK_N; bid ++) begin
             if (!tr.vlm_bken[bid]) continue;
-            for (int unsigned byte_offs = 0; byte_offs <= VLM_DATA_BYTE_W; byte_offs++) begin
+            for (int unsigned byte_offs = 0; byte_offs < VLM_DATA_BYTE_W; byte_offs++) begin
                 if (tr.vlm_strb[bid][byte_offs]) begin
                     baddr_t byte_waddr = tr.vlm_addr[bid] + baddr_t'(byte_offs);
                     byte unsigned wdata = tr.vlm_data[bid][byte_offs * 8 +: 8];
-                    rtl_banks[bid].write(byte_waddr, byte_wdata);
+                    rtl_banks[bid].write(byte_waddr, wdata);
                 end
             end
         end
@@ -198,15 +198,15 @@ task shm_scoreboard::compare_dut_with_ref();
             waddr_set_t matched_final_waddr = wmap_util::get_keys(matched_final_wmap);
 
             wmmap_t matched_expired_wmmap = wmap_adapter_util::get_intersect(wmap_expired, vlm_wmap);
-            waddr_set_t matched_expired_waddr = wmap_util::get_keys(matched_expired_wmmap);
+            waddr_set_t matched_expired_waddr = wmmap_util::get_keys(matched_expired_wmmap);
 
             waddr_set_t hited_addrs = waddr_util::get_union(matched_final_waddr, matched_expired_waddr);
             if (!waddr_util::contains(hited_addrs, vlm_waddrs)) begin: addr_check
                 waddr_set_t error_waddr = waddr_util::get_diff(vlm_waddrs, hited_addrs);
-                string err_msg = {"rtl write address is not expected:\n", waddr_util::sprint(error_waddr, "error address", "\n")};
-                err_msg = {err_msg, wmap_util::sprint(vlm_wmap, "vlm table", "\n")};
-                err_msg = {err_msg, wmap_util::sprint(wmap_final, "final wmap table", "\n")};
-                err_msg = {err_msg, wmap_util::sprint(wmap_expired, "expired wmmap table", "\n")};
+                string err_msg = {"rtl write address is not expected:\n", waddr_util::sprint(error_waddr, "error address")};
+                err_msg = {err_msg, "\n", wmap_util::sprint(vlm_wmap, "vlm table")};
+                err_msg = {err_msg, "\n", wmap_util::sprint(wmap_final, "final wmap table")};
+                err_msg = {err_msg, "\n", wmmap_util::sprint(wmap_expired, "expired wmmap table")};
                 `uvm_error(get_type_name(), err_msg);
             end: addr_check
             else begin: value_check
@@ -247,9 +247,9 @@ task shm_scoreboard::compare_dut_with_ref();
                 end
 
                 if (value_error) begin
-                    err_msg = {err_msg, wmap_util::sprint(vlm_wmap, "vlm table", "\n")};
-                    err_msg = {err_msg, wmap_util::sprint(wmap_final, "final wmap table", "\n")};
-                    err_msg = {err_msg, wmap_util::sprint(wmap_expired, "expired wmmap table", "\n")};
+                    err_msg = {err_msg, "\n", wmap_util::sprint(vlm_wmap, "vlm table")};
+                    err_msg = {err_msg, "\n", wmap_util::sprint(wmap_final, "final wmap table")};
+                    err_msg = {err_msg, "\n", wmmap_util::sprint(wmap_expired, "expired wmmap table")};
                     `uvm_error(get_type_name(), err_msg);
                 end
                 else begin: value_full_match

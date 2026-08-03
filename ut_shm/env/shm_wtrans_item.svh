@@ -1,8 +1,6 @@
 `ifndef INC_SHM_WTRANS_ITEM_SVH
 `define INC_SHM_WTRANS_ITEM_SVH
 
-import shm_util_package::*;
-
 class shm_wtrans_item extends shmins_sequence_item;
     parameter int unsigned ELEM_MAX_N = VEC_BYTE_N;
     `uvm_object_utils(shm_wtrans_item)
@@ -222,7 +220,7 @@ class shm_wtrans_item extends shmins_sequence_item;
                     `uvm_error(get_type_name(), "creq_space not expect");
                 end
 
-                `uvm_info(get_type_name(), $sformatf("THD[%0d].Elem[%0d] %s Bank[%0d]@0x%x_Strb[0x%x] = (%0d x 12KB) + {0x%x, 0x%x} = B + Offs(0x%x)",
+                `uvm_info(get_type_name(), $sformatf("THD[%0d].Elem[%0d] %s Bank[%0d]@0x%x_Strb[0x%x] Space[%s] = (%0d x 12KB) + {0x%x, 0x%x} = B + Offs(0x%x)",
                     tidx, eidx, action, elem_bid, wstrb_2d_array[tidx][eidx], space_name, elem_maddr, warp_index, inv_index, inv_offs, eoff_val[eidx]), UVM_FULL);
                 baddr_2d_array[tidx][eidx] = elem_baddr;
                 bid_2d_array[tidx][eidx] = elem_bid;

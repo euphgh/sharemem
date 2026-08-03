@@ -1,5 +1,7 @@
 package shm_env_package;
   import uvm_pkg::*;
+  import shm_util_package::*;
+  import collection::*;
 
   `include "uvm_macros.svh"
 

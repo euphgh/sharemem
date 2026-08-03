@@ -30,8 +30,9 @@ class shmins_mst_sequence extends uvm_sequence #(shmins_sequence_item);
         if (phase != null)
             phase.raise_objection(this);
 
-        if (!uvm_config_db#(virtual shmins_interface)::get(.cntxt(null), .inst_name(""), .field_name($sprintf("shmins_mst_vif")), .value(vif)))
-            `uvm_error(get_type_name(), "Unable to find the shmins_mst interface!")
+        if (!uvm_config_db#(virtual shmins_interface)::get(
+                .cntxt(null), .inst_name(""), .field_name("shmins_vif"), .value(vif)))
+            `uvm_error(get_type_name(), "Unable to find the SHMINS interface")
     endtask: pre_start
 
         task post_start();

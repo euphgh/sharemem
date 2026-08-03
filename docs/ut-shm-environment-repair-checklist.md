@@ -262,7 +262,7 @@ AGENT-01～03 验证结果（2026-08-03）：
   - 保留并规范 SHMINS active/passive 配置。
   - 必要 config 缺失时使用明确的 `UVM_FATAL`，避免报错后继续解引用 null。
 
-- [~] **ENV-02：重写 `shm_environment` 的 build/connect。**
+- [x] **ENV-02：重写 `shm_environment` 的 build/connect。**
   - 创建 SHMINS、VLM memory 和 VLM reservation 三个 agent。
   - 创建 reference 与 scoreboard。
   - 通过 config object 和 Config DB 向子组件传递 virtual interface。
@@ -270,35 +270,46 @@ AGENT-01～03 验证结果（2026-08-03）：
   - VLM memory monitor write analysis port 连接 scoreboard。
   - VLM memory driver `mem_port` 连接 scoreboard `mem_imp`。
   - reference 输出连接 scoreboard 的 reference analysis export。
-  - build/connect 结构已完成并通过 stub 类型的本地 slang；真实 reference/scoreboard
-    仍受 `ENV-03` 的旧 transaction 类型阻塞，待该项完成后再做整包验收。
+  - build/connect 结构已通过真实 environment package 的远端 VCS 编译和 smoke build/connect。
 
-- [ ] **ENV-03：修复 reference、scoreboard 和转换工具的类型。**
+- [x] **ENV-03：修复 reference、scoreboard 和转换工具的类型。**
   - 将旧 `vlm_sequence_item` 替换为 `vlm_memory_sequence_item`。
   - 更新 analysis export、FIFO、blocking transport 和局部变量的模板参数。
   - 修复 `shm_util_package` 与 `collection` import。
   - 本阶段只修复编译和连接，不重构 scoreboard 算法。
 
-- [ ] **PKG-01：补全 `shm_env_package`。**
+- [x] **PKG-01：补全 `shm_env_package`。**
   - 删除所有旧 `.sv`/旧 VLM include。
   - 以基类和被依赖类型优先的顺序 include agent、config、reference、scoreboard 和
     environment。
   - 确保一个 class 只被一个 package 定义一次。
 
-- [ ] **PKG-02：修复 `shm_seq_package` 与 `shm_test_package`。**
+- [x] **PKG-02：修复 `shm_seq_package` 与 `shm_test_package`。**
   - sequence package 仅 include 当前存在的 `.svh`。
   - 删除不存在且不再需要的 `vlm_slv_sequence`。
   - test package include base/unit test，并保证 UVM factory 注册完整。
 
+P3 完整验证结果（2026-08-03）：
+
+- `vlm_sequence_item`、`vlm_interface`、`vlm_slv_*`、`shminus_*` 等旧类型或旧拼写不再
+  出现在有效环境源码中。
+- `shm_env_package` 显式 import `shm_util_package` 与 `collection`，并按依赖顺序直接
+  include 三个 agent、reference、scoreboard 和 environment。
+- reference/scoreboard 已改用 `vlm_memory_sequence_item`，同时修复 collection API、
+  analysis imp 名称和迁移过程中暴露的局部字段/格式化错误；未重构 scoreboard 算法。
+- 本地 `scripts/check_vlm_memory_slang.sh`：0 error，仅 UVM 1.2 源码的 2 个既有 warning。
+- 远端 VCS 已完整解析并 elaboration `shm_env_package`、`shm_seq_package` 与
+  `shm_test_package`，成功生成 `build/ut_shm/simv`。
+
 ### P4：重写 testbench top 和接口连接
 
-- [ ] **TOP-01：替换旧 VLM interface。**
+- [x] **TOP-01：替换旧 VLM interface。**
   - 删除 `vlm_interface`。
   - 实例化 `vlm_memory_interface(clk, rst_n)`。
   - 实例化 `vlm_reservation_interface(clk, rst_n)`。
   - 实例化共享 `clk_if`。
 
-- [ ] **TOP-02：拆分 DUT 接线。**
+- [x] **TOP-02：拆分 DUT 接线。**
   - DUT `mem_rvld/raddr/rdata` 和 `mem_wvld/waddr/wstrb/wdata` 接入
     `vlm_memory_interface`。
   - DUT `vlm_rreq/raddr/rdly`、`vlm_wreq/waddr/wdly` 和 busy 接入
@@ -306,19 +317,35 @@ AGENT-01～03 验证结果（2026-08-03）：
   - 保持 SHMINS creq/ack 接线。
   - 修复 `clck`、旧 `.sv` include 和宽度不一致等 top 级错误。
 
-- [ ] **TOP-03：统一 Config DB 发布。**
+- [x] **TOP-03：统一 Config DB 发布。**
   - 发布 `shmins_interface`。
   - 发布 `vlm_memory_interface`。
   - 发布 `vlm_reservation_interface`。
   - 发布 `clk_if`。
   - key、类型和 environment/agent 的 get 路径完全一致。
 
-- [ ] **TOP-04：使 smoke test 不依赖 DUT 功能。**
+- [x] **TOP-04：使 smoke test 不依赖 DUT 功能。**
   - 使用 `shm_unit_test` 加 `+TRANS_NUM=0`，或增加专用零事务 smoke test。
   - smoke test 只验证 UVM component build/connect 和仿真启动。
   - test 必须打印或以其他可检查方式证明 `TRANS_NUM=0` 已被解析并生效。
   - smoke 命令必须显式传递 `+UVM_TESTNAME`，并启用 topology 输出。
   - 设置有限仿真超时作为挂起保护；触发 timeout 应判定 smoke 失败。
+
+P4 top 验证结果（2026-08-03）：
+
+- top 已实例化并直连 `shmins_interface`、`vlm_memory_interface`、
+  `vlm_reservation_interface` 与共享 `clk_if`；Config DB 的类型、key 与 get 路径一致。
+- 删除未使用且会与 DUT output 形成多驱动的 SHMINS slave、VLM memory master 和
+  VLM reservation master clocking block；reservation busy 改由 slave clocking block 驱动。
+- 远端 `make compile` 成功，VCS W-2024.09-SP1 完成 compile、elaboration 和 link，
+  原 `ICPSD_W` 接口多驱动警告已消失。
+- 远端 `make smoke` 成功创建 `shm_unit_test` 和完整 environment，日志明确打印
+  `Smoke configuration: TRANS_NUM=0`，进入 run phase 并在 200 ns 正常结束，无
+  `UVM_FATAL`。
+- 当前 `design/RpuTop/src/RpuShm/RpuShmTop.sv` 只有端口声明、没有功能实现，因而其
+  reservation/MEM outputs 保持 X；reservation monitor 报出 16096 个 X/Z `UVM_ERROR`。
+  这不阻塞 TOP-04 的“build/connect 和启动”目标，但意味着 P5 `REMOTE-03` 的零错误
+  验收条件尚未满足。
 
 ### P5：语法检查、远端编译和仿真启动
 

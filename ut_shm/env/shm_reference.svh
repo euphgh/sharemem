@@ -1,14 +1,11 @@
 `ifndef INC_SHM_REFERENCE_SVH
 `define INC_SHM_REFERENCE_SVH
 
-import shm_util_package::*;
-
 `include "shm_wtrans_item.svh"
 
 // TLM Analysis Imp Declaration
 //AUTO_GEN_REF_IMP_BEGIN
-`uvm_analysis_imp_decl(_shmins__reference)
-`uvm_analysis_imp_decl(_rdvlm__reference)
+`uvm_analysis_imp_decl(_shmins_reference)
 //AUTO_GEN_REF_IMP_END
 
 //-----------------------------------------------------------------------------
@@ -26,7 +23,7 @@ class shm_reference extends uvm_component;
 
     shm_environment_config shm_environment_cfg;
 
-    uvm_analysis_imp_shmins__reference #(shmins_sequence_item, shm_reference) shmins_analysis_export;
+    uvm_analysis_imp_shmins_reference #(shmins_sequence_item, shm_reference) shmins_analysis_export;
 
     uvm_analysis_port #(shm_wtrans_item) wdata_ass_arr_port;
 
@@ -37,8 +34,7 @@ class shm_reference extends uvm_component;
     // User Defined APIs
     //---------------------------------------------------------------------
     //AUTO_GEN_REF_TLM_EXTERN_BEGIN
-    extern function void write_shmins__reference(shmins_sequence_item shmins_trans);
-    extern function void write_rdvlm__reference(vlm_memory_sequence_item vlm_trans);
+    extern function void write_shmins_reference(shmins_sequence_item shmins_trans);
 
     extern function void v2m_write_wmap(string label, int tidx, int eidx, int lidx, byte unsigned wdata, shm_wtrans_item item);
     extern function void write_wmap(string label, int tidx, int eidx, int lidx, bit wen, bidx_t bid, baddr_t baddr, byte unsigned wdata, shm_wtrans_item item);
@@ -118,7 +114,7 @@ function void shm_reference::v2m_write_wmap(string label, int tidx, int eidx, in
     write_wmap(label, tidx, eidx, lidx, wen, bid, baddr, wdata, item);
 endfunction: v2m_write_wmap
 
-function void shm_reference::write_shmins__reference(shmins_sequence_item shmins_trans);
+function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_trans);
     shm_wtrans_item wgolden = shm_wtrans_item::type_id::create("ref_shm_wtrans", this);
     wgolden.init_from(shmins_trans);
     if (shmins_trans.creq_rw == SHM_V2M) begin
@@ -129,14 +125,14 @@ function void shm_reference::write_shmins__reference(shmins_sequence_item shmins
                 if (eidx >= 16) continue;
                 for(int unsigned byte_idx = 0; byte_idx < elem_byten; byte_idx++) begin: foreach_byte
                     int data_offset = tidx * elem_byten + byte_idx;
-                    byte byte_wdata = wgolden.creq_vdata[tidx][data_offset];
+                    byte byte_wdata = wgolden.creq_vdat[tidx][data_offset];
                     v2m_write_wmap("VTRANS", tidx, eidx, byte_idx, byte_wdata, wgolden);
                 end: foreach_byte
             end: vtrans_v2m
             else begin: normal_v2m
                 for(int unsigned byte_idx = 0; byte_idx < elem_byten; byte_idx++) begin: foreach_byte
                     int data_offset = eidx * elem_byten + byte_idx;
-                    byte byte_wdata = wgolden.creq_vdata[tidx][data_offset];
+                    byte byte_wdata = wgolden.creq_vdat[tidx][data_offset];
                     v2m_write_wmap("V2M", tidx, eidx, byte_idx, byte_wdata, wgolden);
                 end: foreach_byte
             end: normal_v2m
