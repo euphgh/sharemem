@@ -1,5 +1,5 @@
-`ifndef INC_SHMINS_UNIT_SEUQNECE_SVH
-`define INC_SHMINS_UNIT_SEUQNECE_SVH
+`ifndef INC_SHMINS_UNIT_SEQUENCE_SVH
+`define INC_SHMINS_UNIT_SEQUENCE_SVH
 
 //-----------------------------------------------------------------------------
 // Class: shmins_unit_sequence
@@ -18,7 +18,7 @@ class shmins_unit_sequence extends shmins_mst_sequence;
     rand creq_atype_w_e     m_seq_atype_w        = ATYP_32  ;
     rand creq_atype_s_e     m_seq_atype_s        = ATYP_U   ;
     rand creq_atype_g_e     m_seq_atype_g        = GAUTO_1B ;
-    rand creq_ltype_e       m_seq_ltype          = LDST_V   ;
+    rand creq_itype_e       m_seq_itype          = LDST_V   ;
     rand creq_space_e       m_seq_space          = SPACE_LOC;
 
     // Methods
@@ -29,7 +29,7 @@ class shmins_unit_sequence extends shmins_mst_sequence;
         creq_atype_w_e  atype_w = ATYP_32  ,
         creq_atype_s_e  atype_s = ATYP_U   ,
         creq_atype_g_e  atype_g = GAUTO_1B ,
-        creq_ltype_e    ltype   = LDST_V   ,
+        creq_itype_e    itype   = LDST_V   ,
         creq_space_e    space   = SPACE_LOC
     );
 
@@ -51,7 +51,7 @@ class shmins_unit_sequence extends shmins_mst_sequence;
     `uvm_field_enum(creq_atype_w_e, m_seq_atype_w , UVM_DEFAULT)
     `uvm_field_enum(creq_atype_s_e, m_seq_atype_s , UVM_DEFAULT)
     `uvm_field_enum(creq_atype_g_e, m_seq_atype_g , UVM_DEFAULT)
-    `uvm_field_enum(creq_ltype_e,   m_seq_ltype   , UVM_DEFAULT)
+    `uvm_field_enum(creq_itype_e,   m_seq_itype   , UVM_DEFAULT)
     `uvm_field_enum(creq_space_e,   m_seq_space   , UVM_DEFAULT)
     `uvm_object_utils_end
 endclass: shmins_unit_sequence
@@ -62,7 +62,7 @@ function void shmins_unit_sequence::config_item(
     creq_atype_w_e  atype_w,
     creq_atype_s_e  atype_s,
     creq_atype_g_e  atype_g,
-    creq_ltype_e    ltype,
+    creq_itype_e    itype,
     creq_space_e    space
 );
     m_seq_rw      = rw;
@@ -70,7 +70,7 @@ function void shmins_unit_sequence::config_item(
     m_seq_atype_w = atype_w;
     m_seq_atype_s = atype_s;
     m_seq_atype_g = atype_g;
-    m_seq_ltype   = ltype;
+    m_seq_itype   = itype;
     m_seq_space   = space;
 endfunction
 
@@ -94,7 +94,7 @@ function void shmins_unit_sequence::plusargs_override_config();
     value_creq_atype_w_e_plusargs("CREQ_ATYPE_W", m_seq_atype_w);
     value_creq_atype_s_e_plusargs("CREQ_ATYPE_S", m_seq_atype_s);
     value_creq_atype_g_e_plusargs("CREQ_ATYPE_G", m_seq_atype_g);
-    value_creq_ltype_e_plusargs("CREQ_ITYPE", m_seq_ltype);
+    value_creq_itype_e_plusargs("CREQ_ITYPE", m_seq_itype);
     value_creq_space_e_plusargs("CREQ_SPACE", m_seq_space);
 endfunction
 
@@ -118,7 +118,7 @@ task shmins_unit_sequence::body();
                 creq_rw     == SHM_V2M;
                 creq_info   == '1;
                 creq_dtype inside {DTYP_16, DTYP_8};
-                creq_ltype inside {LDST_S, LDST_V};
+                creq_itype inside {LDST_S, LDST_V};
                 creq_space  == SPACE_LOC;
                 foreach (elem_num[tidx]) { elem_num[tidx] == 16 };
                 foreach (creq_vmsk[tidx]) { creq_vmsk[tidx] == '1; }
@@ -128,7 +128,7 @@ task shmins_unit_sequence::body();
                 creq_info   == '0;
                 creq_dtype  == m_seq_dtype;
                 creq_atype_w== m_seq_atype_w;
-                creq_ltype  == m_seq_ltype;
+                creq_itype  == m_seq_itype;
                 creq_space  == m_seq_space;
             }
             creq_wpid   == 0;
@@ -141,4 +141,4 @@ task shmins_unit_sequence::body();
     `uvm_info(get_type_name(), "shmins_unit_sequence::body sequence completed", UVM_HIGH)
 endtask: body
 
-`endif // INC_SHMINS_UNIT_SEUQNECE_SVH
+`endif // INC_SHMINS_UNIT_SEQUENCE_SVH

@@ -1,5 +1,5 @@
-`ifndef VLM_MEMORY_SLV_DRIVER_SV
-`define VLM_MEMORY_SLV_DRIVER_SV
+`ifndef INC_VLM_MEMORY_SLV_DRIVER_SVH
+`define INC_VLM_MEMORY_SLV_DRIVER_SVH
 
 //------------------------------------------------------------------------------
 // @brief Returns fixed-latency read data on the VLM memory interface.
@@ -108,4 +108,4 @@ task vlm_memory_slv_driver::drive_signals();
   end
 endtask : drive_signals
 
-`endif // VLM_MEMORY_SLV_DRIVER_SV
+`endif // INC_VLM_MEMORY_SLV_DRIVER_SVH

@@ -59,4 +59,4 @@ function shm_environment_config::init();
     vlm_slv_agent_cfg.vlm_slv_is_active = env_is_active;
  endfunction: init
 
- `endif //INC_SHM_ENVIRONMENT_CONFIG_SVH
+`endif // INC_SHM_ENVIRONMENT_CONFIG_SVH

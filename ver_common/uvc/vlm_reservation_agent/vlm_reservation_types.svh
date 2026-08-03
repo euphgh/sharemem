@@ -1,5 +1,5 @@
-`ifndef VLM_RESERVATION_TYPES_SVH
-`define VLM_RESERVATION_TYPES_SVH
+`ifndef INC_VLM_RESERVATION_TYPES_SVH
+`define INC_VLM_RESERVATION_TYPES_SVH
 
 //------------------------------------------------------------------------------
 // @brief Selects the independently scheduled read or write reservation table.
@@ -117,4 +117,4 @@ typedef struct {
   int unsigned matched_mem_request_count;
 } vlm_reservation_check_result_t;
 
-`endif // VLM_RESERVATION_TYPES_SVH
+`endif // INC_VLM_RESERVATION_TYPES_SVH

@@ -5,11 +5,11 @@ package vlm_reservation_compile_test_pkg;
   import vlm_reservation_pkg::*;
 
   `include "uvm_macros.svh"
-  `include "vlm_memory_sequence_item.sv"
-  `include "vlm_memory_slv_agent_config.sv"
-  `include "vlm_memory_monitor.sv"
-  `include "vlm_memory_slv_driver.sv"
-  `include "vlm_memory_slv_sequencer.sv"
+  `include "vlm_memory_sequence_item.svh"
+  `include "vlm_memory_slv_agent_config.svh"
+  `include "vlm_memory_monitor.svh"
+  `include "vlm_memory_slv_driver.svh"
+  `include "vlm_memory_slv_sequencer.svh"
   `include "vlm_memory_slv_agent.svh"
 
   //----------------------------------------------------------------------------

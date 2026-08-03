@@ -1,5 +1,5 @@
-`ifndef VLM_RESERVATION_SCHEDULER_SVH
-`define VLM_RESERVATION_SCHEDULER_SVH
+`ifndef INC_VLM_RESERVATION_SCHEDULER_SVH
+`define INC_VLM_RESERVATION_SCHEDULER_SVH
 
 //------------------------------------------------------------------------------
 // @brief Maintains the cycle-relative VLM reservation busy schedule.
@@ -400,4 +400,4 @@ function void vlm_reservation_scheduler::rebuild_final_busy();
   end
 endfunction : rebuild_final_busy
 
-`endif // VLM_RESERVATION_SCHEDULER_SVH
+`endif // INC_VLM_RESERVATION_SCHEDULER_SVH

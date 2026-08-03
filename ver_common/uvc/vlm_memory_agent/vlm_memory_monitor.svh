@@ -1,5 +1,5 @@
-`ifndef VLM_MEMORY_MONITOR_SV
-`define VLM_MEMORY_MONITOR_SV
+`ifndef INC_VLM_MEMORY_MONITOR_SVH
+`define INC_VLM_MEMORY_MONITOR_SVH
 
 //------------------------------------------------------------------------------
 // @brief Publishes read and write transactions observed on the MEM interface.
@@ -180,4 +180,4 @@ task vlm_memory_monitor::monitor_signals();
   join
 endtask : monitor_signals
 
-`endif // VLM_MEMORY_MONITOR_SV
+`endif // INC_VLM_MEMORY_MONITOR_SVH

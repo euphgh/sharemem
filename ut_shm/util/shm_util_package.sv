@@ -1,5 +1,24 @@
 package shm_util_package;
     `include "bit_rt_range.svh"
+
+    //-------------------------------------------------------------------------
+    // @brief Returns an uppercase copy of a SystemVerilog string.
+    //
+    // @param value Source string; the input object is not modified.
+    // @return A copy with ASCII lowercase letters converted to uppercase.
+    //-------------------------------------------------------------------------
+    function automatic string str_toupper(input string value);
+        string result = value;
+
+        for (int index = 0; index < result.len(); index++) begin
+            if (result[index] >= "a" && result[index] <= "z") begin
+                result[index] = result[index] - "a" + "A";
+            end
+        end
+
+        return result;
+    endfunction : str_toupper
+
     parameter WARP_N          = 8                     ;
     parameter OTF_N           = 4                     ;
     parameter PRIO_W          = 4                     ;

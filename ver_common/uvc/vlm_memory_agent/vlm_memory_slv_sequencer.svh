@@ -1,5 +1,5 @@
-`ifndef VLM_MEMORY_SLV_SEQUENCER_SV
-`define VLM_MEMORY_SLV_SEQUENCER_SV
+`ifndef INC_VLM_MEMORY_SLV_SEQUENCER_SVH
+`define INC_VLM_MEMORY_SLV_SEQUENCER_SVH
 
 //------------------------------------------------------------------------------
 // @brief Sequences VLM memory transactions for the memory slave driver.
@@ -29,4 +29,4 @@ function vlm_memory_slv_sequencer::new(
   super.new(name, parent);
 endfunction : new
 
-`endif // VLM_MEMORY_SLV_SEQUENCER_SV
+`endif // INC_VLM_MEMORY_SLV_SEQUENCER_SVH

@@ -1,12 +1,10 @@
-`ifndef INC_vlm_memory_sequence_item_SV
-`define INC_vlm_memory_sequence_item_SV
+`ifndef INC_VLM_MEMORY_SEQUENCE_ITEM_SVH
+`define INC_VLM_MEMORY_SEQUENCE_ITEM_SVH
 
 //-------------------------------------------------------------------
 // Class: vlm_memory_sequence_item
 //
 //-------------------------------------------------------------------
-
-import shm_util_package::*;
 
 class vlm_memory_sequence_item extends uvm_sequence_item;
 
@@ -102,4 +100,4 @@ function vlm_memory_sequence_item::new(string name="vlm_memory_sequence_item");
   super.new(name);
 endfunction: new
 
-`endif //INC_vlm_memory_sequence_item_SV
+`endif // INC_VLM_MEMORY_SEQUENCE_ITEM_SVH

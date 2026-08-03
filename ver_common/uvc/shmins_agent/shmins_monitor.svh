@@ -1,5 +1,5 @@
-`ifndef INC_SHMINS_MONITOR_SV
-`define INC_SHMINS_MONITOR_SV
+`ifndef INC_SHMINS_MONITOR_SVH
+`define INC_SHMINS_MONITOR_SVH
 
 //-----------------------------------------------------------------------------
 // Class: shmins_monitor
@@ -168,3 +168,5 @@ task shmins_monitor::monitor_signals();
         shmins_cnt++;
     end
 endtask
+
+`endif // INC_SHMINS_MONITOR_SVH

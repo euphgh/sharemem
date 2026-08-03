@@ -1,5 +1,5 @@
-`ifndef INC_SHM_W_TRANS_SVH
-`define INC_SHM_W_TRANS_SVH
+`ifndef INC_SHM_WTRANS_ITEM_SVH
+`define INC_SHM_WTRANS_ITEM_SVH
 
 import shm_util_package::*;
 
@@ -57,7 +57,7 @@ class shm_wtrans_item extends shmins_sequence_item;
         eoff_val    = new[this_max_elem_cnt];
         elem_unify_addr = new[this_max_elem_cnt];
         for(int unsigned bidx = 0; bidx < this_max_elem_cnt; bidx ++) begin: each_elem_slot
-            if(creq_ltype == LDST_S || creq_ltype == LDST_V) begin: vec_en_toff
+            if(creq_itype == LDST_S || creq_itype == LDST_V) begin: vec_en_toff
                 if(creq_atype_w == ATYP_32) begin: atyp32
                     // support max 32 elemnt
                     eoff_val[bidx] = t_offs[31:0];
@@ -82,7 +82,7 @@ class shm_wtrans_item extends shmins_sequence_item;
                 end: atyp8
                 eoff_val[bidx] = (eoff_val[bidx] << offs_sft) + (bidx * $unsigned(elem_byten));
             end: vec_en_toff
-            else if(creq_ltype == LDST_V) begin: ele_en_eoff
+            else if(creq_itype == LDST_V) begin: ele_en_eoff
                 if(creq_atype_w == ATYP_32) begin
                     // ATYP_32 mode, only support 8 element
                     eoff_val[bidx] = t_offs[bidx*32+:32];
@@ -106,7 +106,7 @@ class shm_wtrans_item extends shmins_sequence_item;
                 end: atyp8
                 eoff_val[bidx] = eoff_val[bidx] << offs_sft;
             end: ele_en_eoff
-            else if (creq_ltype === LDSTE_S) begin: lsdt_e_s
+            else if (creq_itype === LDSTE_S) begin: lsdt_e_s
                 if(creq_atype_w === ATYP_32)
                     if (creq_atype_s) begin
                         eoff_val[bidx] = $unsigned($signed(t_offs[31:0]) * $signed(bidx));
@@ -242,4 +242,4 @@ class shm_wtrans_item extends shmins_sequence_item;
     endfunction
 endclass
 
-`endif // INC_SHM_W_TRANS_SVH
+`endif // INC_SHM_WTRANS_ITEM_SVH

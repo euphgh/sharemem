@@ -105,7 +105,7 @@ vlm_interface vlm_slv_intf();
         .mem_wdata      (tb_mem_wdata   )
     );
 
-     `include "./shm_ut_connect.sv"
+     `include "shm_ut_connect.svh"
 
     initial begin
         run_test();

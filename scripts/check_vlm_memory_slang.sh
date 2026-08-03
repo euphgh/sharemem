@@ -49,11 +49,11 @@ fi
 required_files=(
     "$repo_root/ut_shm/util/shm_util_package.sv"
     "$memory_agent_dir/vlm_memory_interface.sv"
-    "$memory_agent_dir/vlm_memory_sequence_item.sv"
-    "$memory_agent_dir/vlm_memory_slv_agent_config.sv"
-    "$memory_agent_dir/vlm_memory_monitor.sv"
-    "$memory_agent_dir/vlm_memory_slv_driver.sv"
-    "$memory_agent_dir/vlm_memory_slv_sequencer.sv"
+    "$memory_agent_dir/vlm_memory_sequence_item.svh"
+    "$memory_agent_dir/vlm_memory_slv_agent_config.svh"
+    "$memory_agent_dir/vlm_memory_monitor.svh"
+    "$memory_agent_dir/vlm_memory_slv_driver.svh"
+    "$memory_agent_dir/vlm_memory_slv_sequencer.svh"
     "$memory_agent_dir/vlm_memory_slv_agent.svh"
 )
 
@@ -75,11 +75,11 @@ package vlm_memory_slang_test_pkg;
   import shm_util_package::*;
 
   `include "uvm_macros.svh"
-  `include "vlm_memory_sequence_item.sv"
-  `include "vlm_memory_slv_agent_config.sv"
-  `include "vlm_memory_monitor.sv"
-  `include "vlm_memory_slv_driver.sv"
-  `include "vlm_memory_slv_sequencer.sv"
+  `include "vlm_memory_sequence_item.svh"
+  `include "vlm_memory_slv_agent_config.svh"
+  `include "vlm_memory_monitor.svh"
+  `include "vlm_memory_slv_driver.svh"
+  `include "vlm_memory_slv_sequencer.svh"
   `include "vlm_memory_slv_agent.svh"
 endpackage : vlm_memory_slang_test_pkg
 

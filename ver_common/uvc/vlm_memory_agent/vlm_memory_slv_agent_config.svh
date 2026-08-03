@@ -1,5 +1,5 @@
-`ifndef VLM_MEMORY_SLV_AGENT_CONFIG_SV
-`define VLM_MEMORY_SLV_AGENT_CONFIG_SV
+`ifndef INC_VLM_MEMORY_SLV_AGENT_CONFIG_SVH
+`define INC_VLM_MEMORY_SLV_AGENT_CONFIG_SVH
 
 //------------------------------------------------------------------------------
 // @brief Configures the active components of a VLM memory slave agent.
@@ -33,4 +33,4 @@ function vlm_memory_slv_agent_config::new(string name = "vlm_memory_slv_agent_co
   super.new(name);
 endfunction : new
 
-`endif // VLM_MEMORY_SLV_AGENT_CONFIG_SV
+`endif // INC_VLM_MEMORY_SLV_AGENT_CONFIG_SVH

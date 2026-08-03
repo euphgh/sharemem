@@ -1,5 +1,5 @@
-`ifndef VLM_RESERVATION_CHECKER_SVH
-`define VLM_RESERVATION_CHECKER_SVH
+`ifndef INC_VLM_RESERVATION_CHECKER_SVH
+`define INC_VLM_RESERVATION_CHECKER_SVH
 
 //------------------------------------------------------------------------------
 // @brief Checks reservation semantics, busy ownership, and MEM correspondence.
@@ -573,4 +573,4 @@ function void vlm_reservation_checker::check_mem_request_pair(
   end
 endfunction : check_mem_request_pair
 
-`endif // VLM_RESERVATION_CHECKER_SVH
+`endif // INC_VLM_RESERVATION_CHECKER_SVH

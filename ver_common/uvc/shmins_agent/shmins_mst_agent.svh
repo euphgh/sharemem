@@ -92,3 +92,5 @@ function void shmins_mst_agent::connect_phase(uvm_phase phase);
         shmins_mst_drv.seq_item_port.connect(shmins_mst_sqr.seq_item_export);
     end
 endfunction: connect_phase
+
+`endif // INC_SHMINS_MST_AGENT_SVH

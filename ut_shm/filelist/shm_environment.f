@@ -34,8 +34,8 @@ $TB_DIR/util/shm_util_package.sv
 # AUTO_GEN_FILELIST_AGENT_SEQ_BEGIN
 +incdir+$VER_CMN/rpu_inst
 +incdir+$VER_CMN/uvc/sequences
-+incdir+$VER_CMN/uvc/shmins_agent/sequences
-+incdir+$VER_CMN/uvc/vlm_agent/sequences
++incdir+$VER_CMN/shmins_agent/sequence
++incdir+$VER_CMN/vlm_memory_agent
 # AUTO_GEN_FILELIST_AGENT_SEQ_END
 
 # Environment Checkers Directory

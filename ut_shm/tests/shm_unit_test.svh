@@ -1,5 +1,5 @@
-`ifndef __SHM_UNIT_TEST_SVH__
-`define __SHM_UNIT_TEST_SVH__
+`ifndef INC_SHM_UNIT_TEST_SVH
+`define INC_SHM_UNIT_TEST_SVH
 
 import shm_seq_item_package::*;
 
@@ -31,4 +31,4 @@ task shm_unit_test::main_phase(uvm_phase phase);
     phase.drop_objection(this);
 endtask: main_phase
 
-`endif //__SHM_UNIT_TEST_SVH__
+`endif // INC_SHM_UNIT_TEST_SVH

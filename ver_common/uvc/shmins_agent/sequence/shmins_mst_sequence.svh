@@ -72,7 +72,7 @@ task shmins_mst_sequence::body();
             creq_atype_w  == ATYP_32 ;
             creq_atype_s  == ATYP_U ;
             creq_atype_g  == GAUTO_1B;
-            creq_ltype    == LDST_V ;
+            creq_itype    == LDST_V ;
             creq_ack_en   == '1     ;
             creq_inv_size == '0     ;
             creq_space    == '0     ;

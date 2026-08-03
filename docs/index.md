@@ -426,7 +426,7 @@ baddr = {inv_index, inv_offs} + warp_index * WARP_STEP;
 
 #### 4\.1\.2 shmins\_sequence\_item
 
-`shmins_sequence_item` 基于 `shmins_interface` 的信号定义，包含 creq 指令的所有位域（不含 ack 信号）。文件位于 `ver_common/uvc/shmins_agent/sequence/shmins_sequence_item.sv`。
+`shmins_sequence_item` 基于 `shmins_interface` 的信号定义，包含 creq 指令的所有位域（不含 ack 信号）。文件位于 `ver_common/shmins_agent/sequence/shmins_sequence_item.svh`。
 
 **位域定义**
 

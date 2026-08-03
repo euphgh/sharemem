@@ -1,5 +1,5 @@
-`ifndef VLM_RESERVATION_COVERAGE_SVH
-`define VLM_RESERVATION_COVERAGE_SVH
+`ifndef INC_VLM_RESERVATION_COVERAGE_SVH
+`define INC_VLM_RESERVATION_COVERAGE_SVH
 
 //------------------------------------------------------------------------------
 // @brief Defines the coverage-facing API for reservation scheduling behavior.
@@ -72,4 +72,4 @@ function void vlm_reservation_coverage::sample_cycle(
   // Functional coverage is intentionally deferred; retain the synchronous API for agent integration.
 endfunction : sample_cycle
 
-`endif // VLM_RESERVATION_COVERAGE_SVH
+`endif // INC_VLM_RESERVATION_COVERAGE_SVH

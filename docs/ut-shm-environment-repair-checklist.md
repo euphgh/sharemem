@@ -158,7 +158,7 @@ P0 编译基线（2026-08-02）：
   - 使用 collection 类型的源码显式 import `collection::*` 或所需符号。
   - 不把 `collection_pkg.sv` include 到 `shm_util_package` 内部。
   - 远端 VCS 已成功越过 `collection_pkg.sv`，当前首错推进到
-    `shm_seq_item_package.sv` 缺少 `shmins_sequence_item.sv` include 路径。
+    `shm_seq_item_package.sv` 缺少 `shmins_sequence_item.svh` include 路径。
 
 - [~] **UTIL-03：解决缺失的 generated collection 头文件。**
   - 当前若干 array utility 会 include `generated/*.svh`。
@@ -185,32 +185,46 @@ P0 编译基线（2026-08-02）：
 
 ### P2：规范 `.svh`、include guard 和事务 package
 
-- [ ] **HDR-01：统一声明型 `.svh` 的 include guard。**
+- [x] **HDR-01：统一声明型 `.svh` 的 include guard。**
   - 格式固定为 `INC_<FILE_NAME>_SVH`。
   - 修复缺少 `INC_`、残留 `_SV`、旧式双下划线和拼写错误的 guard。
   - 文件结束注释与 guard 名一致。
+  - `ver_common/` 与 `ut_shm/` 自有 `.svh` 已完成机械核对；独立子仓库
+    `ut_shm/util/sv-collection` 保持其自身规范。
 
-- [ ] **HDR-02：核对仍带 guard 的 `.sv` 文件。**
+- [x] **HDR-02：核对仍带 guard 的 `.sv` 文件。**
   - 若文件只应由 package include，则改为 `.svh`。
   - 若文件作为独立 compilation unit 编译，则移除不必要的 include 关系并避免重复定义。
-  - 优先核对 `shmins_sequence_item.sv` 和 VLM memory agent 中的 class 文件。
+  - 优先核对 `shmins_sequence_item.svh` 和 VLM memory agent 中的 class 文件。
+  - package include 的 SHMINS transaction 与 VLM memory class 文件已改为 `.svh`；
+    interface 和 package compilation unit 继续使用 `.sv`。
 
-- [ ] **SEQITEM-01：修复 `shm_seq_item_package`。**
+- [x] **SEQITEM-01：修复 `shm_seq_item_package`。**
   - include 实际存在的 SHMINS sequence item 文件。
   - 在 enum typedef 之后 include `shmins_enum_field.svh`。
   - 用 `vlm_memory_sequence_item` 替换不存在的 `vlm_sequence_item`。
   - 删除 `shmins_enum_fields.sv` 等失效文件名。
 
-- [ ] **SEQITEM-02：修复 enum 字符串转换生成物。**
+- [x] **SEQITEM-02：修复 enum 字符串转换生成物。**
   - 为 `shmins_enum_field.svh` 增加规范 include guard。
   - 提供 `str_toupper()`，或让生成代码使用标准 string 大写转换方式。
   - 同步修复 `scripts/gen_enum_str.py`，避免下次生成重新引入错误。
+  - `str_toupper()` 由 `shm_util_package` 提供；generator 对 `.svh` 输出自动生成
+    规范 include guard。
 
-- [!] **SEQITEM-03：统一 `creq_itype` 与遗留 `creq_ltype`。**
+- [x] **SEQITEM-03：统一 `creq_itype` 与遗留 `creq_ltype`。**
   - 当前 sequence item 和新文档使用 `creq_itype_e/creq_itype`。
   - 旧 sequence、reference 辅助类仍使用 `creq_ltype_e/creq_ltype`。
   - 推荐以 `creq_itype` 为标准；正式修改前确认不需要兼容旧外部 API。
   - 本项未解决前不得迁移 sequence、reference 和 scoreboard 类型依赖。
+  - 已按用户授权采用 `creq_itype_e/creq_itype`，不保留旧名称兼容 alias。
+
+P2 验证结果（2026-08-03）：
+
+- 本地 transaction package slang：0 error，仅 UVM 1.2 既有 warning。
+- 本地 VLM memory agent slang：0 error，仅 UVM 1.2 既有 warning。
+- 远端 VCS 已解析 `shm_seq_item_package` 的三个 transaction/enum 头文件；当前首错为
+  `FLIST-01` 的旧路径 `$VER_CMN/uvc/shmins_agent/shmins_interface.sv`。
 
 ### P3：迁移 agent、environment 和 package
 

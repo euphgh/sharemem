@@ -9,11 +9,11 @@ import uvm_pkg::*;
 
  import shm_seq_item_package::*;
 
- `include "shmins_mst_agent_config.sv"
+ `include "shmins_mst_agent_config.svh"
  `include "vlm_slv_agent_config.sv"
-`include "shm_environment_config.sv"
+`include "shm_environment_config.svh"
 
- `include "shmins_monitor.sv"
+ `include "shmins_monitor.svh"
  `include "vlm_monitor.sv"
 
 endpackage: shm_env_package

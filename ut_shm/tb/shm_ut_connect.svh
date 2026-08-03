@@ -1,3 +1,6 @@
+`ifndef INC_SHM_UT_CONNECT_SVH
+`define INC_SHM_UT_CONNECT_SVH
+
 always @(*) begin
     shmins_mst_intf.clk    = clk;
     shmins_mst_intf.rst_n  = rst_n;
@@ -44,3 +47,5 @@ end
 initial begin
     uvm_config_db#(virtual vlm_interface)::set(null, "", $sprintf("vlm_slv_vif"), vlm_slv_intf);
 end
+
+`endif // INC_SHM_UT_CONNECT_SVH

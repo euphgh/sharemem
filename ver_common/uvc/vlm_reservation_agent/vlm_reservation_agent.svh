@@ -1,5 +1,5 @@
-`ifndef VLM_RESERVATION_AGENT_SVH
-`define VLM_RESERVATION_AGENT_SVH
+`ifndef INC_VLM_RESERVATION_AGENT_SVH
+`define INC_VLM_RESERVATION_AGENT_SVH
 
 //------------------------------------------------------------------------------
 // @brief Coordinates reservation sampling, checking, coverage, and scheduling.
@@ -174,4 +174,4 @@ function void vlm_reservation_agent::drive_busy();
   reservation_vif.wbusy <= scheduler.final_busy[VLM_RESERVATION_WRITE];
 endfunction : drive_busy
 
-`endif // VLM_RESERVATION_AGENT_SVH
+`endif // INC_VLM_RESERVATION_AGENT_SVH

@@ -1,5 +1,5 @@
-`ifndef VLM_MEMORY_SLV_AGENT_SVH
-`define VLM_MEMORY_SLV_AGENT_SVH
+`ifndef INC_VLM_MEMORY_SLV_AGENT_SVH
+`define INC_VLM_MEMORY_SLV_AGENT_SVH
 
 //------------------------------------------------------------------------------
 // @brief Contains the monitor and active components for the VLM memory port.
@@ -96,4 +96,4 @@ function void vlm_memory_slv_agent::connect_phase(uvm_phase phase);
   end
 endfunction : connect_phase
 
-`endif // VLM_MEMORY_SLV_AGENT_SVH
+`endif // INC_VLM_MEMORY_SLV_AGENT_SVH

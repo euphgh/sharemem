@@ -1,5 +1,5 @@
-`ifndef VLM_RESERVATION_MONITOR_SVH
-`define VLM_RESERVATION_MONITOR_SVH
+`ifndef INC_VLM_RESERVATION_MONITOR_SVH
+`define INC_VLM_RESERVATION_MONITOR_SVH
 
 //------------------------------------------------------------------------------
 // @brief Samples reservation and MEM request interfaces into one transaction.
@@ -359,4 +359,4 @@ function void vlm_reservation_monitor::collect_memory_requests(ref vlm_reservati
   end
 endfunction : collect_memory_requests
 
-`endif // VLM_RESERVATION_MONITOR_SVH
+`endif // INC_VLM_RESERVATION_MONITOR_SVH

@@ -6,8 +6,8 @@
 // NOTE: Please Don't Remove Any Comments or //--- Given Below
 //================================================================================
 
-`ifndef INC_SHMINS_MST_SEQUENCER_SV
-`define INC_SHMINS_MST_SEQUENCER_SV
+`ifndef INC_SHMINS_MST_SEQUENCER_SVH
+`define INC_SHMINS_MST_SEQUENCER_SVH
 
 //-----------------------------------------------------------------------------
 // Class: shmins_mst_sequencer
@@ -41,4 +41,4 @@ function void shmins_mst_sequencer::build_phase(uvm_phase phase);
     `uvm_info(get_type_name(), "In build_phase...!!", UVM_DEBUG);
 endfunction: build_phase
 
-`endif //INC_SHMINS_MST_SEQUENCER_SV
+`endif // INC_SHMINS_MST_SEQUENCER_SVH

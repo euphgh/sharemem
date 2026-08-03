@@ -1,5 +1,5 @@
-`ifndef INC_SHMINS_SEQUENCE_ITEM_SV
-`define INC_SHMINS_SEQUENCE_ITEM_SV
+`ifndef INC_SHMINS_SEQUENCE_ITEM_SVH
+`define INC_SHMINS_SEQUENCE_ITEM_SVH
 
 //-------------------------------------------------------------------
 // Class: shmins_sequence_item
@@ -45,8 +45,6 @@ typedef enum bit[1:0] {
   SPACE_WRP = 2'd1,
   SPACE_BLK = 2'd2
 } creq_space_e;
-
-import shm_util_package::*;
 
 class shmins_sequence_item extends uvm_sequence_item;
   parameter WARP_ID_WIDTH_MAX = $clog2(4);
@@ -433,4 +431,4 @@ function shmins_sequence_item::new(string name="shmins_sequence_item");
   super.new(name);
 endfunction: new
 
-`endif //INC_SHMINS_SEQUENCE_ITEM_SV
+`endif // INC_SHMINS_SEQUENCE_ITEM_SVH

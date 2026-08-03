@@ -1,5 +1,5 @@
-`ifndef VLM_RESERVATION_AGENT_CONFIG_SVH
-`define VLM_RESERVATION_AGENT_CONFIG_SVH
+`ifndef INC_VLM_RESERVATION_AGENT_CONFIG_SVH
+`define INC_VLM_RESERVATION_AGENT_CONFIG_SVH
 
 //------------------------------------------------------------------------------
 // @brief Carries the two business interfaces used by the reservation agent.
@@ -44,4 +44,4 @@ function bit vlm_reservation_agent_config::validate();
   return reservation_vif != null && memory_vif != null;
 endfunction : validate
 
-`endif // VLM_RESERVATION_AGENT_CONFIG_SVH
+`endif // INC_VLM_RESERVATION_AGENT_CONFIG_SVH
