@@ -56,28 +56,28 @@ class shm_wtrans_item extends shmins_sequence_item;
         elem_unify_addr = new[this_max_elem_cnt];
         for(int unsigned bidx = 0; bidx < this_max_elem_cnt; bidx ++) begin: each_elem_slot
             if(creq_itype == LDST_S || creq_itype == LDST_V) begin: vec_en_toff
-                if(creq_atype_w == ATYP_32) begin: atyp32
+                if(creq_atype_w == ATYP_32) begin: atype32
                     // support max 32 elemnt
                     eoff_val[bidx] = t_offs[31:0];
-                end: atyp32
-                else if(creq_atype_w == ATYP_16) begin: atyp16
+                end: atype32
+                else if(creq_atype_w == ATYP_16) begin: atype16
                     // support max 32 elemnt
-                    if (creq_atype_s) begin
-                        eoff_val[bidx] = $signed(32'($signed(t_offs[15:0])));
+                    if (creq_atype_s == ATYP_S) begin
+                        eoff_val[bidx] = $unsigned(32'($signed(t_offs[15:0])));
                     end
                     else begin
                         eoff_val[bidx] = 32'(t_offs[15:0]);
                     end
-                end: atyp16
-                else begin: atyp8
+                end: atype16
+                else begin: atype8
                     // support max 32 elemnt
-                    if (creq_atype_s) begin
-                        eoff_val[bidx] = $signed(32'($signed(t_offs[7:0])));
+                    if (creq_atype_s == ATYP_S) begin
+                        eoff_val[bidx] = $unsigned(32'($signed(t_offs[7:0])));
                     end
                     else begin
                         eoff_val[bidx] = 32'(t_offs[7:0]);
                     end
-                end: atyp8
+                end: atype8
                 eoff_val[bidx] = (eoff_val[bidx] << offs_sft) + (bidx * $unsigned(elem_byten));
             end: vec_en_toff
             else if(creq_itype == LDST_V) begin: ele_en_eoff
@@ -85,50 +85,50 @@ class shm_wtrans_item extends shmins_sequence_item;
                     // ATYP_32 mode, only support 8 element
                     eoff_val[bidx] = t_offs[bidx*32+:32];
                 end
-                else if(creq_atype_w == ATYP_16) begin: atyp16
+                else if(creq_atype_w == ATYP_16) begin: atype16
                     // ATYP_16 mode, only support 16 element
-                    if (creq_atype_s) begin
-                        eoff_val[bidx] = 32'($signed(t_offs[bidx*16+:16]));
+                    if (creq_atype_s == ATYP_S) begin
+                        eoff_val[bidx] = $unsigned(32'($signed(t_offs[bidx*16+:16])));
                     end
                     else begin
                         eoff_val[bidx] = 32'(t_offs[bidx*16+:16]);
                     end
-                end: atyp16
-                else begin: atyp8
-                    if (creq_atype_s) begin
-                        eoff_val[bidx] = 32'($signed(t_offs[bidx*8+:8]));
+                end: atype16
+                else begin: atype8
+                    if (creq_atype_s == ATYP_S) begin
+                        eoff_val[bidx] = $unsigned(32'($signed(t_offs[bidx*8+:8])));
                     end
                     else begin
                         eoff_val[bidx] = 32'(t_offs[bidx*8+:8]);
                     end
-                end: atyp8
+                end: atype8
                 eoff_val[bidx] = eoff_val[bidx] << offs_sft;
             end: ele_en_eoff
-            else if (creq_itype === LDSTE_S) begin: lsdt_e_s
+            else if (creq_itype === LDSTE_S) begin: lsdte_s
                 if(creq_atype_w === ATYP_32)
-                    if (creq_atype_s) begin
+                    if (creq_atype_s == ATYP_S) begin
                         eoff_val[bidx] = $unsigned($signed(t_offs[31:0]) * $signed(bidx));
                     end
                     else begin
                         eoff_val[bidx] = (t_offs[31:0] * bidx);
                     end
                 else if(creq_atype_w === ATYP_16)
-                    if (creq_atype_s) begin
+                    if (creq_atype_s == ATYP_S) begin
                         eoff_val[bidx] = $unsigned(int'($signed(t_offs[15:0])) * $signed(bidx));
                     end
                     else begin
-                        eoff_val[bidx] = $unsigned(32'($unsigned(t_offs[15:0]) * bidx));
+                        eoff_val[bidx] = $unsigned(32'($unsigned(t_offs[15:0])) * bidx); 
                     end
                 else begin
                     if (creq_atype_s) begin
-                        eoff_val[bidx] = $unsigned(int'($signed(t_offs[7:0]) * $signed(bidx)));
+                        eoff_val[bidx] = $unsigned(int'($signed(t_offs[7:0])) * $signed(bidx));
                     end
                     else begin
-                        eoff_val[bidx] = $unsigned(32'($unsigned(t_offs[7:0]) * bidx));
+                        eoff_val[bidx] = $unsigned(32'($unsigned(t_offs[7:0])) * bidx);
                     end
                 end
                 eoff_val[bidx] = eoff_val[bidx] << offs_sft;
-            end: lsdt_e_s
+            end: lsdte_s
         end: each_elem_slot
     endfunction
     //-----------------------------------------------------------------------------
@@ -165,7 +165,7 @@ class shm_wtrans_item extends shmins_sequence_item;
                 if (creq_vmsk[tidx][eidx]) begin
                     byte wstrb = 0;
                     for (int i = 0; i < elem_byten; i++) begin
-                        wstrb[i] = int'(creq_len[tidx]) >= ((elem_byten * eidx) + i);
+                        wstrb[i] = int'(creq_len[tidx]) > ((elem_byten * eidx) + i);
                     end
                     wstrb_2d_array[tidx][eidx] = wstrb;
                 end
@@ -220,8 +220,8 @@ class shm_wtrans_item extends shmins_sequence_item;
                     `uvm_error(get_type_name(), "creq_space not expect");
                 end
 
-                `uvm_info(get_type_name(), $sformatf("THD[%0d].Elem[%0d] %s Bank[%0d]@0x%x_Strb[0x%x] Space[%s] = (%0d x 12KB) + {0x%x, 0x%x} = B + Offs(0x%x)",
-                    tidx, eidx, action, elem_bid, wstrb_2d_array[tidx][eidx], space_name, elem_maddr, warp_index, inv_index, inv_offs, eoff_val[eidx]), UVM_FULL);
+                `uvm_info(get_type_name(), $sformatf("THD[%0d].Elem[%0d] %s Bank[%0d][0x%x].Strb[0x%x] = %s[0x%x] = (%0d x 12KB) + {0x%x, 0x%x} = B + Offs(0x%x)", 
+                tidx, eidx, action, elem_bid, elem_baddr, wstrb_2d_array[tidx][eidx], space_name, elem_maddr, warp_index, inv_index, inv_offs, eoff_val[eidx]), UVM_FULL);
                 baddr_2d_array[tidx][eidx] = elem_baddr;
                 bid_2d_array[tidx][eidx] = elem_bid;
             end
