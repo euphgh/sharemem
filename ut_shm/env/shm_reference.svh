@@ -99,7 +99,7 @@ endtask: configure_phase
 
 function void shm_reference::write_wmap(string label, int tidx, int eidx, int lidx, bit wen, bidx_t bid, baddr_t baddr, byte unsigned wdata, shm_wtrans_item item);
     if (wen) begin
-        `uvm_info(get_type_name(), $sformatf("%s Thd[%0d].Elem[%0d].Lane[%0d] W bank[%0d]@0x%x 0x%x", label, tidx, eidx, lidx, bid, baddr, wdata), UVM_FULL);
+        `uvm_info(get_type_name(), $sformatf("%s Thd[%0d].Elem[%0d].Lane[%0d] W bank[%0d][0x%x] %0x", label, tidx, eidx, lidx, bid, baddr, wdata), UVM_FULL);
         if (item.wmap[bid].exists(baddr))
             `uvm_error(get_type_name(), $sformatf("%s write address overlap at %x, %x -> %x", label, baddr, item.wmap[bid][baddr], wdata));
         item.wmap[bid][baddr] = wdata;
@@ -121,11 +121,11 @@ function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_
         const int unsigned elem_byten = wgolden.data_byte_w();
         foreach(wgolden.baddr_2d_array[tidx, eidx]) begin
             byte elem_wmask = wgolden.wstrb_2d_array[tidx][eidx];
-            if (wgolden.creq_info == 1) begin: vtrans_v2m
+            if (wgolden.creq_info == '1) begin: vtrans_v2m
                 if (eidx >= 16) continue;
                 for(int unsigned byte_idx = 0; byte_idx < elem_byten; byte_idx++) begin: foreach_byte
                     int data_offset = tidx * elem_byten + byte_idx;
-                    byte byte_wdata = wgolden.creq_vdat[tidx][data_offset];
+                    byte byte_wdata = wgolden.creq_vdat[eidx][data_offset];
                     v2m_write_wmap("VTRANS", tidx, eidx, byte_idx, byte_wdata, wgolden);
                 end: foreach_byte
             end: vtrans_v2m
@@ -150,7 +150,7 @@ function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_
                 bidx_t bidx = wgolden.bid_2d_array[tidx][eidx];
                 byte raw_data = ref_banks[bidx].read(baddr);
                 rdata[tidx][eidx * elem_byte_n + i] = raw_data;
-                `uvm_info(get_type_name(), $sformatf("M2V Thd[%0d].Elem[%0d].Lane[%0d] R bank[%0d]@0x%x = %x", tidx, eidx, i, bidx, baddr, raw_data), UVM_FULL);
+                `uvm_info(get_type_name(), $sformatf("M2V Thd[%0d].Elem[%0d].Lane[%0d] R bank[%0d][0x%x] = %x", tidx, eidx, i, bidx, baddr, raw_data), UVM_FULL);
             end
         end
 

@@ -94,7 +94,7 @@ task shm_scoreboard::b_transport(vlm_memory_sequence_item trans, uvm_tlm_time de
                 byte rdata = rtl_banks[bid].read(byte_addr);
                 trans.vlm_data[bid][byte_offs * 8 +: 8] = rdata;
             end
-            `uvm_info(get_type_name(), $sformatf("VLM[%0d][%x] R: %x", bid, trans.vlm_addr[bid], trans.vlm_data[bid]), UVM_FULL)
+            `uvm_info(get_type_name(), $sformatf("VLM[%02d][%x] R: %x", bid, trans.vlm_addr[bid], trans.vlm_data[bid]), UVM_FULL)
         end
     end
 endtask // 任务结束，控制权和修改后的 txn 一起交还给 Driver
@@ -151,18 +151,16 @@ task shm_scoreboard::scan_timeout_creq();
         foreach (ref_record_q[id]) begin: foreach_ref
             shm_wtrans_item tr = ref_record_q[id].tr;
             if (is_finished_ref_trans(id)) begin
-                string info_msg = $sformatf(
-                    "ref record qid = %0d: all data is matched or expired",
-                    ref_record_q[id].tr.creq_id);
+                string info_msg = $sformatf("ref_record_q(id = %0d) all data is matched or expired: \n", ref_record_q[id].tr.creq_id);
                 info_msg = {info_msg, tr.sprint(), tmap_util::sprint(ref_record_q[id].expired), tmap_util::sprint(ref_record_q[id].matched)};
-                info_msg = {info_msg, "expired table: ", tmap_util::sprint(ref_record_q[id].expired), " "};
-                info_msg = {info_msg, "matched table: ", tmap_util::sprint(ref_record_q[id].matched), "\n"};
+                info_msg = {info_msg, "expired table: \n", tmap_util::sprint(ref_record_q[id].expired), "\n"};
+                info_msg = {info_msg, "matched table: \n", tmap_util::sprint(ref_record_q[id].matched), "\n"};
                 `uvm_info(get_type_name(), info_msg, UVM_FULL);
             end
             else if (($time - tr.issue_time) > (time_out_cycle * CLK_PERIOD)) begin
-                string error_msg = {$sformatf("shmins require expired after %0d cycles:", time_out_cycle), tr.sprint()};
-                error_msg = {error_msg, "expired table: ", tmap_util::sprint(ref_record_q[id].expired), "\n"};
-                error_msg = {error_msg, "matched table: ", tmap_util::sprint(ref_record_q[id].matched), "\n"};
+                string error_msg = {$sformatf("shmins require expired after %0d cycles:\n", time_out_cycle), tr.sprint()};
+                error_msg = {error_msg, "expired table: \n", tmap_util::sprint(ref_record_q[id].expired), "\n"};
+                error_msg = {error_msg, "matched table: \n", tmap_util::sprint(ref_record_q[id].matched), "\n"};
                 `uvm_error(get_type_name(), error_msg);
             end
             else begin // only not finish and not expired records should be saved
