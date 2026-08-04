@@ -158,9 +158,20 @@ task shm_scoreboard::scan_timeout_creq();
                 `uvm_info(get_type_name(), info_msg, UVM_FULL);
             end
             else if (($time - tr.issue_time) > (time_out_cycle * CLK_PERIOD)) begin
-                string error_msg = {$sformatf("shmins require expired after %0d cycles:\n", time_out_cycle), tr.sprint()};
+                wmap_t unmatched_wmap;
+                string error_msg;
+
+                foreach (tr.wmap[bank, addr]) begin
+                    if (!ref_record_q[id].expired[bank].exists(addr) &&
+                        !ref_record_q[id].matched[bank].exists(addr)) begin
+                        unmatched_wmap[bank][addr] = tr.wmap[bank][addr];
+                    end
+                end
+
+                error_msg = {$sformatf("shmins require expired after %0d cycles:\n", time_out_cycle), tr.sprint()};
                 error_msg = {error_msg, "expired table: \n", tmap_util::sprint(ref_record_q[id].expired), "\n"};
                 error_msg = {error_msg, "matched table: \n", tmap_util::sprint(ref_record_q[id].matched), "\n"};
+                error_msg = {error_msg, "unmatched table: \n", wmap_util::sprint(unmatched_wmap), "\n"};
                 `uvm_error(get_type_name(), error_msg);
             end
             else begin // only not finish and not expired records should be saved
