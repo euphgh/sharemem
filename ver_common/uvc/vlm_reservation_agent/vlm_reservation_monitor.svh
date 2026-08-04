@@ -5,10 +5,10 @@
 // @brief Samples reservation and MEM request interfaces into one transaction.
 //
 // Owns the four-state sampling and normalization boundary. It obtains the
-// shared clk_if through UVM Config DB, reports unknown interface values, and
-// returns one two-state cycle transaction per collect_cycle() call. It does not
-// drive busy, schedule reservations, check MEM correspondence, or inspect MEM
-// data payloads.
+// shared clk_if through UVM Config DB, waits until reset is released, reports
+// unknown interface values, and returns one two-state cycle transaction per
+// collect_cycle() call. It does not drive busy, schedule reservations, check
+// MEM correspondence, or inspect MEM data payloads.
 //------------------------------------------------------------------------------
 class vlm_reservation_monitor extends uvm_component;
 
@@ -62,12 +62,14 @@ class vlm_reservation_monitor extends uvm_component;
   extern function void set_config(vlm_reservation_agent_config cfg);
 
   //------------------------------------------------------------------------------
-  // @brief Waits for, checks, and returns one normalized reservation/MEM cycle.
+  // @brief Waits for reset release, then returns one normalized reservation/MEM cycle.
   //
   // @param txn Output receiving the two-state cycle transaction.
   // @pre clk_vif, reservation_vif, and memory_vif are non-null.
-  // @post txn contains direct clocking-block samples normalized at the monitor's
-  //       four-state boundary, and txn.cycle identifies the sampling edge.
+  // @post No X/Z checks occur while sampled rst_n is not exactly 1. After
+  //       reset release, txn contains direct clocking-block samples normalized
+  //       at the monitor's four-state boundary, and txn.cycle identifies the
+  //       sampling edge.
   //------------------------------------------------------------------------------
   extern task collect_cycle(
       output vlm_reservation_cycle_transaction_t txn);
@@ -160,8 +162,11 @@ task vlm_reservation_monitor::collect_cycle(output vlm_reservation_cycle_transac
     return;
   end
 
-  // The reservation monitor clocking block is the only timing control in the reactive processing path.
-  @(reservation_vif.mon_cb);
+  // Reset values and interface payloads share the same clocking-block sampling boundary.
+  // Treat X/Z reset as asserted so interface X/Z checks cannot run before a known release.
+  do begin
+    @(reservation_vif.mon_cb);
+  end while (reservation_vif.mon_cb.rst_n !== 1'b1);
 
   initialize_transaction(current_txn);
   current_txn.cycle = clk_vif.cycle_count;

@@ -27,6 +27,7 @@ logic [BANK_N-1:0][WRITE_PORT_N-1:0][$clog2(VTAB_D)-1:0] wdly;
 
 // Passive monitor view: sample the complete interface atomically.
 clocking mon_cb @(posedge clk);
+  input rst_n;
   input rbusy;
   input wbusy;
 

@@ -4,8 +4,6 @@
 > [RpuShmTop MEM/VLM 接口规范](mem-vlm-interface-spec.md)；reservation scheduler、
 > checker 和组件连接的代码实现基准见
 > [VLM Reservation 调度与协同验证架构](vlm-reservation-verification-architecture.md)。
-> 当前环境恢复到可编译、可启动状态的实施顺序与验收项见
-> [ut_shm 验证环境修复 TODO 与检查清单](ut-shm-environment-repair-checklist.md)。
 
 ## 1\. 概述
 

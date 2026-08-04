@@ -120,14 +120,16 @@ transaction 中的 cycle 字段只是对 `clk_vif.cycle_count` 的当周期快�
 `main_phase` 启动 reservation monitor、scheduler、checker、coverage 或 busy
 驱动逻辑。
 
-当前 API-shape 和首版行为实现暂不处理 reset：
+Monitor 使用 reservation interface clocking block 中采样的 `rst_n` 作为采集门控：
 
-- reservation agent 不根据 `rst_n` 清空内部状态；
-- scheduler、checker 和 coverage 不声明 reset API；
-- reset 场景不属于当前实现验收范围。
+- 当 `rst_n !== 1'b1` 时，`collect_cycle()` 继续等待，不构造 cycle transaction，
+  也不执行 busy、reservation 或 MEM request 的 X/Z 检查；
+- reset 释放后的请求从第一个完整采样到 `rst_n == 1'b1` 的时钟沿开始生效；
+- reservation agent 在等待期间不调用 checker、coverage 或 scheduler；
+- scheduler、checker 和 coverage 暂不声明 reset API，运行中再次进入 reset 时保留内部状态。
 
-接口规范中的 reset 规则仍然有效。后续增加 reset 验证时，必须单独更新本文和代码
-API，不能在当前框架中隐式假设 reset 行为。
+当前 reset 支持仅用于屏蔽 reset 期间的接口采样与检查，不等同于完整的动态 reset
+状态清理。后续若需要在运行中 reset 并清空 scheduler 状态，必须单独扩展对应 API。
 
 ## 3. 总体架构
 
@@ -305,9 +307,9 @@ Coverage 只通过同步 function API 采样，不启动 `main_phase` 或 `main_
 
 ### 5.1 Monitor 四态采样边界
 
-Monitor 在 `collect_cycle()` 中直接读取两个业务 interface 的 clocking-block
-采样值，完成四态检查并构造二态 transaction。本架构不定义或传递独立的
-`vlm_reservation_raw_sample_t`。
+Monitor 在 `collect_cycle()` 中先等待 reservation interface clocking block 采样到
+`rst_n == 1'b1`，再读取两个业务 interface 的同周期采样值，完成四态检查并构造
+二态 transaction。本架构不定义或传递独立的 `vlm_reservation_raw_sample_t`。
 
 对于 req/vld 为 0 的端口，对应 addr、dly 和数据为 don't-care，monitor 不检查
 这些 payload，对应的 transaction class handle 保持 `null`。req/vld 或其有效
@@ -494,7 +496,8 @@ Checker 必须同时保证：
 周期 `N` 上升沿后的 `main_phase` 处理顺序固定为：
 
 1. agent 调用 `monitor.collect_cycle()`；
-2. monitor 等待并原子采样两个业务 interface，生成 transaction；
+2. monitor 等待 reset 释放后的有效采样沿，并原子采样两个业务 interface，生成
+   transaction；reset 有效期间不会返回 transaction；
 3. agent 调用 checker，checker 使用 scheduler 更新前状态检查当前到期记录；
 4. agent 调用 coverage，传入相同 transaction、checker 结果和 scheduler
    更新前状态；
