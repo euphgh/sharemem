@@ -43,7 +43,7 @@ class shm_scoreboard extends uvm_scoreboard;
         tmap_t expired;
         function new (shm_wtrans_item tr_);
             this.tr = tr_;
-            for (int unsigned i = 0; i <= BANK_N; i++) begin
+            for (int unsigned i = 0; i < BANK_N; i++) begin
                 matched[i].delete();
                 expired[i].delete();
             end
