@@ -22,7 +22,7 @@ $TB_DIR/util/shm_util_package.sv
 $VER_CMN/uvc/clock/clk_if.sv
 
 +incdir+$VER_CMN/uvc/shmins_agent
-+incdir+$VER_CMN/uvc/shmins_agent/sequence
++incdir+$VER_CMN/uvc/shmins_agent/sequences
 $VER_CMN/uvc/shmins_agent/shmins_interface.sv
 
 +incdir+$VER_CMN/uvc/vlm_memory_agent
