@@ -102,6 +102,8 @@ function vlm_reservation_agent::new(string name = "vlm_reservation_agent", uvm_c
 endfunction : new
 
 function void vlm_reservation_agent::build_phase(uvm_phase phase);
+  int unsigned configured_external_busy_percent;
+
   super.build_phase(phase);
 
   // The agent requires one configuration object containing both business interfaces.
@@ -118,11 +120,24 @@ function void vlm_reservation_agent::build_phase(uvm_phase phase);
   reservation_vif = cfg.reservation_vif;
   memory_vif      = cfg.memory_vif;
 
+  // The command-line setting has higher priority than the value supplied by the test config object.
+  configured_external_busy_percent = cfg.EXTERNAL_BUSY_PERCENT;
+  void'($value$plusargs("EXTERNAL_BUSY_PERCENT=%d", configured_external_busy_percent));
+
+  if (configured_external_busy_percent > 100) begin
+    `uvm_fatal("VLM_RESERVATION_EXTERNAL_PERCENT",
+               $sformatf("EXTERNAL_BUSY_PERCENT %0d is outside [0, 100]",
+                         configured_external_busy_percent))
+  end
+
   // Always construct the complete active reservation hierarchy; passive mode is not supported yet.
   monitor             = vlm_reservation_monitor::type_id::create("monitor", this);
   reservation_checker = vlm_reservation_checker::type_id::create("reservation_checker", this);
   coverage            = vlm_reservation_coverage::type_id::create("coverage", this);
   scheduler           = vlm_reservation_scheduler::type_id::create("scheduler", this);
+  scheduler.external_busy_percent = configured_external_busy_percent;
+
+  `uvm_info("VLM_RESERVATION_EXTERNAL_PERCENT", $sformatf("using EXTERNAL_BUSY_PERCENT=%0d", scheduler.external_busy_percent), UVM_LOW)
 endfunction : build_phase
 
 function void vlm_reservation_agent::connect_phase(uvm_phase phase);

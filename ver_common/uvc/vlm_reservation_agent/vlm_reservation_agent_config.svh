@@ -2,12 +2,12 @@
 `define INC_VLM_RESERVATION_AGENT_CONFIG_SVH
 
 //------------------------------------------------------------------------------
-// @brief Carries the two business interfaces used by the reservation agent.
+// @brief Carries the interfaces and external busy policy used by the reservation agent.
 //
 // This first-stage environment always builds an active reservation agent with
-// checker, coverage, and scheduler enabled. External busy policy belongs to the
-// scheduler. The shared clk_if is supplied directly to cycle-aware components
-// through UVM Config DB and is not stored in this object.
+// checker, coverage, and scheduler enabled. The shared clk_if is supplied
+// directly to cycle-aware components through UVM Config DB and is not stored in
+// this object.
 //------------------------------------------------------------------------------
 class vlm_reservation_agent_config extends uvm_object;
 
@@ -17,6 +17,9 @@ class vlm_reservation_agent_config extends uvm_object;
   // Read-only MEM interface used only for actual request valid and address.
   virtual vlm_memory_interface memory_vif;
 
+  // Percentage probability applied independently to every free external busy slot.
+  int unsigned EXTERNAL_BUSY_PERCENT;
+
   //------------------------------------------------------------------------------
   // @brief Constructs an agent configuration object with default settings.
   //
@@ -25,9 +28,9 @@ class vlm_reservation_agent_config extends uvm_object;
   extern function new(string name = "vlm_reservation_agent_config");
 
   //------------------------------------------------------------------------------
-  // @brief Validates that both required business interfaces are available.
+  // @brief Validates the required interfaces and external busy percentage.
   //
-  // @return 1 when the configuration is internally consistent; otherwise 0.
+  // @return 1 when both interfaces exist and the percentage is in [0, 100].
   //------------------------------------------------------------------------------
   extern function bit validate();
 
@@ -37,11 +40,12 @@ endclass : vlm_reservation_agent_config
 
 function vlm_reservation_agent_config::new(string name = "vlm_reservation_agent_config");
   super.new(name);
+  EXTERNAL_BUSY_PERCENT = 0;
 endfunction : new
 
 function bit vlm_reservation_agent_config::validate();
-  // Both interfaces are mandatory because one cycle transaction combines reservation and MEM observations.
-  return reservation_vif != null && memory_vif != null;
+  // Both interfaces and a bounded percentage are required before the active agent can run.
+  return reservation_vif != null && memory_vif != null && EXTERNAL_BUSY_PERCENT <= 100;
 endfunction : validate
 
 `endif // INC_VLM_RESERVATION_AGENT_CONFIG_SVH

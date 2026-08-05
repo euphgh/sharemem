@@ -222,6 +222,18 @@ Scheduler 接收：
 - transaction 中从 `clk_if` 快照得到的 cycle number；
 - 测试配置提供的 external busy 生成策略。
 
+External busy 概率通过 `vlm_reservation_agent_config.EXTERNAL_BUSY_PERCENT`
+配置，取值范围为 0～100，默认值为 0。仿真命令行可以使用以下大写 plusarg
+覆盖 test 写入 config object 的值：
+
+```text
++EXTERNAL_BUSY_PERCENT=<0..100>
+```
+
+Plusarg 在 agent 的 build 阶段解析，并在 scheduler 开始处理第一个周期前完成传递；
+超出范围的值属于 testbench 配置错误，必须立即报告 `UVM_FATAL`。配置值表示对
+每个当前空闲的 `<direction, delay, sub_bank_id>` slot 独立执行一次百分比随机判定。
+
 Scheduler 提供：
 
 - `external_busy`；

@@ -16,7 +16,7 @@ class vlm_reservation_scheduler extends uvm_component;
 
   // Percentage probability, from 0 through 100, applied independently to every
   // free slot across the full busy window during external busy generation.
-  int unsigned external_busy_percent = 0;
+  int unsigned external_busy_percent;
 
   // External occupancy indexed by direction, relative delay, and sub bank.
   vlm_busy_table_t external_busy[VLM_RESERVATION_DIRECTION_N];
@@ -158,7 +158,7 @@ endclass : vlm_reservation_scheduler
 function vlm_reservation_scheduler::new(string name = "vlm_reservation_scheduler", uvm_component parent = null);
   super.new(name, parent);
 
-  external_busy_percent          = 0;
+  external_busy_percent         = 0;
   has_processed_cycle           = 1'b0;
   last_processed_cycle          = 0;
   accepted_record_count         = 0;
@@ -198,13 +198,6 @@ function void vlm_reservation_scheduler::process_cycle(
   // Relative-delay state cannot be advanced safely without the shared cycle source.
   if (clk_vif == null) begin
     `uvm_fatal("VLM_RESERVATION_NO_CLK_VIF", "process_cycle() requires scheduler.clk_vif")
-    return;
-  end
-
-  // A percentage outside 0 through 100 is a testbench configuration error.
-  if (external_busy_percent > 100) begin
-    `uvm_fatal("VLM_RESERVATION_EXTERNAL_PERCENT",
-               $sformatf("external_busy_percent %0d is outside [0, 100]", external_busy_percent))
     return;
   end
 
@@ -386,7 +379,7 @@ function void vlm_reservation_scheduler::generate_external_busy();
         random_percent = $urandom_range(99, 0);
 
         // A result below the configured percentage changes this free slot to external ownership.
-        if (random_percent < external_busy_percent) begin
+        if (random_percent < EXTERNAL_BUSY_PERCENT) begin
           external_busy[direction][delay][sub_bank] = 1'b1;
           generated_external_slot_count++;
         end
