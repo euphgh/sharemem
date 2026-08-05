@@ -379,7 +379,7 @@ function void vlm_reservation_scheduler::generate_external_busy();
         random_percent = $urandom_range(99, 0);
 
         // A result below the configured percentage changes this free slot to external ownership.
-        if (random_percent < EXTERNAL_BUSY_PERCENT) begin
+        if (random_percent < external_busy_percent) begin
           external_busy[direction][delay][sub_bank] = 1'b1;
           generated_external_slot_count++;
         end
