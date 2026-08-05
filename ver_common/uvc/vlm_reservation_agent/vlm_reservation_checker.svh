@@ -247,6 +247,16 @@ function void vlm_reservation_checker::check_busy_state(
           continue;
         end
 
+        // Retain source-port provenance so the record keeps the issue-time alignment contract.
+        if ((direction == VLM_RESERVATION_READ && rec.write_port != 0) ||
+            (direction == VLM_RESERVATION_WRITE && rec.write_port >= WRITE_PORT_N)) begin
+          result.busy_error_count++;
+          busy_error_count++;
+          `uvm_error("VLM_RESERVATION_RECORD_WRITE_PORT",
+                     $sformatf("cycle %0d direction %0d delay %0d bank %0d record has write port %0d",
+                               txn.cycle, direction, delay, bank, rec.write_port))
+        end
+
         // Scheduler records may only represent supported nonzero-delay reservations.
         if (rec.issue_delay == 0 || rec.issue_delay >= VTAB_D) begin
           result.busy_error_count++;
@@ -256,13 +266,16 @@ function void vlm_reservation_checker::check_busy_state(
                                txn.cycle, direction, delay, bank, rec.issue_delay))
         end
 
-        // Every stored beat address must retain the interface's 32-byte alignment.
-        if (rec.address[4:0] != 5'b0) begin
+        // Read and write-port-1 records remain aligned; write-port-0 records may retain low address bits.
+        if (vlm_reservation_requires_32byte_alignment(
+                vlm_reservation_direction_e'(direction), rec.write_port) &&
+            rec.address[4:0] != 5'b0) begin
           result.busy_error_count++;
           busy_error_count++;
           `uvm_error("VLM_RESERVATION_RECORD_ALIGNMENT",
-                     $sformatf("cycle %0d direction %0d delay %0d bank %0d record address 0x%0h is unaligned",
-                               txn.cycle, direction, delay, bank, rec.address))
+                     $sformatf({"cycle %0d direction %0d delay %0d bank %0d write port %0d record ",
+                                "address 0x%0h is unaligned"},
+                               txn.cycle, direction, delay, bank, rec.write_port, rec.address))
         end
 
         expected_due_cycle = txn.cycle + delay;
@@ -404,8 +417,9 @@ function bit vlm_reservation_checker::check_reservation_request(
     return 1'b0;
   end
 
-  // Every reservation represents one 32-byte MEM beat and must use a 32-byte-aligned address.
-  if (rsv.address[4:0] != 5'b0) begin
+  // Read reservations and write port 1 require alignment; write port 0 may carry a complete unaligned address.
+  if (vlm_reservation_requires_32byte_alignment(direction, write_port) &&
+      rsv.address[4:0] != 5'b0) begin
     request_is_valid = 1'b0;
     result.reservation_error_count++;
     reservation_error_count++;
@@ -526,8 +540,8 @@ function void vlm_reservation_checker::check_mem_request_pair(
   sub_bank = req.address[6:5];
   rec_due_cycle = rec.issue_cycle + rec.issue_delay;
 
-  // Actual MEM addresses use the same 32-byte beat alignment as reservations.
-  if (req.address[4:0] != 5'b0) begin
+  // Read MEM requests remain aligned; write MEM legality comes from exact equality with its due record.
+  if (direction == VLM_RESERVATION_READ && req.address[4:0] != 5'b0) begin
     request_matches = 1'b0;
     result.mem_match_error_count++;
     mem_match_error_count++;
@@ -547,7 +561,7 @@ function void vlm_reservation_checker::check_mem_request_pair(
                          txn.cycle, direction, bank, sub_bank))
   end
 
-  // BANK and direction match structurally; the remaining request-to-record key requires equal addresses.
+  // BANK and direction match structurally; compare every address bit without beat alignment or masking.
   if (req.address != rec.address) begin
     request_matches = 1'b0;
     result.mem_match_error_count++;

@@ -18,3 +18,13 @@ VCS writes all generated files to `build/`. Remove them with:
 ```sh
 make clean
 ```
+
+Run the directed write-address alignment and exact-match regression with:
+
+```sh
+make alignment-test
+```
+
+The regression checks that write reservation port 0 accepts and preserves a
+nonaligned address, write port 1 rejects one, and a due `mem_waddr` must match
+all address bits from the reservation.

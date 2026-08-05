@@ -3,8 +3,8 @@
 |项目|内容|
 |---|---|
 |文档状态|验证代码实现基准|
-|版本|0.4|
-|日期|2026-07-30|
+|版本|0.5|
+|日期|2026-08-05|
 |适用模块|`RpuShmTop`|
 
 ## 1. 文档目的
@@ -243,7 +243,7 @@ counter。若保存 `last_processed_cycle`，它只能是最近一次 transactio
 `vlm_reservation_checker` 负责检查：
 
 - busy 状态及来源的一致性；
-- reservation 请求的 dly、地址对齐和 sub-bank 选择；
+- reservation 请求的 dly、端口相关地址对齐和 sub-bank 选择；
 - reservation 是否避开 external/SHM 已占用 slot；
 - 同一 BANK、同一方向的到期冲突；
 - 到期 `shm_records` 与实际 MEM 请求的一一对应；
@@ -379,6 +379,7 @@ shm_busy[direction][delay][sub_bank_id]
 ```systemverilog
 class vlm_shm_record_t;
     bit [BADDR_W-1:0] address;
+    int unsigned      write_port;
     longint unsigned  issue_cycle;
     int unsigned      issue_delay;
 endclass
@@ -395,6 +396,10 @@ record 的 `address[6:5]` 派生。固定 `<direction, relative_delay, bank_id>`
 一个 handle，因此从结构上保证同一 BANK、同一方向、同一到期周期最多保存一笔
 DUT reservation。不同 BANK 的 record 可以通过相同地址 sub-bank 位共享一个
 SHM busy bit。
+
+Record 中的 `write_port` 保存写预约的来源端口；读预约统一保存为 0。该字段不属于
+MEM 匹配键，因为每个 BANK 只有一条实际 MEM 写端口，但 checker 使用它保留
+write port 0 与 write port 1 不同的地址对齐契约。
 
 Record 中的 `issue_delay` 是 reservation 发出时的原始 delay，record 移动时
 保持不变。Checker 在 scheduler 更新前必须检查：
@@ -435,7 +440,8 @@ Checker 不再保存 per-bit known mask，也不重复增加四态错误计数�
 对于 transaction 中每笔完整已知的 reservation，checker 必须检查：
 
 - `1 <= dly < VTAB_D`；
-- 地址按 32 Byte 对齐；
+- read reservation 和 write port 1 地址按 32 Byte 对齐；
+- write port 0 允许非 32 Byte 对齐，scheduler 必须原样保存完整地址；
 - `sub_bank_id = address[6:5]`；
 - 当 `input_error == 0` 时，对应方向的二态 `observed_busy[dly][sub_bank_id]`
   必须为 0；
@@ -479,6 +485,11 @@ shm_records[direction][0][bank_id]
 ```text
 <direction, bank_id, address, due_cycle=transaction.cycle>
 ```
+
+`address` 比较必须覆盖完整 BADDR。Checker 禁止对 reservation 或 MEM 地址进行
+32 Byte 向下对齐、清除低 5 bit 或仅比较 beat 编号。读 MEM 地址仍必须
+32 Byte 对齐；写 MEM 地址不单独要求对齐，其合法性由它是否逐位等于到期写预约
+决定。write port 0 的非对齐预约因此只能由完全相同的非对齐 `mem_waddr` 兑现。
 
 Checker 必须同时保证：
 

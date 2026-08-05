@@ -314,8 +314,9 @@ function bit vlm_reservation_scheduler::admit_reservation(
     return 1'b0;
   end
 
-  // Scheduler records represent complete 32-byte MEM beats and cannot preserve an unaligned request.
-  if (rsv.address[4:0] != 5'b0) begin
+  // Read reservations and write port 1 require alignment; write port 0 preserves all address bits.
+  if (vlm_reservation_requires_32byte_alignment(direction, write_port) &&
+      rsv.address[4:0] != 5'b0) begin
     rejected_record_count++;
     return 1'b0;
   end
@@ -339,6 +340,7 @@ function bit vlm_reservation_scheduler::admit_reservation(
   // Copy the monitor-owned request into an independent immutable scheduler record.
   rec = new();
   rec.address     = rsv.address;
+  rec.write_port  = write_port;
   rec.issue_cycle = issue_cycle;
   rec.issue_delay = rsv.delay;
 

@@ -3,8 +3,8 @@
 |项目|内容|
 |---|---|
 |文档状态|接口级验证基准|
-|版本|0.4|
-|日期|2026-07-30|
+|版本|0.5|
+|日期|2026-08-05|
 |适用模块|`RpuShmTop`|
 
 ## 1. 文档目的
@@ -56,11 +56,18 @@ sub_bank_id = bank_addr[6:5];
 
 ### 2.2 地址和数据 lane
 
-`mem_*addr` 和 `vlm_*addr` 均为 BANK 内字节地址 BADDR。一个 MEM beat 为 256 bit，即 32 Byte。MEM beat 地址必须按 32 Byte 对齐：
+`mem_*addr` 和 `vlm_*addr` 均为 BANK 内字节地址 BADDR。一个 MEM beat 为 256 bit，即 32 Byte。
+
+读地址 `mem_raddr`、`vlm_raddr` 以及写预约端口 1 的
+`vlm_waddr[bank][1]` 必须按 32 Byte 对齐：
 
 ```systemverilog
 addr[4:0] == 5'b0;
 ```
+
+写预约端口 0 的 `vlm_waddr[bank][0]` 允许非 32 Byte 对齐。该预约兑现时，
+`mem_waddr[bank]` 必须逐位等于预约中保存的完整地址，因此 `mem_waddr` 也允许
+出现非对齐值。验证器禁止先清除地址低 5 bit、向下取整或只比较 beat 编号。
 
 对于 byte lane `k`，其中 `0 <= k < 32`：
 
@@ -99,7 +106,8 @@ MEM 接口没有 `ready`。`mem_rvld[bank]` 或 `mem_wvld[bank]` 在上升沿为
 
 ### 3.2 MEM 写行为
 
-当 `mem_wvld[bank] == 1` 时，形成一笔对 `bank` 的写事务：
+当 `mem_wvld[bank] == 1` 时，形成一笔对 `bank` 的写事务。`mem_waddr` 可以非
+32 Byte 对齐，其合法性由第 5 章定义的到期写预约完整地址决定：
 
 ```text
 bank    = bank
@@ -161,7 +169,7 @@ MEM 读写通道相互独立，允许同一周期：
 |`MEM-004`|当 `mem_wvld[bank] == 1` 时，`mem_waddr[bank]`、`mem_wstrb[bank]` 及所有 strobe 有效的 `mem_wdata` byte 禁止包含 X/Z。|
 |`MEM-005`|`mem_wvld[bank] == 1` 时，`mem_wstrb[bank]` 禁止全 0。|
 |`MEM-006`|一次 `mem_*vld[bank]` 只能表示该 BANK 的一笔 32-Byte beat，禁止在一个端口周期隐式表示两个不同 beat 地址。|
-|`MEM-007`|每笔 MEM 请求必须存在一笔匹配的 VLM 预约，匹配规则见第 5 章。|
+|`MEM-007`|每笔 MEM 请求必须存在一笔匹配的 VLM 预约，且 MEM 地址必须逐位等于预约保存的完整地址，匹配规则见第 5 章。|
 |`MEM-008`|memory model 必须在 `T+RPORT_DLY` 提供读返回，禁止提前、延后或改变同一 BANK 的返回顺序。|
 |`MEM-009`|存在到期读返回时，对应的 256-bit `mem_rdata[bank]` 禁止包含 X/Z。|
 
@@ -250,7 +258,7 @@ cycle T:
 `port` 取值为 0 或 1。当 `vlm_wreq[bank][port] == 1` 时：
 
 1. `vlm_wdly[bank][port]` 必须位于 `[0, VTAB_D-1]`。
-2. `vlm_waddr[bank][port]` 必须是合法且 32 Byte 对齐的 BADDR。
+2. `port == 1` 时，`vlm_waddr[bank][port]` 必须是合法且 32 Byte 对齐的 BADDR；`port == 0` 时允许非对齐地址。
 3. `sub_bank_id = vlm_waddr[bank][port][6:5]`。
 4. `vlm_wbusy[vlm_wdly[bank][port]][vlm_waddr[bank][port][6:5]]` 必须严格等于 0；X/Z 不视为空闲。
 5. 必须在 `T + vlm_wdly[bank][port]` 产生匹配的 `mem_wvld[bank]`。
@@ -315,7 +323,7 @@ DUT 自身还受 BANK MEM 端口数量限制。每个 BANK 在每个方向只有
 |`VLM-002`|所有 `vlm_*req` 禁止包含 X/Z。|
 |`VLM-003`|req 有效时，对应 addr 和 dly 禁止包含 X/Z。|
 |`VLM-004`|req 有效时，dly 禁止大于或等于 `VTAB_D`，即禁止使用编码空间中的无效值。|
-|`VLM-005`|req 有效时，对应地址必须 32 Byte 对齐。|
+|`VLM-005`|读 req 有效时以及 `vlm_wreq[bank][1]` 有效时，对应地址必须 32 Byte 对齐；`vlm_wreq[bank][0]` 允许非对齐地址。|
 |`VLM-006`|req 有效时，必须使用对应地址的 `[6:5]` 作为 `sub_bank_id`，并且 `busy[dly][sub_bank_id]` 必须严格等于 0。|
 |`VLM-007`|同一 BANK、同一方向禁止有两笔不同预约在同一周期到期，无论其 sub bank 是否相同，因为对应方向只有一条实际 MEM 端口。读写方向独立，同一 BANK 同周期各一笔读写预约不违反本规则。|
 |`VLM-008`|每笔预约必须在到期周期产生且只产生一笔同 BANK、同地址、同方向的 MEM 请求。|
@@ -351,6 +359,11 @@ MEM 请求使用以下键与 pending record 匹配：
 ```text
 <direction, bank_id, address, due_cycle>
 ```
+
+其中 `address` 是接口采样得到的完整 BADDR，必须逐位相等。禁止把 reservation
+地址或 MEM 地址向下对齐、清除 `[4:0]`，也禁止仅比较
+`address[BADDR_W-1:5]`。因此，write port 0 预约的非对齐地址必须由
+`mem_waddr` 原样兑现。
 
 `mem_wstrb` 和 `mem_wdata` 不属于 VLM 写预约匹配键，由 MEM 数据 checker 单独检查。
 
@@ -426,6 +439,8 @@ VLM reservation 的组件划分、scheduler 状态模型和连接关系见
 - 每个 BANK 内的 4 个 sub bank；
 - 16 个 BANK；
 - 两条 VLM 写预约通道；
+- write port 0 的对齐与非对齐地址，以及 write port 1 非对齐地址被拒绝；
+- write port 0 非对齐预约与 `mem_waddr` 的完整地址相等和低位不相等场景；
 - 同周期不同 BANK、不同 sub bank 的并行预约；
 - 同一 sub bank 的不同 delay 预约；
 - 不同 BANK 在相同周期、相同方向、相同 `<dly, sub_bank_id>` 的合法共享场景；

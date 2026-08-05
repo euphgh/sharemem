@@ -12,6 +12,22 @@ typedef enum bit {
 // Number of independently scheduled reservation directions.
 localparam int unsigned VLM_RESERVATION_DIRECTION_N = 2;
 
+//------------------------------------------------------------------------------
+// @brief Returns whether one reservation source requires 32-byte alignment.
+//
+// Read reservations and write port 1 require alignment. Write port 0 preserves
+// and schedules the complete address even when its low five bits are nonzero.
+//
+// @param direction  Read or write reservation direction.
+// @param write_port Write-port index; zero for read reservations.
+// @return 1 when the source requires address[4:0] to be zero; otherwise 0.
+//------------------------------------------------------------------------------
+function automatic bit vlm_reservation_requires_32byte_alignment(
+    vlm_reservation_direction_e direction,
+    int unsigned                write_port);
+  return direction == VLM_RESERVATION_READ || write_port == 1;
+endfunction : vlm_reservation_requires_32byte_alignment
+
 // Two-state busy table indexed by relative delay and sub-bank identifier.
 typedef bit [VTAB_D-1:0][VLM_SUB_BANK_N-1:0] vlm_busy_table_t;
 
@@ -48,8 +64,11 @@ endclass : vlm_rsv_req
 // The scheduler owns each instance and all readers must treat it as immutable.
 //------------------------------------------------------------------------------
 class vlm_shm_record_t;
-  // Known BANK-local, 32-byte-aligned address reserved by the DUT.
+  // Complete known BANK-local address reserved by the DUT, including low bits.
   bit [BADDR_W-1:0] address;
+
+  // Source write-port index; read reservations use zero by convention.
+  int unsigned write_port;
 
   // Global clk_if cycle in which the reservation request was sampled.
   longint unsigned issue_cycle;
