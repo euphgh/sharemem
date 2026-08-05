@@ -219,10 +219,7 @@ class shmins_sequence_item extends uvm_sequence_item;
     wpid_width inside {[0:WARP_ID_WIDTH_MAX]};
     creq_wpnum == 1 << wpid_width;
     int'(creq_wpid) inside {[0: WARP_N-1]};
-    foreach(creq_vaddr[i]) {
-      creq_vaddr[i] >= 0;
-      creq_vaddr[i] <= WARP_STEP - VEC_BYTE_N;
-    }
+    creq_vaddr inside {[0: WARP_STEP - VEC_BYTE_N]};
   }
 
   // -- inactive offsets ---------------------------------------------
