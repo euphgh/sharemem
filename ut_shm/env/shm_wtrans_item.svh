@@ -80,7 +80,7 @@ class shm_wtrans_item extends shmins_sequence_item;
                 end: atype8
                 eoff_val[bidx] = (eoff_val[bidx] << offs_sft) + (bidx * $unsigned(elem_byten));
             end: vec_en_toff
-            else if(creq_itype == LDST_V) begin: ele_en_eoff
+            else if(creq_itype == LDSTE_V) begin: ele_en_eoff
                 if(creq_atype_w == ATYP_32) begin
                     // ATYP_32 mode, only support 8 element
                     eoff_val[bidx] = t_offs[bidx*32+:32];
