@@ -75,6 +75,7 @@ class shmins_sequence_item extends uvm_sequence_item;
   rand logic [7:0] creq_len[THD_N]  = '{THD_N{'0}}; // element total byte number length:0~32, align with data type
   rand byte elem_num[THD_N]         = '{THD_N{'0}};
   rand logic [VEC_BYTE_N-1:0] creq_vmsk[THD_N] = '{THD_N{'0}}; // element mask
+  rand logic [THD_N]          creq_tmsk = '{THD_N{'0}}; // thread mask, 1: active, 0: inactive
   logic [VEC_W-1:0] creq_offs_packed[THD_N]; // packed form, filled in post_randomize
   rand logic [VEC_BYTE_N-1:0][7:0] creq_vdat[THD_N] = '{THD_N{'0}};
   rand int delay_cycle = '0;
@@ -220,6 +221,7 @@ class shmins_sequence_item extends uvm_sequence_item;
     creq_wpnum == 1 << wpid_width;
     int'(creq_wpid) inside {[0: WARP_N-1]};
     creq_vaddr inside {[0: WARP_STEP - VEC_BYTE_N]};
+    creq_tmsk != '0;
   }
 
   // -- inactive offsets ---------------------------------------------

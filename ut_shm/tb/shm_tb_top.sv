@@ -53,6 +53,7 @@ module shm_tb_top;
       .creq_len   (shmins_intf.creq_len),
       .creq_typ   (shmins_intf.creq_typ),
       .creq_vaddr (shmins_intf.creq_vaddr),
+      .creq_tmsk  (shmins_intf.creq_tmsk),
       .creq_vmsk  (shmins_intf.creq_vmsk),
       .creq_base  (shmins_intf.creq_base),
       .creq_offs  (shmins_intf.creq_offs),
