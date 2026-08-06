@@ -2,7 +2,7 @@ shm_unit_test
 +TRANS_DELAY_MIN=64
 +TRANS_DELAY_MAX=128
 +TRANS_NUM=16
-+EXTERNAL_BUSY_PERCENT=40
++EXTERNAL_BUSY_PERCENT=10
 endargs
 
 v2m_unit_test: shm_unit_test
