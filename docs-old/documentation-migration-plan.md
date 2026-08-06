@@ -250,18 +250,31 @@ V2M、M2V 与 reservation 数据流；阶段 2 已定义但尚未进入验证代
 
 ### 阶段 4：逐个迁移组件文档
 
-建议按依赖关系依次完成：
+阶段 4 先建立集中问题台账，再按依赖关系迁移组件文档：
 
-1. `shm-environment.md`；
-2. `shmins-mst-agent.md`；
-3. `vlm-memory-agent.md`；
-4. `shm-reference.md`；
-5. `shm-scoreboard.md`；
-6. `vlm-reservation-agent.md`。
+1. 提前创建 `verification-status.md`，定义稳定问题 ID、状态流转和验收记录格式；
+2. 登记阶段 0～3 已确认的实现差异，不在组件正文中重复维护修复进度；
+3. 迁移 `shm-environment.md`；
+4. 迁移 `shmins-mst-agent.md`；
+5. 迁移 `vlm-memory-agent.md`；
+6. 迁移 `shm-reference.md`；
+7. 迁移 `shm-scoreboard.md`；
+8. 迁移 `vlm-reservation-agent.md`；
+9. 每完成一篇组件文档，核对源码、spec 和测试，把新发现的差异加入问题台账；
+10. 统一检查组件间链接、问题 ID、历史名称和重复职责。
+
+组件文档、问题台账和 DUT spec 的分工如下：
+
+- DUT spec 定义最终必须满足的端口、地址和时序行为；
+- 组件文档说明组件职责、当前结构、数据流、核心算法和开发时必须保持的 contract；
+- `verification-status.md` 记录实现与目标之间的差异、优先级、处理状态和验收证据；
+- 组件文档只引用问题 ID，不复制问题的处理过程。无法从 spec 和源码确认的内容在
+  台账中标记为“待确认”，并在继续形成结论前向用户或设计人员确认。
 
 已知实现差异：当前 `shm_wtrans_item.svh` 的 SPACE_BLK 映射没有正确处理非零
 `warp_group`，已有 case 因 MADDR 高位恒为 0 未暴露该问题。迁移 `shm-reference.md`
-时需要按新地址模型登记并修复，不能把现有 reference 写法反向解释成 DUT 规则。
+时需要按新地址模型登记，后续再修改代码；不能把现有 reference 写法反向解释成
+DUT 规则。
 
 阶段 2 后新增的已知实现缺口需要在对应组件迁移时处理：
 
@@ -289,7 +302,12 @@ V2M、M2V 与 reservation 数据流；阶段 2 已定义但尚未进入验证代
 - 修改或扩展时需要保持的 contract。
 
 验收条件：组件文档能够指导开发修改，但不重新定义 DUT 端口协议；组件间共享的
-transaction 和连接关系通过环境文档引用。
+transaction 和连接关系通过环境文档引用。所有已知实现差异都有唯一问题 ID、影响、
+目标依据和验收方法，组件正文中不存在难以追踪的散落 todo。
+
+状态：已于 2026-08-06 完成。六篇组件正文均已按当前源码迁移；同时提前建立
+`verification-status.md`，集中登记实现缺口。当前支持边界明确为完整 active 环境；
+DUT 可乱序调度重叠 creq，但 scoreboard 最终状态必须等价于 creq 顺序执行。
 
 ### 阶段 5：整理功能点、case 和覆盖闭环
 
@@ -315,7 +333,7 @@ case 文档与当前测试目录一致。
 ### 阶段 7：迁移开发规范和当前状态
 
 - [ ] 迁移 SystemVerilog/UVM 开发规范。
-- [ ] 编写 `verification-status.md`。
+- [ ] 整理并补全阶段 4 已创建的 `verification-status.md`。
 - [ ] 将“已实现、部分实现、未实现、设计待确认、已知问题”分开记录。
 - [ ] 为容易变化的状态记录检查日期或对应版本。
 - [ ] 稳定的接口和算法规则回写到 spec/component 文档，不只保留在 status 中。

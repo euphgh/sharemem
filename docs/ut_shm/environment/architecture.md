@@ -150,7 +150,8 @@ slave driver 经 blocking transport 从 scoreboard 获取，不经过该 analysi
 
 Reservation agent 不通过 TLM 与 reference 或 scoreboard 连接。它在每个采样周期内
 同步取得 reservation/MEM 地址快照，然后按 checker、coverage、scheduler 的顺序
-直接调用，最后驱动下一周期 busy。具体内部状态和检查算法留到阶段 4 的组件文档。
+直接调用，最后驱动下一周期 busy。具体内部状态和检查算法见
+[VLM reservation agent](components/vlm-reservation-agent.md)。
 
 ## 6. UVM phase 分工
 
@@ -166,8 +167,8 @@ Reservation agent 不通过 TLM 与 reference 或 scoreboard 连接。它在每�
 |`final_phase`|需要文件输出的 monitor 关闭 debug 文件|
 
 当前大多数组件在启动时等待初始 reset 释放，但尚未形成统一的“运行中复位”状态清理
-机制。DUT 的复位契约已经由 spec 定义，验证组件如何取消各自 pending 状态需要在阶段 4
-逐项补齐。
+机制。DUT 的复位契约已经由 spec 定义，各组件需要取消的 pending 状态见组件文档，
+跨组件缺口统一记录为 [`ENV-001`](../verification-status.md#env-001-运行中-reset-状态清理)。
 
 ## 7. Package 与编译依赖
 

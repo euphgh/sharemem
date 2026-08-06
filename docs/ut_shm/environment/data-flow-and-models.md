@@ -2,7 +2,7 @@
 
 本文在[环境总体架构](architecture.md)的连接关系之上，说明 transaction、byte map
 和两份 memory 状态由谁创建、修改和消费，并沿 V2M、M2V、reservation 三条路径追踪
-数据。组件内部的匹配算法和错误 ID 将在阶段 4 的组件文档中展开。
+数据。组件内部的匹配算法、错误边界和开发 contract 见[组件文档](components/index.md)。
 
 ## 1. 共享数据模型
 
@@ -194,12 +194,12 @@ scheduler 状态，再让 scheduler 推进窗口。该顺序不依赖 analysis F
 
 Reservation 到实际 MEM 的匹配键和 busy 规则由
 [MEM/VLM 接口规范](../spec/mem-vlm-interface.md)定义；scheduler/checker 的内部数据结构
-将在 reservation agent 组件文档中说明。
+见 [VLM reservation agent](components/vlm-reservation-agent.md)。
 
 ## 7. Reset 与当前实现边界
 
-阶段 3 文档描述的是当前数据通路，不表示所有阶段 2 协议都已实现。当前需要在后续
-组件修改中处理的边界包括：
+这里描述的是当前数据通路，不表示所有 DUT spec 都已实现。当前需要在后续组件修改中
+处理的边界包括：
 
 - `creq_tmsk` 尚未进入 interface、transaction、driver、monitor 和 reference；
 - MEM read 服务尚未按 `FFD_CYC` 建立截止周期快照；
@@ -209,5 +209,5 @@ Reservation 到实际 MEM 的匹配键和 busy 规则由
   稳定协议；write alignment 最终应由持有原始 creq 类型的检查路径判断；
 - `shm_wtrans_item` 的 SPACE_BLK 计算尚未正确处理非零 `warp_group`。
 
-这些条目是实现状态，不会覆盖阶段 2 spec。组件级修复和详细算法将在阶段 4 文档及
-后续代码修改中分别处理。
+这些条目是实现状态，不会覆盖 DUT spec。唯一问题 ID、优先级和验收方法见
+[验证实现状态](../verification-status.md)，组件算法见[组件文档](components/index.md)。
