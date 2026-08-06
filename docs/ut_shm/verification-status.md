@@ -1,8 +1,9 @@
 # ut_shm 验证实现状态
 
 本文集中记录 ut_shm 验证环境与当前 DUT spec 之间的实现差异，以及组件开发中已经
-确认的问题。组件文档只引用这里的稳定问题 ID，不重复维护修复过程。当前清单基于
-2026-08-06 的源码提交 `d719f0b`；本轮仅迁移文档，没有据此声明新的编译或仿真结果。
+确认的问题。组件文档只引用这里的稳定问题 ID，不重复维护修复过程。当前清单以
+2026-08-06 的源码为基线；Phase 6 的 macOS/Ubuntu 构建结果见
+[实测快照](guide/ubuntu-vcs-check.md#6-2026-08-06-实测快照)，不作为闭环以下功能问题的证据。
 
 ## 1. 状态和优先级
 
@@ -250,10 +251,11 @@
 ### `RSV-003` Reservation example 失效
 
 - 现状：`alignment_tb.sv` 仍断言旧 port 对齐规则；`external_busy_tb.sv` 访问 scheduler
-  中不存在的 `EXTERNAL_BUSY_PERCENT` 大写字段。
+  中不存在的 `EXTERNAL_BUSY_PERCENT` 大写字段。2026-08-06 Ubuntu 实测中，
+  `alignment` 按旧规则运行通过，`external-busy` 因该字段编译失败。
 - 影响：示例不能作为当前 spec 的可靠回归证据，部分目标可能无法编译。
 - 目标：示例改为检查 read alignment、write 完整地址匹配和 plusarg 覆盖的实际字段。
-- 验收：`alignment-test`、`external-busy-test` 在远端 VCS 环境编译并通过。
+- 验收：Ubuntu 脚本的 `alignment`、`external-busy` 目标编译并通过。
 
 ### `RSV-004` `input_error` 抑制粒度
 

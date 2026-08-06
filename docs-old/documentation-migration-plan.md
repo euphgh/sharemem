@@ -59,7 +59,10 @@ docs/
 │   │
 │   ├── guide/
 │   │   ├── index.md
-│   │   ├── build-and-run.md
+│   │   ├── execution-environments.md
+│   │   ├── workspace-transfer.md
+│   │   ├── macos-slang-check.md
+│   │   ├── ubuntu-vcs-check.md
 │   │   ├── configuration-reference.md
 │   │   └── debug-guide.md
 │   │
@@ -88,7 +91,10 @@ docs/
 |`plan/testpoints.md`|需要验证的功能点和检查/覆盖映射|case 运行命令|
 |`plan/testcases-and-regression.md`|case 组织、命名、约束、seed 和 regression|plusarg 完整字典|
 |`plan/coverage-and-closure.md`|覆盖模型、目标、waiver 和完成条件|组件算法|
-|`guide/build-and-run.md`|Slang、VCS、Makefile、case 和 regression 的运行方法|功能点定义|
+|`guide/execution-environments.md`|macOS、Ubuntu 和 CentOS 的工具、文件可见性、权限与证据边界|具体运行命令|
+|`guide/workspace-transfer.md`|macOS 到 Ubuntu/CentOS 的单向代码流转和远程命令边界|编译参数、功能点定义|
+|`guide/macos-slang-check.md`|macOS 上可执行的 Slang 语法检查|VCS 或完整 DUT 结论|
+|`guide/ubuntu-vcs-check.md`|Ubuntu 上的伪 design 全环境编译、smoke 和组件 VCS 测试|CentOS 命令、regression 解析|
 |`guide/configuration-reference.md`|环境变量、Makefile 变量和 plusarg 的完整定义|重复的运行教程|
 |`guide/debug-guide.md`|常见错误、日志、波形和定位方法|当前开发进度|
 |`verification-status.md`|已实现、部分实现、未实现、已知限制和最近验证结果|稳定的 DUT 规则|
@@ -116,7 +122,7 @@ DUT overview
   -> 验证环境架构
   -> 数据流和模型
   -> 功能点与 case
-  -> 构建运行
+  -> 执行环境与对应检查方法
   -> 当前状态
 ```
 
@@ -130,7 +136,9 @@ DUT overview
 |修改 VLM memory agent|MEM/VLM interface -> architecture -> vlm-memory-agent|
 |修改 reservation agent|MEM/VLM interface -> vlm-reservation-agent -> reservation testpoints|
 |新增 testcase|testpoints -> testcases and regression -> configuration reference|
-|运行编译或回归|build and run -> configuration reference -> debug guide|
+|运行本地检查|execution environments -> macOS Slang check -> debug guide|
+|运行 Ubuntu 编译|execution environments -> workspace transfer -> Ubuntu VCS check -> configuration reference|
+|准备 CentOS 验证|execution environments -> workspace transfer；实际命令由 CentOS 自有框架维护|
 |了解未完成功能|verification status -> 对应 spec/component 文档|
 
 ### 4.3 子目录索引
@@ -158,7 +166,7 @@ DUT overview
 |验证组件概览和连接|`environment/architecture.md`|
 |各组件实现|`environment/components/` 下对应文档|
 |Outstanding 和 scoreboard 算法|`environment/components/shm-scoreboard.md`|
-|代码仓库、package 和 filelist|`environment/architecture.md` 与 `guide/build-and-run.md`|
+|代码仓库、package 和 filelist|`environment/architecture.md`、`guide/execution-environments.md` 与 `guide/ubuntu-vcs-check.md`|
 |功能维度和测试限制|`plan/testpoints.md`|
 |case、tc 和 regression|`plan/testcases-and-regression.md`|
 |plusarg|`guide/configuration-reference.md`|
@@ -330,13 +338,25 @@ functional coverage，因此本文只建立目标 bin/cross 和关闭条件，�
 
 ### 阶段 6：编写使用和调试指南
 
-- [ ] 编写 `guide/build-and-run.md`，覆盖本地 Slang、远端 VCS、Makefile、case 和 regression。
-- [ ] 编写 `guide/configuration-reference.md`，集中维护环境变量、Makefile 变量和 plusarg。
-- [ ] 编写 `guide/debug-guide.md`，按问题现象组织常见错误、日志字段和波形观察点。
-- [ ] 用实际命令验证指南，不复制旧 `rpu_sim` 或历史目录说明。
+- [x] 编写 `guide/execution-environments.md`，明确 macOS、Ubuntu 和 CentOS 的工具、文件边界与验证证据等级。
+- [x] 编写 `guide/workspace-transfer.md`，分别说明 macOS 到 Ubuntu 的 rsync 和到 CentOS 的 SFTP 上传。
+- [x] 编写 `guide/macos-slang-check.md`，只覆盖本地可执行的 Slang 语法检查。
+- [x] 编写 `guide/ubuntu-vcs-check.md`，覆盖根 Makefile 的伪 design 全编译、smoke 和组件 Shell 测试。
+- [x] 编写 `guide/configuration-reference.md`，集中维护环境变量、Makefile 变量和 plusarg。
+- [x] 编写 `guide/debug-guide.md`，按问题现象组织常见错误、日志字段和波形观察点。
+- [x] 所有命令标明启动环境、实际执行环境和工作目录；本地与 Ubuntu 命令分别实际验证。
+- [x] 不记录 CentOS 自有 Makefile/`rpu_sim` 命令；TC、LST 和 CFG 只标明由 CentOS 框架解析。
 
-验收条件：新 checkout 的开发者或 Agent 能按照指南完成环境检查、编译和 smoke；
-所有配置字段只有一个完整定义位置。
+验收条件：新 checkout 的开发者或 Agent 能按照指南完成 macOS 语法检查、同步 Ubuntu、
+执行 VCS 编译和 smoke，并能把 `ut_shm/`、`ver_common/` 正确交付到 CentOS；每条命令的
+运行位置没有歧义，所有配置字段只有一个完整定义位置。CentOS 的最终编译和 regression
+由用户使用服务器自有框架执行，仓库文档不复制该框架命令。
+
+状态：已于 2026-08-06 完成文档和入口迁移。macOS Slang 检查通过；Ubuntu
+`make preflight`、`make compile` 和组件 `compile` 通过。根 smoke 已能启动 UVM，
+但会因当前空壳 DUT 的输出未驱动而触发 X/Z 错误；组件 `external-busy`
+仍按 `RSV-003` 失败。CentOS 上传脚本已通过 Python 语法检查，本阶段没有执行
+真实上传，也没有记录服务器自有构建命令。
 
 ### 阶段 7：迁移开发规范和当前状态
 

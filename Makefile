@@ -59,11 +59,11 @@ export RPU_DIR TB_DIR VER_CMN AXI_VIP_DIR SNPS_DC_HOME
 
 help:
 	@printf '%s\n' \
-	  'ut_shm VCS build entry' \
+	  'ut_shm Ubuntu VCS build entry (repository design stub)' \
 	  '' \
 	  'Environment variables:' \
 	  '  AXI_VIP_DIR   Synopsys AXI/VIP root (required)' \
-	  '  RPU_DIR       design root; defaults to <repo>/design' \
+	  '  RPU_DIR       design/stub root; defaults to <repo>/design' \
 	  '  TB_DIR        ut_shm root; defaults to <repo>/ut_shm' \
 	  '  VER_CMN       ver_common root; defaults to <repo>/ver_common' \
 	  '  SNPS_DC_HOME  Synopsys DesignWare root; an empty build-local' \

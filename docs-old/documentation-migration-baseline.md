@@ -58,13 +58,13 @@
 |5.1.4 scoreboard|reference 与 MEM 写比对|`components/shm-scoreboard.md`|以新算法为准|
 |5.2 读请求处理计划|reference/implementation memory 的设想|`verification-status.md`，确认后再进入组件文档|不得作为已实现架构直接迁移|
 |5.3 Outstanding 场景|覆盖写、合并写、过期值和匹配算法|`components/shm-scoreboard.md`|新算法已实现，逐段与源码核对|
-|5.3.3 collection 工具库|集合与关联数组工具的用途|`components/shm-scoreboard.md`、`guide/build-and-run.md`|package 名为 `collection`|
+|5.3.3 collection 工具库|集合与关联数组工具的用途|`components/shm-scoreboard.md`、`guide/ubuntu-vcs-check.md`|package 名为 `collection`|
 |6.1 ver_common|通用 UVC 的来源和路径|`environment/architecture.md`|只保留当前目录|
-|6.2 ut_shm|专用环境的目录组织|`environment/architecture.md`、`guide/build-and-run.md`|旧目录树废弃|
+|6.2 ut_shm|专用环境的目录组织|`environment/architecture.md`、`guide/execution-environments.md`|旧目录树废弃|
 |6.3 参数管理|共享参数 package|`guide/configuration-reference.md`|使用 `shm_util_package`|
 |7.1 测试策略|单元测试、回归和覆盖目标|`plan/index.md`、`plan/testpoints.md`|状态与策略分离|
 |7.2 用例定义|case 维度、限制和不支持组合|`plan/testpoints.md`、`plan/testcases-and-regression.md`、`verification-status.md`|当前 case 不足以确认的内容列为待确认|
-|7.3 测试脚本组织|tc、lst、plusarg 和历史 `rpu_sim` 流程|`plan/testcases-and-regression.md`、`guide/build-and-run.md`、`guide/configuration-reference.md`|以当前 `ut_shm/tc/`、`ut_shm/regression/` 和 5.7 节格式基线重写；运行命令另行验证|
+|7.3 测试脚本组织|tc、lst、plusarg 和历史 `rpu_sim` 流程|`plan/testcases-and-regression.md`、`guide/workspace-transfer.md`、`guide/configuration-reference.md`|以当前 `ut_shm/tc/`、`ut_shm/regression/` 和 5.7 节格式基线重写；运行命令另行验证|
 |7.4 当前测试状态|已完成和待完成清单|`verification-status.md`|全部重新从代码和近期运行结果建立|
 
 ### 2.2 `index.md`

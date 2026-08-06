@@ -7,22 +7,25 @@ This example checks that VCS can elaborate `RpuShmTop` together with:
 - `vlm_reservation_interface` and `vlm_memory_interface`;
 - the shared `clk_if`.
 
+The compile and directed-test commands run on the Ubuntu VCS environment. Run
+them from the repository root.
+
 Compile without running the generated simulation:
 
 ```sh
-make compile
+scripts/ubuntu/check_vlm_reservation_vcs.sh compile
 ```
 
 VCS writes all generated files to `build/`. Remove them with:
 
 ```sh
-make clean
+scripts/ubuntu/check_vlm_reservation_vcs.sh clean
 ```
 
 Run the directed write-address alignment and exact-match regression with:
 
 ```sh
-make alignment-test
+scripts/ubuntu/check_vlm_reservation_vcs.sh alignment
 ```
 
 The regression checks that write reservation port 0 accepts and preserves a
@@ -32,7 +35,7 @@ all address bits from the reservation.
 Run the external busy plusarg regression with:
 
 ```sh
-make external-busy-test
+scripts/ubuntu/check_vlm_reservation_vcs.sh external-busy
 ```
 
 This passes `+EXTERNAL_BUSY_PERCENT=100`, confirms that it overrides the test

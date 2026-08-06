@@ -9,15 +9,15 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 用法：
-  scripts/check_vlm_memory_slang.sh [slang 额外参数...]
+  scripts/local/check_vlm_memory_slang.sh [slang 额外参数...]
 
 环境变量：
   SLANG     slang 可执行文件，默认 slang
   UVM_HOME  UVM 源码根目录，默认 <repo>/resources/uvm-1.2
 
 示例：
-  scripts/check_vlm_memory_slang.sh
-  scripts/check_vlm_memory_slang.sh --quiet
+  scripts/local/check_vlm_memory_slang.sh
+  scripts/local/check_vlm_memory_slang.sh --quiet
 EOF
 }
 

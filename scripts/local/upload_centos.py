@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""通过带本地内容缓存的 SFTP 增量同步目录。"""
+"""从本地 macOS 工作区向 CentOS 验证环境增量上传测试环境。"""
 
 from __future__ import annotations
 
@@ -486,7 +486,9 @@ def run(args: argparse.Namespace) -> None:
 def parse_args() -> argparse.Namespace:
     """解析命令行参数。"""
     parser = argparse.ArgumentParser(
-        description=("使用密码登录 SFTP，通过 build/remote-cache 增量同步目录")
+        description=(
+            "使用密码登录 SFTP，通过 build/remote-cache 向 CentOS 增量同步目录"
+        )
     )
 
     parser.add_argument(

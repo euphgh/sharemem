@@ -13,7 +13,7 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 用法：
-  scripts/sync_remote_repo.sh [--dry-run] [--no-delete]
+  scripts/local/sync_remote_repo.sh [--dry-run] [--no-delete]
 
 选项：
   --dry-run    只显示将要同步的改动，不实际修改远端文件

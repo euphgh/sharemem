@@ -3,16 +3,16 @@
 # 在远端 ShareMemory 仓库目录中执行命令。
 #
 # 示例：
-#   scripts/run_remote_command.sh pwd
-#   scripts/run_remote_command.sh make -C examples/vlm_reservation_compile compile
-#   scripts/run_remote_command.sh bash -lc 'make compile 2>&1 | tee /tmp/compile.log'
+#   scripts/local/run_remote_command.sh pwd
+#   scripts/local/run_remote_command.sh scripts/ubuntu/check_vlm_reservation_vcs.sh compile
+#   scripts/local/run_remote_command.sh bash -lc 'make compile 2>&1 | tee /tmp/compile.log'
 
 set -euo pipefail
 
 usage() {
     cat <<'EOF'
 用法：
-  scripts/run_remote_command.sh <命令> [参数...]
+  scripts/local/run_remote_command.sh <命令> [参数...]
 
 环境变量：
   SHAREMEM_REMOTE_HOST  SSH 主机或别名，默认 chatgpt
@@ -21,7 +21,7 @@ usage() {
 命令及其参数会被安全地逐项转义，然后在远端仓库目录中执行。需要管道、重定向
 或其他 shell 语法时，请显式使用：
 
-  scripts/run_remote_command.sh bash -lc '命令 2>&1 | tee /tmp/output.log'
+  scripts/local/run_remote_command.sh bash -lc '命令 2>&1 | tee /tmp/output.log'
 EOF
 }
 

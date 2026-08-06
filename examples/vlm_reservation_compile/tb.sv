@@ -153,6 +153,7 @@ module tb;
       .creq_typ   ('0),
       .creq_vaddr ('0),
       .creq_vmsk  ('0),
+      .creq_tmsk  ('0),
       .creq_base  ('0),
       .creq_offs  ('0),
       .creq_vdat  ('0),
