@@ -36,12 +36,17 @@
 |---|---:|---|---|---|
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
-|`SHMINS-001`|P0|待实现|shmins agent|`creq_tmsk` 尚未进入验证数据通路|
+|`COV-001`|P1|待实现|跨组件|ut_shm 尚未建立 functional coverage 模型|
+|`SHMINS-001`|P0|实现中|shmins agent|`creq_tmsk` 只有局部声明和接线，尚未贯通验证数据通路|
 |`SHMINS-002`|P0|待实现|shmins transaction|`do_copy()` 遗漏或错误复制关键字段|
 |`SHMINS-003`|P0|待实现|shmins constraints|地址约束没有实现 12 KiB 编码和地址空洞规则|
 |`SHMINS-004`|P1|待实现|unit sequence|signedness/granularity 配置没有约束到 item|
 |`SHMINS-005`|P2|待实现|shmins agent|部分循环和位宽硬编码为当前 16-thread/4-bit 配置|
 |`SHMINS-006`|P1|待实现|shmins monitor|active creq payload 缺少系统性的 X/Z 检查|
+|`SHMINS-007`|P1|待实现|unit sequence/TC|V2M `LDSTE_S + WRP/BLK` 缺少屏蔽 element 0 的合法激励|
+|`SHMINS-008`|P1|待实现|shmins monitor|固定 200-cycle ack timeout 与协议无最大延迟冲突|
+|`SHMINS-009`|P1|待实现|shmins monitor|credit/release 和 unexpected/duplicate ack 缺少完备检查|
+|`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
@@ -73,10 +78,23 @@
 - 目标：现阶段只支持完整 active；不支持的组合应尽早 fatal，或删除无效 knob。
 - 验收：所有公开配置组合要么形成完整连接，要么在 build 阶段给出明确错误。
 
+### `COV-001` ut_shm functional coverage
+
+- 现状：shmins monitor 只有注释掉的历史 coverage include；reservation coverage 是空
+  API；reference、scoreboard 和 memory agent 均没有有效 covergroup/coverpoint。
+- 影响：case 运行和 checker 通过不能证明 spec 场景实际发生，所有 testpoint 都缺少
+  功能覆盖关闭证据。
+- 目标依据：[Testpoints](plan/testpoints.md)和
+  [Coverage 与关闭条件](plan/coverage-and-closure.md)。
+- 验收：每个 required testpoint 都能映射到已实现的 functional bin/cross，报告可按
+  testpoint ID 回溯，未命中项有定向激励或有效 waiver。
+
 ### `SHMINS-001` `creq_tmsk` 数据通路
 
-- 现状：DUT 规范已有 `creq_tmsk`，当前 top、interface、transaction、constraints、
-  driver、monitor 和 reference 均没有该字段。
+- 现状：当前工作树已在 tb top、interface 和 transaction 中添加 `creq_tmsk`，公共
+  constraint 要求非全零；但 transaction 使用 `[THD_N]`，与 interface 的
+  `[THD_N-1:0]` 位宽不一致，copy、factory field、driver、monitor 和 reference 也未
+  贯通，VTRANS 没有约束为全 1。
 - 影响：无法生成或验证 inactive thread，VTRANS 也无法约束 `creq_tmsk=='1`。
 - 目标依据：[creq/ack 接口](spec/creq-ack-interface.md)。
 - 验收：覆盖非全零普通 mask、inactive thread X/Z、全零非法请求和 VTRANS 全 1。
@@ -122,6 +140,48 @@
 - 目标依据：`CREQ-002`。
 - 验收：为公共字段、active thread payload 和 inactive thread payload 分别注入 X/Z，
   只报告协议禁止的组合。
+
+### `SHMINS-007` V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
+
+- 现状：不同 thread 的 element 0 都按 `creq_base + 0*offset` 生成相同 MADDR。V2M
+  对该地址形成多笔写，结果未定义；当前根 TC 注释了 `v2m/es_warp.tc` 和
+  `v2m/es_blk.tc`，unit sequence 也没有提供 element-0 mask 配置。
+- 影响：不能验证这两种 address space 下 element 1 及之后的合法 `LDSTE_S` V2M
+  地址和数据行为。M2V 不存在重叠写问题，仍属于支持组合。
+- 目标：V2M 定向激励至少约束所有 thread 的 `creq_vmsk[*][0]==0`，同时保证其余有效
+  element 不产生未定义的同地址多写；M2V 不应用该限制。
+- 验收：新增合法 V2M WRP/BLK case，波形和 monitor transaction 中 element 0 全部
+  masked，其余 element 由 reference/scoreboard 正确检查；原始未 mask 组合不进入
+  正常正向 regression。
+
+### `SHMINS-008` Ack timeout 不是协议时限
+
+- 现状：shmins monitor 为 ack-enabled 请求启动固定 200-cycle timeout，并在到期时
+  报告 `UVM_ERROR`；spec 明确 ack 没有最大延迟。
+- 影响：超过 200 周期后仍正确完成的 DUT 请求会被误判失败。
+- 目标：timeout 可配置或关闭，并明确属于 hang 诊断；默认策略不得被解释成 DUT
+  protocol checker。
+- 验收：关闭 timeout 时长延迟 ack 不报错；配置诊断阈值时日志能区分协议错误与
+  hang 诊断；最终正确 ack 仍按方向和 ID 完成匹配。
+
+### `SHMINS-009` Credit 与 ack 完备性检查
+
+- 现状：driver semaphore 限制环境自身发送并在每个 `creq_rls` 上 `put()`，但没有检查
+  credit 是否超过 `OTF_N`；monitor 只为 ack-enabled 请求等待一次匹配事件，没有完整
+  报告 ack-disabled 请求的 unexpected ack、重复 ack 或错误方向事件。
+- 影响：DUT 的 release 上溢和部分 ack 协议违例可能漏报，或只表现为后续间接错误。
+- 目标依据：`CREQ-005`、`ACK-001` 和 `ACK-002`。
+- 验收：定向覆盖 credit 下溢/上溢、unexpected/duplicate/wrong-direction/wrong-ID ack，
+  每类违例均得到唯一且可定位的错误；合法 release/ack 独立顺序不误报。
+
+### `SHMINS-010` 复位期间 release/ack 静默
+
+- 现状：driver 和 monitor 等待初始 reset 释放后才进入正常业务循环，没有独立检查
+  `rst_n==0` 时 DUT 的 `creq_rls/vack_done/mack_done` 必须为 0。
+- 影响：DUT 在初始或运行中 reset 期间错误归还 credit 或发送 ack 时可能不被报告。
+- 目标依据：[creq/ack 接口的复位规则](spec/creq-ack-interface.md#8-复位与检查规则)。
+- 验收：reset 已知为 0 时分别拉高 release、vack 和 mack，均得到明确错误；reset X/Z
+  不启动正常 payload 检查，done 为 0 时不检查 ID。
 
 ### `VMEM-001` `FFD_CYC` read snapshot
 

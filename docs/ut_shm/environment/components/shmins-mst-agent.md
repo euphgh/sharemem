@@ -64,8 +64,9 @@ CREQ_SPACE
 ```
 
 枚举字符串通过 `shmins_enum_field.svh` 转换。普通请求从这些配置约束 item；VTRANS
-强制 V2M、SPACE_LOC、16 个 element 和全 element mask。`creq_tmsk` 尚未实现，因此
-当前 sequence 还不能满足 VTRANS 的完整新约束。
+强制 V2M、SPACE_LOC、16 个 element 和全 element mask。`creq_tmsk` 已有初始 item
+声明和非全零约束，但尚未贯通驱动与监测，VTRANS 也没有约束为全 1，因此仍不能满足
+完整协议。
 
 ## 5. Driver 和 credit
 
@@ -119,27 +120,32 @@ Transaction 的 `compare_item()` 仍是 placeholder，调用会 fatal；字段�
 
 `ut_shm/tests/shm_unit_test.svh` 通过 `shmins_unit_sequence` 覆盖当前集成激励入口，可用
 plusarg 改变 transaction 数量和部分 creq 字段。当前没有独立的 credit/release、ack
-timeout、四态输入或 transaction copy 单元测试；对应缺口由 `SHMINS-001`～
-`SHMINS-006` 的验收项追踪。
+完整性、四态输入、transaction copy 或 reset 静默单元测试；V2M
+`LDSTE_S + SPACE_WRP/SPACE_BLK` 也缺少 element-0 mask 激励。相关缺口由
+`SHMINS-001`～`SHMINS-010` 的验收项追踪。
 
 ## 10. 开发 contract
 
 - Reference 的架构顺序以 monitor 发布的 creq 顺序为准；DUT 乱序调度不得改变最终
   memory 结果。
-- 新增 `creq_tmsk` 时必须一次性更新 interface、transaction、copy、factory field、
-  constraints、driver、monitor 和 reference。
+- 完成 `creq_tmsk` 时必须统一 interface 与 transaction 位宽，并一次性更新 copy、
+  factory field、constraints、driver、monitor 和 reference。
 - 生成约束必须以地址 spec 为输入，并为 12 KiB 空洞提供定向测试。
 - Public sequence knob 必须实际约束 item；不能只解析 plusarg 而忽略字段。
 - Runtime reset 必须释放 credit wait、取消 ack timeout，并阻止 reset 前 item 继续驱动。
 
 ## 11. 当前实现状态
 
-- `SHMINS-001`：缺少 `creq_tmsk`。
+- `SHMINS-001`：`creq_tmsk` 只有局部声明和接线，尚未贯通。
 - `SHMINS-002`：transaction copy 不完整。
 - `SHMINS-003`：地址约束与 12 KiB 地址模型不一致。
 - `SHMINS-004`：部分 unit-sequence 配置未作用到 item。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。
 - `SHMINS-006`：缺少 active payload X/Z 检查。
+- `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 缺少 element-0 mask 激励。
+- `SHMINS-008`：固定 ack timeout 与协议无最大延迟冲突。
+- `SHMINS-009`：credit/release 和 ack 完备性检查不足。
+- `SHMINS-010`：复位期间 release/ack 静默没有检查。
 - `ENV-001`：运行中 reset 未取消 driver/monitor pending 状态。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

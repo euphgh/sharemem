@@ -70,8 +70,9 @@ Reference 和 scoreboard 位于 ut_shm 专用环境中。三个 agent 位于 `ve
 `clk_if.cycle_count` 不受 `rst_n` 清零，用于把 reservation、busy 和实际 MEM 请求
 标到同一个全局周期。业务复位仍由三条业务 interface 上的 `rst_n` 表示。
 
-当前 `shmins_interface` 和 `shm_tb_top` 尚未接入阶段 2 规范新增的 `creq_tmsk`。这是
-验证实现缺口，不改变 [creq/ack 接口规范](../spec/creq-ack-interface.md)中的要求。
+当前工作树已在 `shmins_interface` 和 `shm_tb_top` 中添加阶段 2 规范要求的
+`creq_tmsk`，但 driver、monitor 和 reference 尚未贯通该字段。这个局部接线还不能
+视为功能已经实现，也不改变 [creq/ack 接口规范](../spec/creq-ack-interface.md)中的要求。
 
 ## 3. UVM hierarchy
 

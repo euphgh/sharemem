@@ -278,8 +278,9 @@ DUT 规则。
 
 阶段 2 后新增的已知实现缺口需要在对应组件迁移时处理：
 
-- `creq_tmsk[THD_N]` 已进入接口规范，但当前 `RpuShmTop`、`shmins_interface`、
-  transaction、driver、monitor 和 reference 尚未添加该字段；
+- `creq_tmsk[THD_N]` 已进入接口规范；当前工作树已在 tb top、`shmins_interface` 和
+  transaction 中开始添加字段，但声明位宽和 driver、monitor、copy、reference 等数据
+  通路仍未贯通；
 - 从当前设计代码推测，write reservation port 1 承载 V2M m-write（包括 VTRANS），
   port 0 承载 M2V v-write。该路由不是稳定 DUT 协议，不能用于接口级对齐判定；
 - 当前 reservation checker 仍按 write port 0/1 判断对齐。后续应只保留 read
@@ -311,14 +312,21 @@ DUT 可乱序调度重叠 creq，但 scoreboard 最终状态必须等价于 creq
 
 ### 阶段 5：整理功能点、case 和覆盖闭环
 
-- [ ] 从旧测试方案、当前 testcase 和已实现 checker 中整理 `plan/testpoints.md`。
-- [ ] 为每个 testpoint 记录 spec、激励、观察点、checker、coverage、case 和状态。
-- [ ] 编写 `plan/testcases-and-regression.md`，说明 case 分类、命名、tc/lst、约束、seed 和 regression。
-- [ ] 编写 `plan/coverage-and-closure.md`，区分功能覆盖、代码覆盖、断言覆盖、waiver 和完成条件。
-- [ ] 不把运行命令复制到 plan 文档；相关内容链接到 guide。
+- [x] 从旧测试方案、当前 testcase 和已实现 checker 中整理 `plan/testpoints.md`。
+- [x] 为每个 testpoint 记录 spec、激励、观察点、checker、coverage、case 和状态。
+- [x] 编写 `plan/testcases-and-regression.md`，说明 case 分类、命名、tc/lst、约束、seed 和 regression。
+- [x] 编写 `plan/coverage-and-closure.md`，区分功能覆盖、代码覆盖、断言覆盖、waiver 和完成条件。
+- [x] 不把运行命令复制到 plan 文档；相关内容链接到 guide。
 
 验收条件：每个主要功能点都能追踪到检查方法和 testcase，未覆盖项有明确状态，
 case 文档与当前测试目录一致。
+
+状态：已于 2026-08-06 完成。`plan/index.md` 定义 spec、testpoint、case、run、checker
+和 coverage 的关系；`testpoints.md` 按 spec-first 原则建立 30 个 testpoint，并分别
+记录目标激励、观察、检查、coverage、case 和当前缺口；case/regression 文档按当前
+19 个 TC 文件和 3 个 LST 文件整理，确认目标 regression 为 85 个 case。当前没有
+functional coverage，因此本文只建立目标 bin/cross 和关闭条件，不声明任何功能点
+已经闭环。新增实现缺口统一登记到 `verification-status.md`。
 
 ### 阶段 6：编写使用和调试指南
 

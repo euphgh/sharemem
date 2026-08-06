@@ -2,8 +2,8 @@
 
 本文记录文档迁移阶段 0 的盘点结果，包括旧章节的去向、当前代码清单、失效链接、
 历史命名和需要延后确认的状态。后续迁移不直接复制旧文档，而是以本基线标记的
-来源优先级和处理方式逐项校正；本次盘点对应仓库提交 `aa5a2e3`，检查日期为
-2026-08-05。
+来源优先级和处理方式逐项校正。阶段 0 初次盘点对应仓库提交 `aa5a2e3`，检查日期为
+2026-08-05；TC 与 regression 格式基线于 2026-08-06 根据当前文件和用户说明补充。
 
 ## 1. 信息来源与判定顺序
 
@@ -64,7 +64,7 @@
 |6.3 参数管理|共享参数 package|`guide/configuration-reference.md`|使用 `shm_util_package`|
 |7.1 测试策略|单元测试、回归和覆盖目标|`plan/index.md`、`plan/testpoints.md`|状态与策略分离|
 |7.2 用例定义|case 维度、限制和不支持组合|`plan/testpoints.md`、`plan/testcases-and-regression.md`、`verification-status.md`|当前 case 不足以确认的内容列为待确认|
-|7.3 测试脚本组织|tc、lst、plusarg 和历史 `rpu_sim` 流程|`plan/testcases-and-regression.md`、`guide/build-and-run.md`、`guide/configuration-reference.md`|当前仓库无对应 tc/lst，不能原样迁移|
+|7.3 测试脚本组织|tc、lst、plusarg 和历史 `rpu_sim` 流程|`plan/testcases-and-regression.md`、`guide/build-and-run.md`、`guide/configuration-reference.md`|以当前 `ut_shm/tc/`、`ut_shm/regression/` 和 5.7 节格式基线重写；运行命令另行验证|
 |7.4 当前测试状态|已完成和待完成清单|`verification-status.md`|全部重新从代码和近期运行结果建立|
 
 ### 2.2 `index.md`
@@ -131,7 +131,7 @@
 |reservation agent “不实现 reset 状态处理”|表述过时且不完整|当前 monitor 在 reset 释放前不采样/XZ 检查，agent 在首个有效周期前驱动已知 busy；运行中再次 reset 时 scheduler 状态如何清理仍需单独确认|
 |reservation 核心路径“不使用 `main_phase`”|文字自相矛盾|当前唯一周期循环位于 agent `main_phase`；核心路径不依赖异步 TLM 回调顺序|
 |`ref_svt_mem`/`imp_svt_mem` 是计划中的两个 memory component|名称和所有权与当前实现不同|当前 reference 持有 `ref_banks`，scoreboard 持有 `rtl_banks`；读路径完成度在组件迁移阶段重新核实|
-|`ut_shm/tc/`、`ut_shm/regression/` 和 `ut_shm/test/` 是当前目录|路径失效|当前只有 `ut_shm/tests/`；tc/lst 内容若需恢复，应作为后续实现而非现状记录|
+|`ut_shm/tc/`、`ut_shm/regression/` 和 `ut_shm/test/` 是当前目录|部分恢复|当前已有 `ut_shm/tc/` 和 `ut_shm/regression/`；UVM test 源码目录仍为复数形式 `ut_shm/tests/`|
 |使用 `ver_common/script/rpu_sim` 编译和回归|当前仓库无该入口|当前可重复构建入口是根 `Makefile`；历史脚本差异不迁移|
 |旧文档“已完成”的 case、回归和覆盖状态|缺少当前文件或近期结果佐证|迁移到 status 前逐项重新验证，不沿用完成标记|
 |Python 约束脚本处于本地未提交状态|当前仓库未发现对应脚本|作为历史未完成项；除非重新提供，不进入主要使用指南|
@@ -253,13 +253,49 @@ scheduler 的顺序直接调用，不通过 scoreboard TLM 连接。
 |---|---|---|
 |主 UVM test|`ut_shm/tests/shm_base_test.svh`、`shm_unit_test.svh`|仓库当前只注册这两个 test class|
 |主 smoke 默认值|根 `Makefile` 的 `SIM_ARGS`|默认运行 `shm_unit_test`，`TRANS_NUM=0`|
+|TC 根入口|`ut_shm/tc/ut_shm.tc`|定义公共 base testcase、方向派生 testcase、VTRANS testcase，并 include V2M/M2V 子 TC|
+|TC 子文件|`ut_shm/tc/v2m/*.tc`、`ut_shm/tc/m2v/*.tc`|按方向、指令类型和地址空间组织普通 case；每个文件展开 DTYPE 与 ATYPE 组合|
+|Regression 入口|`ut_shm/regression/ut_shm.lst`|include `v2m.lst` 和 `m2v.lst`；两个子列表给出当前完整目标回归集合|
 |reservation compile 示例|`examples/vlm_reservation_compile/tb.sv`|联合 elaboration reservation 与 memory agent|
 |地址对齐定向测试|`examples/vlm_reservation_compile/alignment_tb.sv`|write port 0 非对齐、port 1 对齐、MEM 完整地址匹配|
 |external busy 定向测试|`examples/vlm_reservation_compile/external_busy_tb.sv`|`EXTERNAL_BUSY_PERCENT` plusarg 覆盖和 busy 驱动|
 |sv-collection 自测|`ut_shm/util/sv-collection/tests/`|工具库独立测试，不等同于 ut_shm DUT case|
 
-当前仓库没有旧文档描述的 `ut_shm/tc/` 和 `ut_shm/regression/`，因此旧 case 名、
-pass list 和回归完成状态均不能作为当前现状。
+当前 regression 共选择 43 个 V2M case（42 个普通组合和 1 个 VTRANS）与 42 个
+M2V case。Regression 条目表示目标运行集合，不等同于对应 case 已经在真实 design
+环境中运行或通过；通过状态仍需以服务器上的实际结果为准。
+
+### 5.7 TC 与 regression 格式基线
+
+`.tc` 文件定义可供仿真或 regression 选择的 testcase：
+
+1. Base testcase 名称对应 `+UVM_TESTNAME`，其后的仿真参数持续到 `endargs`。
+2. `derived_case: base_case` 表示继承 base testcase。派生 case 可以追加或覆盖仿真
+   参数，但 `+UVM_TESTNAME` 仍使用 base testcase 对应的 UVM test class。
+3. `INCLUDE: path/to/file.tc` 将子 TC 文件中的定义并入当前 TC；include 路径相对
+   `ut_shm/tc/` 组织。
+
+当前根 TC 先定义 `shm_unit_test`，再派生 V2M、M2V 和 VTRANS 配置。普通子 TC 的名称
+遵循：
+
+```text
+<direction>_<instruction>_<space>_dtyp<width>_atyp<width>
+```
+
+其中 `direction` 为 `v2m` 或 `m2v`，`instruction` 为 `vec`、`es` 或 `ev`，`space`
+为 `loc`、`warp` 或 `blk`。每个普通子文件定义
+`DTYP_{32,16,8} x ATYP_{32,16}` 六个组合。
+
+`.lst` 文件选择已经在 TC 中定义的 case，并遵循以下规则：
+
+1. 每个列出的 case 必须存在于 TC 定义中。
+2. `RUN=n` 表示使用不同随机 seed 运行该 case `n` 次。
+3. `SEED=num` 固定该 case 的随机 seed；指定 `SEED` 时，`RUN` 必须为 1。
+4. `INCLUDE: child.lst` 将子 regression 列表并入当前列表。
+
+这些规则是 Phase 5 编写 `plan/testcases-and-regression.md` 和检查 case/regression
+一致性的格式依据。本地只做文本结构与引用完整性检查；权威解析和执行仍在具有
+design 与回归工具的服务器上完成。
 
 ## 6. 后续阶段的待确认项
 
@@ -271,8 +307,8 @@ pass list 和回归完成状态均不能作为当前现状。
 - 旧文档列出的指令类型、数据类型、地址类型和不支持组合是否仍适用；
 - trans 指令需求是否仍属于当前 DUT 和验证范围；
 - reservation agent 在仿真中途再次进入 reset 时是否必须清空 scheduler state；
-- 主 ut_shm case/regression 的目标目录、命名和恢复策略；
-- 旧文档宣称已经通过的 case、coverage 和 regression 结果；
+- TC 中存在但未进入 regression 的组合是否需要单独维护或删除；
+- 当前 regression case、coverage 和通过结果在远端 design 环境中的最新状态；
 - 远端完整 RTL 环境中的最近 compile/smoke 基线。
 
 这些项目分别在迁移阶段 2、4、5、6 和 7 处理。需要设计或用户决定的内容保持
