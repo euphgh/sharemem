@@ -24,19 +24,20 @@ module RpuShmTop
     input  logic [ID_W-1:0]           creq_id          ,
     input  logic [$clog2(WARP_N)-1:0] creq_wpid        ,
     input  logic [$clog2(WARP_N+1)-1:0] creq_wpnum     ,
-    input  logic [THD_N-1:0][3:0]     creq_prio        , //thd prio
-    input  logic [THD_N-1:0][7:0]     creq_len         , //byte length
-    input  logic [19:0]               creq_typ         , //[19:16]:info[3:0]=15~vtrans_en+[15:14]:space[1:0]+[13:10]:ilv_size+[9]:ack_en+[8:7]typ+[6:3]atyp+[2:1]dwidth+[0:0]rw
+    input  logic [THD_N-1:0][3:0]     creq_prio        ,
+    input  logic [THD_N-1:0][7:0]     creq_len         ,
+    input  logic [19:0]               creq_typ         ,
     input  logic [VADDR_W-1:0]        creq_vaddr       ,
-    input  logic [THD_N-1:0][63:0]    creq_vmsk        , //element mask
-    input  logic [47:0]               creq_base        , //byte addr
-    input  logic [THD_N-1:0][511:0]   creq_offs        , //rs2_val,element mode only support 16 element;vector only have 1 addr
+    input  logic [THD_N-1:0][63:0]    creq_vmsk        ,
+    input  logic [THD_N-1:0]          creq_tmsk        ,       
+    input  logic [47:0]               creq_base        ,
+    input  logic [THD_N-1:0][511:0]   creq_offs        , 
     input  logic [THD_N-1:0][511:0]   creq_vdat        ,
 
-    output logic                      vack_done        , //vlm write done
+    output logic                      vack_done        ,
     output logic [ID_W-1:0]           vack_id          ,
 
-    output logic                      mack_done        , //mem write done
+    output logic                      mack_done        ,
     output logic [ID_W-1:0]           mack_id          ,
 
     //MEMORY IO
