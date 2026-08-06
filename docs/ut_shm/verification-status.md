@@ -51,6 +51,8 @@
 |`RSV-001`|P0|待实现|reservation agent|仍按 write port 推断 write alignment|
 |`RSV-002`|P1|待实现|reservation coverage|coverage 组件目前为空实现|
 |`RSV-003`|P1|待实现|reservation example|定向测试仍编码旧 port 对齐规则，external busy 测试字段名也已失效|
+|`RSV-004`|P1|待实现|reservation checker|全局 `input_error` 会屏蔽无关 slot 的检查|
+|`RSV-005`|P1|待实现|reservation monitor|复位期间没有检查 DUT request/valid 必须为 0|
 
 ## 4. 问题详情
 
@@ -190,6 +192,30 @@
 - 影响：示例不能作为当前 spec 的可靠回归证据，部分目标可能无法编译。
 - 目标：示例改为检查 read alignment、write 完整地址匹配和 plusarg 覆盖的实际字段。
 - 验收：`alignment-test`、`external-busy-test` 在远端 VCS 环境编译并通过。
+
+### `RSV-004` `input_error` 抑制粒度
+
+- 现状：cycle transaction 只有一个全局 `input_error`。任意 busy、reservation 或 MEM
+  端口出现 X/Z 后，checker 会跳过本周期全部 observed-busy 比较，并抑制所有到期
+  record 的 `MISSING_MEM`。
+- 影响：一个 BANK 或方向上的四态错误可能掩盖其他 BANK、方向和 slot 上彼此独立的
+  busy mismatch 或 missing MEM，降低 checker 的并发诊断能力。
+- 目标：保留 monitor 的原始 X/Z 报错，同时把“该观察值是否可靠”记录到实际受影响的
+  busy bit 和 request port，或采用等价的局部抑制机制。
+- 验收：向一个无关端口注入 X/Z 时，该端口不产生归一化后的级联误报；同周期其他
+  BANK/direction 上的 busy mismatch 和 missing MEM 仍能被 checker 报告。
+
+### `RSV-005` 复位期间 request quiescence
+
+- 现状：`collect_cycle()` 在 `rst_n!==1` 时只等待，不采样 reservation 或 MEM
+  request，因此没有检查复位期间 `vlm_rreq/vlm_wreq` 和 `mem_rvld/mem_wvld` 必须为 0。
+- 影响：DUT 在初始或运行中复位期间错误发出 reservation/MEM request 时，验证环境
+  不会报告 `MEM-001` 或 `VLM-001` 违例。
+- 目标依据：[MEM/VLM 接口的复位和 X/Z](spec/mem-vlm-interface.md#5-复位和-xz)。正常
+  cycle transaction 仍只在 reset 释放后创建；复位静默检查应使用独立的 assertion、
+  reset-only monitor 路径或等价机制。
+- 验收：在已知 `rst_n==0` 的周期分别拉高四类 request/valid，均能得到明确错误；reset
+  为 X/Z 时不启动业务 X/Z 检查，也不产生正常 transaction。
 
 ## 5. 已解决记录
 

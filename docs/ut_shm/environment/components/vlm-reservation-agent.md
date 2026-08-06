@@ -70,6 +70,9 @@ MEM 端口的请求。Scheduler record 保存 direction、source port、issue cy
 期间不执行 busy/request 的 X/Z 检查，也不生成 cycle transaction；复位前 1 ns 的未知
 busy 不会再触发 `VLM_RESERVATION_BUSY_XZ`。
 
+这条门控也意味着当前 monitor 不检查已知 `rst_n==0` 时 DUT request/valid 必须保持
+为 0，相关协议检查缺口见 `RSV-005`。
+
 Reset 释放后，monitor 对 busy、reservation valid/address/delay 和 MEM valid/address
 执行四态检查。X/Z 会被报告，并在 two-state transaction 中归一化为 inactive/0，且
 设置 `input_error`，防止 checker 把不可靠的 observed busy 再报成普通 mismatch。
@@ -104,20 +107,147 @@ Write 的两个 reservation port 若在同一 bank 同一周期选择相同 dela
 
 ## 8. Checker 职责
 
-Checker 使用 scheduler 的 pre-update 状态检查四类关系：
+Checker 的入口是同步 function `check_cycle(const ref txn)`。它不消耗仿真时间，也不
+修改 scheduler；所有检查都读取产生当前接口 busy 的 pre-update scheduler 状态。
+`check_cycle()` 每次先清零 `current_result`，依次执行 cycle/busy、reservation 和 MEM
+检查，最后返回 `vlm_reservation_check_result_t`。
 
-1. transaction cycle 与共享 `clk_if`、scheduler 前一周期连续；
-2. `shm_records`、`shm_busy`、`external_busy`、`final_busy` 和接口 observed busy 一致；
-3. reservation delay、目标 busy、同 bank 到期冲突等接纳条件合法；
-4. delay 归零的 record 与同 bank、同方向实际 MEM request 一对一对应，完整地址相等。
+### 8.1 检查结果和累计计数
 
-目标 slot 在 observed busy 或 scheduler authoritative ownership 任一视图中被占用时，
-当前 reservation 都不能合法接纳。使用 OR 是为了同时捕获接口侧占用和环境内部所有权
-不一致的情况；若只在两者同时为 1 时拦截，会漏掉单侧已经 busy 的非法请求。
+|结果字段|含义|
+|---|---|
+|`reservation_error_count`|本周期 reservation delay、alignment、busy 或到期冲突错误数|
+|`busy_error_count`|本周期 cycle、record 和 busy 状态错误数|
+|`mem_match_error_count`|本周期到期 record 与实际 MEM request 的匹配错误数|
+|`dly_zero_error_count`|本周期不支持的 `dly==0` 请求数|
+|`matched_mem_request_count`|本周期完整通过到期匹配的 MEM request 数|
+|`passed`|上述四类 error count 均为 0；matched 数不参与 pass 判定|
 
-实际 MEM request 没有到期 record 时属于 unreserved access；有到期 record 但没有
-MEM request 时属于 missing request。Read MEM beat 仍需 32-byte 对齐，reservation
-地址与实际 MEM 地址必须逐 bit 完全相等。
+Checker class 还维护同名的仿真期累计计数器。Monitor 报告的 X/Z 不直接增加这些
+checker counter，也不直接把 `current_result.passed` 置 0；该状态通过
+`txn.input_error` 单独传给 checker 和 coverage。
+
+### 8.2 依赖和 cycle 一致性
+
+|检查|失败条件|错误 ID|
+|---|---|---|
+|共享 cycle source|build phase 取不到 `clk_vif`，或调用时 handle 为空|`VLM_RESERVATION_NO_CLK_VIF`|
+|Scheduler 连接|调用 `check_cycle()` 时 `scheduler==null`|`VLM_RESERVATION_NO_SCHEDULER`|
+|Transaction cycle|`txn.cycle != clk_vif.cycle_count`|`VLM_RESERVATION_CYCLE_MISMATCH`|
+|Pre-update 顺序|已有历史时，`scheduler.last_processed_cycle+1 != txn.cycle`|`VLM_RESERVATION_SCHEDULER_CYCLE`|
+
+前两项是 testbench 连接错误，使用 `UVM_FATAL`。后两项表示 agent 调用顺序或共享周期
+视图损坏，计入 `busy_error_count`；即使发生，checker 仍继续检查当周期其他状态，以便
+一次日志暴露更多内部不一致。
+
+### 8.3 Scheduler record 自洽性
+
+Checker 遍历所有 `shm_records[direction][relative_delay][bank]`，对每个非空 record
+执行以下检查：
+
+|检查|失败条件|错误 ID|
+|---|---|---|
+|来源端口|read record 的 `write_port!=0`，或 write record 端口越界|`VLM_RESERVATION_RECORD_WRITE_PORT`|
+|原始 delay|`issue_delay==0` 或 `issue_delay>=VTAB_D`|`VLM_RESERVATION_RECORD_DELAY`|
+|Record alignment|当前 helper 判断需要对齐，但 `address[4:0]!=0`|`VLM_RESERVATION_RECORD_ALIGNMENT`|
+|到期方程|`issue_cycle+issue_delay != txn.cycle+relative_delay`|`VLM_RESERVATION_RECORD_DUE_CYCLE`|
+
+Record 的来源、原始 delay、地址和 issue cycle 应在窗口移动过程中保持不变；到期方程
+保证 scheduler 没有把 record 提前、延后或放入错误的 relative-delay 位置。Record
+alignment 仍调用旧的 port-based helper，不是目标 spec，属于 `RSV-001`；其余
+record 自洽性检查不应随 alignment 修复一起删除。
+
+### 8.4 Busy 来源一致性
+
+对每个 `<direction, relative_delay, sub_bank>`，checker 先遍历全部 BANK record，按
+`record.address[6:5]` 计算 `has_record`，再执行：
+
+|检查|失败条件|错误 ID|
+|---|---|---|
+|来源互斥|同一 slot 的 `external_busy && shm_busy`|`VLM_RESERVATION_BUSY_OVERLAP`|
+|Record 归约|`shm_busy != has_record`|`VLM_RESERVATION_SHM_BUSY_RECORD`|
+|最终 busy|`final_busy` 不等于 external 与 SHM busy 的 OR|`VLM_RESERVATION_FINAL_BUSY`|
+|接口观察值|`txn.input_error==0` 且 `observed_busy != final_busy`|`VLM_RESERVATION_OBSERVED_BUSY`|
+
+`has_record` 是跨 BANK 的 OR reduction，因此不同 BANK 可以合法共享相同 direction、
+delay 和 sub-bank busy bit。Checker 检查的是这个共享 bit 是否与所有 record 的归约
+结果一致，不会因为共享本身报错。
+
+### 8.5 Reservation 请求合法性
+
+Checker 只处理 monitor 已经创建的完整已知 request handle：
+
+|检查|失败条件|错误 ID|
+|---|---|---|
+|零 delay|`delay==0`；立即返回，不进入其他 reservation 检查|`VLM_RESERVATION_DLY_ZERO`|
+|Delay 范围|`delay>=VTAB_D`；立即返回，避免数组越界|`VLM_RESERVATION_DLY_RANGE`|
+|请求 alignment|当前 helper 要求对齐，但 `address[4:0]!=0`|`VLM_RESERVATION_ALIGNMENT`|
+|目标 busy|可靠的 observed busy 或 scheduler-owned busy 任一个为 1|`VLM_RESERVATION_TARGET_BUSY`|
+|Pending record 冲突|同一 direction/delay/bank 已有 record|`VLM_RESERVATION_PENDING_BANK_DUE_CONFLICT`|
+|同周期 write-port 冲突|同一 BANK 的较早 write port 使用相同 delay|`VLM_RESERVATION_CURRENT_BANK_DUE_CONFLICT`|
+
+目标 busy 使用 OR 条件：接口观察值和 scheduler authoritative ownership 任一视图已经
+占用，当前 reservation 都不合法。只在两者同时为 1 时拒绝会漏掉单侧占用或状态视图
+失配。Pending conflict 检查历史 record，同周期 write-port conflict 检查当前
+transaction 的两个物理 write port；read 和 write 方向使用不同数组，互不构成该类
+BANK 冲突。
+
+Checker 只报告错误并返回该 request 是否有效，不会接纳或删除 record。Scheduler 随后
+使用自己的接纳逻辑更新状态。请求 alignment 同样仍采用旧 port-based helper，修复归入
+`RSV-001`。
+
+### 8.6 到期 MEM 请求匹配
+
+Checker 对每个 `<direction, bank>` 配对：
+
+```text
+txn.mem_[r/w]req_array[bank]
+shm_records[direction][0][bank]
+```
+
+Direction 和 BANK 由数组位置构成匹配键。两边都为空表示本周期该位置空闲；其他组合和
+检查如下：
+
+|检查|失败条件|错误 ID|
+|---|---|---|
+|Unexpected MEM|有完整已知 MEM request，但没有到期 record|`VLM_RESERVATION_UNEXPECTED_MEM`|
+|Missing MEM|有到期 record、没有 MEM request，且 `txn.input_error==0`|`VLM_RESERVATION_MISSING_MEM`|
+|Read alignment|read MEM request 的 `address[4:0]!=0`|`VLM_RESERVATION_MEM_ALIGNMENT`|
+|到期 slot 所有权|request 对应 sub-bank 没有 `shm_busy`，或仍有 `external_busy`|`VLM_RESERVATION_MEM_BUSY`|
+|完整地址|`req.address != record.address`|`VLM_RESERVATION_MEM_ADDRESS`|
+|绝对到期周期|`record.issue_cycle+record.issue_delay != txn.cycle`|`VLM_RESERVATION_MEM_DUE_CYCLE`|
+
+Unexpected 和 missing 分支报告后立即返回；两边都存在时，其余四项可以在同一次调用中
+分别报错。只有四项全部通过才增加 `matched_mem_request_count`。Write MEM 不在这里做
+固定对齐，但 reservation 与 MEM 地址始终逐 bit 比较，禁止清除低 5 bit 或只比较 beat
+编号。
+
+固定数组保证每个 direction/bank 每周期最多有一个 MEM request 和一个到期 record，
+因此上述配对同时完成“一笔 request 对一笔 record”和“一笔 record 对一笔 request”的
+结构性检查。
+
+### 8.7 `input_error` 的影响
+
+`input_error` 是 monitor 在本周期发现任意 busy、request valid 或 active payload X/Z
+后设置的单个全局 bit。Checker 不重复报告四态错误，并继续检查 scheduler 内部不变量
+以及仍然完整已知的 request。
+
+当前源码只在两处用它抑制可能由归一化造成的二次报错：
+
+- 跳过全部 `observed_busy` 与 `final_busy` 比较；
+- 到期 record 没有 MEM handle 时，不报告 `MISSING_MEM`。
+
+因为该 bit 没有 bank、direction 或信号粒度，一个无关端口的 X/Z 会让同周期所有 busy
+观察检查和 missing-MEM 检查一起失效。这个漏检风险记录为 `RSV-004`。
+
+### 8.8 Checker 不负责的检查
+
+- 接口 X/Z：由 reservation monitor 报告；
+- `mem_rdata`、read response 延迟、`mem_wdata` 和 `mem_wstrb`：由 memory agent、
+  memory model 和 scoreboard 负责；
+- memory 内容以及 creq 到 MEM 的功能映射：由 reference 和 scoreboard 负责；
+- 来源相关 write alignment：reservation transaction 缮信息，目标检查位置是
+  scoreboard，见 `SCB-001`。
 
 ## 9. Write alignment 的职责边界
 
@@ -147,6 +277,9 @@ covergroup，预留计数器也保持为 0。它不能作为 reservation 场景�
 Monitor 已保证只在 reset 后检查 X/Z，但 scheduler record、external busy 和 checker
 累计状态不会因运行中 reset 自动清空。若 reset 期间有在途 reservation，释放后旧 record
 仍可能移动或到期，违反“取消所有在途事务”的 DUT 契约，见 `ENV-001`。
+
+Reset 期间不创建 transaction 是正确的数据流边界，但还需要独立检查 DUT 的
+reservation/MEM request 是否保持为 0，见 `RSV-005`。
 
 常用错误族包括：
 
@@ -185,6 +318,8 @@ case 仍编码旧的 write-port alignment 规则或失效字段名，不能作�
 - `RSV-001`：仍按 write port 检查 alignment。
 - `RSV-002`：coverage 是空实现。
 - `RSV-003`：alignment 和 external-busy 示例与当前实现不一致。
+- `RSV-004`：全局 `input_error` 会屏蔽无关 slot 的检查。
+- `RSV-005`：复位期间没有检查 DUT request/valid 必须为 0。
 - `ENV-001`：运行中 reset 未清理 scheduler record 和 busy 状态。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。
