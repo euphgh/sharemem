@@ -1,8 +1,8 @@
 # ut_shm 验证实现状态
 
 本文集中记录 ut_shm 验证环境与当前 DUT spec 之间的实现差异，以及组件开发中已经
-确认的问题。组件文档只引用这里的稳定问题 ID，不重复维护修复过程。当前清单以
-2026-08-06 的源码为基线；Phase 6 的 macOS/Ubuntu 构建结果见
+确认的问题。组件文档只引用这里的稳定问题 ID，不重复维护修复过程。当前清单于
+2026-08-06 按源码提交 `d931e6b` 复核；Phase 6 的 macOS/Ubuntu 构建结果见
 [实测快照](guide/ubuntu-vcs-check.md#6-2026-08-06-实测快照)，不作为闭环以下功能问题的证据。
 
 ## 1. 状态和优先级
@@ -14,6 +14,15 @@
                          ↘ 暂缓
 ```
 
+|状态|含义|
+|---|---|
+|待确认|DUT contract 或验证目标尚未确定；当前没有这类开放项|
+|待实现|contract 已确定，代码尚未满足|
+|实现中|已开始修改，但代码或必要测试尚未完整|
+|待验证|代码路径已实现，缺少验收条件中要求的可重复证据|
+|已完成|代码和验收证据均齐备，转入已解决记录|
+|暂缓|目标已知，但经明确决定暂不实现|
+
 |优先级|含义|
 |---|---|
 |P0|违反当前 spec、破坏核心数据正确性，或阻止主要功能验证|
@@ -21,6 +30,12 @@
 |P2|参数化、冗余结构或辅助 API 问题，不影响默认配置的主要路径|
 
 “已完成”必须同时具备代码修改和可重复的验收证据。只有文档更新不能关闭实现问题。
+问题关闭时必须记录修改文件、commit、验证命令、结果和日期；不追溯没有完整
+证据的历史修改。
+
+本文维护“具体实现问题”的生命周期。功能点的激励、checker、coverage 和 case 是已实现、
+部分实现还是未实现，统一由 [Testpoints](plan/testpoints.md) 维护；稳定的当前结构和
+算法由对应组件文档维护。这里不再建立重复的功能完成度矩阵。
 
 ## 2. 当前支持边界
 
@@ -48,6 +63,7 @@
 |`SHMINS-008`|P1|待实现|shmins monitor|固定 200-cycle ack timeout 与协议无最大延迟冲突|
 |`SHMINS-009`|P1|待实现|shmins monitor|credit/release 和 unexpected/duplicate ack 缺少完备检查|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
+|`SHMINS-011`|P2|待实现|shmins transaction|`compare_item()` 是无条件 fatal 的伪 API|
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
@@ -186,6 +202,17 @@
 - 验收：reset 已知为 0 时分别拉高 release、vack 和 mack，均得到明确错误；reset X/Z
   不启动正常 payload 检查，done 为 0 时不检查 ID。
 
+### `SHMINS-011` 无效 transaction compare API
+
+- 现状：`shmins_sequence_item.compare_item()` 无条件执行
+  `uvm_fatal("please implement do_compare")`，当前仓库内没有调用者。
+- 影响：公开 API 暗示 transaction 可以比较，但任何调用都会直接终止仿真；后续代码
+  可能误用该入口。
+- 目标：没有稳定 contract 和调用者时删除该 API；如果后续需要 transaction compare，则改为
+  完整实现并定义字段、四态和返回值语义。
+- 验收：无用 API 被删除且现有编译通过，或保留的 compare 有正反例定向测试且不使用
+  无条件 fatal。
+
 ### `VMEM-001` `FFD_CYC` read snapshot
 
 - 现状：memory driver 在采样 `mem_rvld/mem_raddr` 后立即调用 scoreboard
@@ -283,5 +310,5 @@
 
 ## 5. 已解决记录
 
-当前没有在本轮文档迁移中关闭的实现问题。问题完成后应保留 ID，并记录修改文件、
-commit、验证命令、结果和日期。
+当前没有在问题 ID 建立后同时具备代码和完整验收证据的已关闭项。后续问题完成
+后保留 ID 并转入本节；不根据历史描述补录无法重现的通过结果。
