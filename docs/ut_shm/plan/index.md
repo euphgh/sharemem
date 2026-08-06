@@ -42,7 +42,7 @@ Testpoint 只引用其中能为目标行为提供证据的检查，不复制实�
 
 - 当前 testcase 最终都运行 `shm_unit_test`，通过 plusargs 选择 V2M、M2V、VTRANS、
   instruction、space、DTYPE 和 ATYPE。
-- `ut_shm/regression/ut_shm.lst` 当前选择 85 个 case：42 个普通 V2M、42 个普通 M2V
+- `ut_shm/regression/shm.lst` 当前选择 85 个 case：42 个普通 V2M、42 个普通 M2V
   和 1 个 VTRANS。
 - 当前没有任何有效 functional covergroup 或 coverpoint。所有 testpoint 的 functional
   coverage 状态均为“未实现”，case 或 checker 不能替代 coverage。

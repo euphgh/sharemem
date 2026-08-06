@@ -255,7 +255,7 @@ scheduler 的顺序直接调用，不通过 scoreboard TLM 连接。
 |主 smoke 默认值|根 `Makefile` 的 `SIM_ARGS`|默认运行 `shm_unit_test`，`TRANS_NUM=0`|
 |TC 根入口|`ut_shm/tc/ut_shm.tc`|定义公共 base testcase、方向派生 testcase、VTRANS testcase，并 include V2M/M2V 子 TC|
 |TC 子文件|`ut_shm/tc/v2m/*.tc`、`ut_shm/tc/m2v/*.tc`|按方向、指令类型和地址空间组织普通 case；每个文件展开 DTYPE 与 ATYPE 组合|
-|Regression 入口|`ut_shm/regression/ut_shm.lst`|include `v2m.lst` 和 `m2v.lst`；两个子列表给出当前完整目标回归集合|
+|Regression 入口|`ut_shm/regression/shm.lst`|include `v2m.lst` 和 `m2v.lst`；两个子列表给出当前完整目标回归集合|
 |reservation compile 示例|`examples/vlm_reservation_compile/tb.sv`|联合 elaboration reservation 与 memory agent|
 |地址对齐定向测试|`examples/vlm_reservation_compile/alignment_tb.sv`|write port 0 非对齐、port 1 对齐、MEM 完整地址匹配|
 |external busy 定向测试|`examples/vlm_reservation_compile/external_busy_tb.sv`|`EXTERNAL_BUSY_PERCENT` plusarg 覆盖和 busy 驱动|

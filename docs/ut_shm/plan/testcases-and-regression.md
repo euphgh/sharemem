@@ -215,7 +215,7 @@ case_name : RUN=1 SEED=num
 |---|---|---:|
 |[`v2m.lst`](../../../ut_shm/regression/v2m.lst)|普通 V2M 矩阵，加 VTRANS|43|
 |[`m2v.lst`](../../../ut_shm/regression/m2v.lst)|普通 M2V 矩阵|42|
-|[`ut_shm.lst`](../../../ut_shm/regression/ut_shm.lst)|include 前两份列表|85|
+|[`shm.lst`](../../../ut_shm/regression/shm.lst)|include 前两份列表|85|
 
 普通 V2M 和 M2V regression 都包含：
 
