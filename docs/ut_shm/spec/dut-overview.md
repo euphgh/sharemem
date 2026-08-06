@@ -13,11 +13,12 @@
 
 ```mermaid
 flowchart LR
-    A["creq 指令"] --> B["地址计算与 BANK 映射"]
-    B --> C["VLM reservation"]
-    C --> D["MEM 读写请求"]
-    D --> E["读数据返回或写完成"]
-    E --> F["可选 ack"]
+    A["creq 指令"] --> B["逐 thread/element 计算 MADDR"]
+    B --> C["映射为 BANK 与 BADDR"]
+    C --> D["VLM reservation"]
+    D --> E["MEM 读写请求"]
+    E --> F["读数据返回或写完成"]
+    F --> G["可选 ack"]
 ```
 
 从接口契约看，物理存储位于模块外部。`RpuShmTop` 负责调度和转换，不规定 SRAM

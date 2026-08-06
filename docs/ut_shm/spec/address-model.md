@@ -21,9 +21,43 @@ BANK 内实际占用 `WARP_STEP=12 KiB`；14-bit VADDR 或某些 interleave size
 形成存储访问的元素 MADDR 均合法，不得依赖 DUT 在收到非法 creq 后丢弃 MEM 或 VLM
 请求。无效 mask 对应的元素不形成访问，其地址不参与这项检查。
 
-## 2. 从 creq 生成统一地址
+## 2. 两阶段地址计算流程
 
-### 2.1 数据元素宽度
+一笔 creq 包含 16 个 thread 的访存信息。DUT 先为每个 thread 的每个有效 element
+计算统一地址 MADDR，再依据 address space 和 interleave 信息把每个 MADDR 映射为
+物理 `<bank_id, BADDR>`：
+
+```text
+creq payload
+    |
+    | creq_base、creq_offs
+    | creq_dtype、creq_atype_*、creq_itype
+    v
+逐 thread、逐有效 element 计算 MADDR
+    |
+    | MADDR、creq_space、creq_inv_size
+    | creq_wpid、creq_wpnum、thread_index
+    v
+映射为 <bank_id, BADDR>
+```
+
+两阶段使用的输入不同：
+
+|阶段|依赖信息|作用|
+|---|---|---|
+|有效元素选择|`creq_len`、`creq_vmsk`、`creq_dtype`|确定哪些 thread、element 和 byte 会形成访问|
+|Offset 解码|`creq_offs`、`creq_atype_w`、`creq_atype_s`、`creq_atype_g`、`creq_dtype`|确定 raw offset 的宽度、扩展方式和缩放单位|
+|MADDR 计算|`creq_base`、解码后的 offset、`creq_itype`|计算每个有效 element 的统一字节地址|
+|空间选择|MADDR、`creq_space`|选择 SPACE_LOC、SPACE_WRP 或 SPACE_BLK 映射|
+|Interleave|MADDR、`creq_inv_size`、`BANK_N`|得到交织块内偏移、BANK 和交织块索引|
+|WARP 定位|`creq_wpid`、`creq_wpnum`、thread index、`WARP_STEP`|选择或检查目标 WARP，并形成最终 BADDR|
+
+`creq_prio` 只影响请求调度顺序，不参与 MADDR、BANK 或 BADDR 的数值计算。VTRANS
+只转置数据，仍使用相同的两阶段地址计算。
+
+## 3. 从 creq 生成统一地址
+
+### 3.1 数据元素宽度
 
 `creq_dtype` 决定每个数据元素占用的字节数 `D`：
 
@@ -36,7 +70,7 @@ BANK 内实际占用 `WARP_STEP=12 KiB`；14-bit VADDR 或某些 interleave size
 `creq_len[t]` 是线程 `t` 的有效数据字节数。有效元素数为
 `creq_len[t]/D`，并受 512-bit 数据向量和 offset 向量容量限制。
 
-### 2.2 Offset 解码
+### 3.2 Offset 解码
 
 `creq_atype_w` 选择 offset 元素宽度 32、16 或 8 bit。每个 raw offset 先按
 `creq_atype_s` 做符号扩展或零扩展；当 `creq_atype_g==GAUTO_DW` 时，再乘以数据
@@ -59,7 +93,7 @@ MADDR[t][k] = creq_base[MADDR_W-1:0] + address_offset[t][k]
 使用有符号 offset 时可以向低地址移动，但结果仍必须落在所选 address space 的合法
 范围内。禁止依靠 `MADDR_W` 截断产生回绕访问。
 
-### 2.3 Mask 和尾部 byte
+### 3.3 Mask 和尾部 byte
 
 `creq_vmsk[t][k]==0` 时，元素 `k` 不产生有效 byte。mask 有效时，元素内 byte lane
 `lane` 的有效条件为：
@@ -72,7 +106,29 @@ byte_valid(t,k,lane) =
 V2M 使用这些有效 byte 形成写数据和 byte strobe；M2V 使用相同范围确定读数据写回
 的有效 byte。
 
-## 3. Interleave 参数
+## 4. Interleave 概念与参数
+
+Interleave 将统一地址空间切成大小为 `G` Byte 的连续交织块。块内 byte offset
+保存在 `inv_offs`；跨过一个交织块边界后，映射会切换到下一个 BANK，而不是立刻
+增加当前 BANK 内的地址。以 SPACE_WRP 为例：
+
+```text
+MADDR [0, G)         -> BANK 0，local block 0
+MADDR [G, 2G)        -> BANK 1，local block 0
+...
+MADDR [15G, 16G)     -> BANK 15，local block 0
+MADDR [16G, 17G)     -> BANK 0，local block 1
+```
+
+因此，较小的 interleave size 会把相邻地址更快地分散到多个 BANK，较大的
+interleave size 则让更多连续 byte 留在同一 BANK。SPACE_BLK 在遍历完全部 BANK
+后还会依次遍历 `warp_offs`，随后才增加 `inv_index` 和 `warp_group`：
+
+```text
+inv_offs -> bank_id -> warp_offs -> inv_index -> warp_group
+```
+
+这里的箭头表示 MADDR 从低位到高位、从变化最快到变化最慢的字段顺序。
 
 令：
 
@@ -89,7 +145,10 @@ C = (G <= 4 KiB) ? 12 KiB : 16 KiB
 BANK/WARP 编码的空间：当 `G` 能整除 12 KiB 时使用真实容量 12 KiB；`G` 为 8 KiB
 或 16 KiB 时按 16 KiB 编码，再通过合法性约束排除尾部地址空洞。
 
-## 4. SPACE_LOC
+一个 WARP 的真实 BANK 内空间始终是 12 KiB。interleave size 可以大于 12 KiB
+能够整除的最大粒度，但合法 creq 仍不得访问 12～16 KiB 的编码空洞。
+
+## 5. SPACE_LOC
 
 SPACE_LOC 表示每个线程访问同编号 BANK 中自己的 WARP 区域：
 
@@ -99,6 +158,16 @@ bank_id = thread_index
 BADDR = creq_wpid * W + MADDR
 ```
 
+从硬件位域看，SPACE_LOC 不进行 interleave 拆分：
+
+```systemverilog
+local_offs = MADDR[VADDR_W-1:0];
+bank_id    = thread_index;
+BADDR      = creq_wpid * WARP_STEP + local_offs;
+```
+
+合法性约束 `MADDR < WARP_STEP` 保证 `local_offs` 不会进入 12～16 KiB 的编码区域。
+
 因此，线程索引选择 BANK，`creq_wpid` 选择 BANK 内的 WARP 区域。尽管
 `VADDR_W=14` 可以编码 16 KiB，SPACE_LOC 的合法 MADDR 上限仍是 12 KiB；
 `[12 KiB, 16 KiB)` 不得由合法 creq 产生。
@@ -106,7 +175,7 @@ BADDR = creq_wpid * W + MADDR
 当前配置要求 `THD_N==BANK_N==16`。若要支持两者不相等，必须先重新定义线程到
 BANK 的映射。
 
-## 5. SPACE_WRP
+## 6. SPACE_WRP
 
 SPACE_WRP 允许一个 WARP 内的线程访问任意 BANK。MADDR 的合法编码范围为：
 
@@ -125,6 +194,27 @@ local_offs = inv_index * G + inv_offs
 BADDR = creq_wpid * W + local_offs
 ```
 
+定义 `S=$clog2(B)`、`J=VADDR_W-I`。对当前 request 按 `I` 展开后，上述算术形式等价
+于以下位域拼接；当 `J==0` 时省略 `inv_index`：
+
+```systemverilog
+{inv_index, bank_id, inv_offs} = MADDR[VADDR_W+S-1:0];
+local_offs = {inv_index, inv_offs};
+BADDR = creq_wpid * WARP_STEP + local_offs;
+```
+
+字段宽度为：
+
+|字段|位宽|
+|---|---:|
+|`inv_offs`|`I`|
+|`bank_id`|`S`|
+|`inv_index`|`J`|
+
+合法 SPACE_WRP 的 MADDR 高于 `VADDR_W+S` 的 bit 必须为 0。`G<=4 KiB` 时，MADDR
+范围进一步保证 `inv_index < C/G`；`G=8/16 KiB` 时仍需用
+`local_offs<WARP_STEP` 排除地址空洞。
+
 每个会形成访问的元素还必须满足：
 
 ```text
@@ -142,7 +232,7 @@ local_offs < W
 
 `creq_wpid` 只参与 BADDR 的 WARP 基址计算，不改变 `bank_id`。
 
-## 6. SPACE_BLK
+## 7. SPACE_BLK
 
 SPACE_BLK 允许 Block 内跨 WARP 访问。令：
 
@@ -173,6 +263,52 @@ local_offs = inv_index * G + inv_offs
 BADDR = warp_index * W + local_offs
 ```
 
+硬件位域形式需要先区分 WARP group。定义：
+
+```text
+Q = $clog2(P)
+J = VADDR_W - I
+group_span = C * B * P
+```
+
+先把 MADDR 分成 group 编号和 group 内地址，再对 `group_maddr` 做拼接：
+
+```systemverilog
+warp_group = MADDR / group_span;
+group_maddr = MADDR % group_span;
+
+{inv_index, warp_offs, bank_id, inv_offs} = group_maddr;
+
+warp_base  = warp_group * P;
+warp_index = warp_base + warp_offs;
+local_offs = {inv_index, inv_offs};
+BADDR      = warp_index * WARP_STEP + local_offs;
+```
+
+字段宽度为：
+
+|字段|位宽|
+|---|---:|
+|`inv_offs`|`I`|
+|`bank_id`|`$clog2(B)`|
+|`warp_offs`|`Q`|
+|`inv_index`|`J`|
+
+当 `P==1` 时省略零宽的 `warp_offs`。`group_maddr < group_span` 保证
+`inv_index < C/G`，因此这组拼接与前面的除法、取模公式完全等价。
+
+当 `C==16 KiB` 时，`group_span` 是 2 的幂，可以把 group 分解和组内拼接合并为：
+
+```systemverilog
+{warp_group, inv_index, warp_offs, bank_id, inv_offs} = MADDR;
+```
+
+此时 `warp_group` 的位宽为 `$clog2(N/P)`，五个字段的总宽度正好是当前
+`MADDR_W=21`。
+
+当 `C==12 KiB` 时，`group_span` 不是 2 的幂，必须保留
+`warp_group/group_maddr` 的预分解；直接把原始 MADDR 固定切成五个字段并不等价。
+
 合法 creq 必须同时满足：
 
 ```text
@@ -190,7 +326,7 @@ creq_wpid / P == warp_index / P
 `0 .. 16 KiB*BANK_N*WARP_N`，但每个 WARP 中满足
 `12 KiB <= local_offs < 16 KiB` 的编码均为地址空洞。
 
-## 7. M2V 写回地址
+## 8. M2V 写回地址
 
 M2V 先按前述映射从外部 MEM 读取数据，再写回线程本地区域。线程 `t`、元素 `k`、
 元素内 byte `lane` 的写回位置为：
@@ -210,14 +346,14 @@ writeback_baddr = creq_vaddr
 0 <= creq_vaddr <= W - 64 Byte
 ```
 
-## 8. VTRANS 与地址计算
+## 9. VTRANS 与地址计算
 
 VTRANS 只转置 V2M 的输入数据矩阵，不改变 `creq_base`、`creq_offs`、地址类型、
 address space 或其他控制字段。转置后的每个目标元素继续按普通 V2M 规则计算
 MADDR、BANK 和 BADDR。VTRANS 的识别方式和输入限制见
 [creq/ack 接口](creq-ack-interface.md#6-vtrans)。
 
-## 9. 三种模式对比
+## 10. 三种模式对比
 
 |项目|SPACE_LOC|SPACE_WRP|SPACE_BLK|
 |---|---|---|---|
