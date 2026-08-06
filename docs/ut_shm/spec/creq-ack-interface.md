@@ -15,6 +15,7 @@
 |`creq_wpid`|输入|发起请求的 WARP ID|
 |`creq_wpnum`|输入|SPACE_BLK 的 WARP 组大小，合法值为 1、2、4|
 |`creq_prio[thread]`|输入|每个线程的调度优先级|
+|`creq_tmsk[thread]`|输入|thread mask；为 1 的 thread 执行本次访存|
 |`creq_len[thread]`|输入|每个线程的有效数据 byte 数|
 |`creq_typ`|输入|方向、数据类型、地址类型和控制位的 20-bit packed 字段|
 |`creq_vaddr`|输入|M2V 写回的线程本地基址|
@@ -74,8 +75,20 @@ ack。协议不规定 credit 的最晚归还周期。
 
 ## 4. Payload 语义与合法性
 
+`creq_tmsk[t]` 决定 thread `t` 是否参与本次请求。`creq_vld==1` 时，
+`creq_tmsk` 必须为已知且非全 0：
+
+```text
+creq_tmsk != '0
+```
+
+当 `creq_tmsk[t]==0` 时，该 thread 不计算有效 MADDR、不产生 MEM/reservation，也不
+进行 M2V 写回。对应的 `creq_prio[t]`、`creq_len[t]`、`creq_vmsk[t]`、
+`creq_offs[t]` 和 `creq_vdat[t]` 均为 don't-care，允许包含 X/Z。
+
 `creq_len[t]` 的单位是 Byte，不是 element。元素宽度为 `D` Byte 时，线程 `t` 的
-有效元素数为 `creq_len[t]/D`；合法请求必须使 byte length 与数据类型对齐。
+有效元素数为 `creq_len[t]/D`；对 `creq_tmsk[t]==1` 的 thread，合法请求必须使
+byte length 与数据类型对齐。
 `creq_vmsk[t][k]` 决定元素 `k` 是否形成访问。
 
 `creq_base`、`creq_offs`、data type 和 address type 共同生成每个有效元素的 MADDR。
@@ -117,6 +130,7 @@ creq_wpid  inside {[0:WARP_N-1]}
 16 个线程均参与操作，每个线程恰好包含 16 个有效元素，所有 element mask 均为 1：
 
 ```text
+creq_tmsk == '1
 DTYP_8 : creq_len[t] == 16 Byte
 DTYP_16: creq_len[t] == 32 Byte
 creq_vmsk[t] == '1
@@ -157,11 +171,12 @@ transposed_data[dst_thread][dst_element]
 |ID|规则|
 |---|---|
 |`CREQ-001`|请求源只能在持有 credit 时拉高 `creq_vld`；每个有效采样沿消耗一个 credit。|
-|`CREQ-002`|`creq_vld==1` 时，所有参与解释的控制字段、地址、length、mask、offset 和有效数据禁止包含 X/Z。|
+|`CREQ-002`|`creq_vld==1` 时，公共控制字段和 `creq_tmsk` 必须已知；active thread 中参与解释的 length、mask、offset 和有效数据禁止包含 X/Z。inactive thread 的 payload 允许 X/Z。|
 |`CREQ-003`|每个有效元素生成的 MADDR 必须满足对应 address space 的范围、空洞和 WARP 分组约束。|
-|`CREQ-004`|`creq_len` 必须以 Byte 表示，并与 `creq_dtype` 对齐。|
+|`CREQ-004`|active thread 的 `creq_len` 必须以 Byte 表示，并与 `creq_dtype` 对齐。|
 |`CREQ-005`|`creq_rls` 每个有效周期只归还一个 credit，并且不得使可用 credit 超过 `OTF_N`。|
-|`CREQ-006`|VTRANS 必须满足第 6 节的方向、space、dtype、itype、length 和 mask 限制。|
+|`CREQ-006`|VTRANS 必须满足第 6 节的方向、space、dtype、itype、thread mask、length 和 element mask 限制。|
+|`CREQ-007`|每笔有效 creq 的 `creq_tmsk` 禁止全 0。|
 |`ACK-001`|ack 关闭的请求不得产生完成 ack；ack 打开的请求必须产生且只产生一次正确方向、正确 ID 的 ack。|
 |`ACK-002`|`vack_done`、`mack_done` 和 done 有效时的 ID 禁止包含 X/Z。|
 |`ACK-003`|复位前尚未完成的请求被取消，复位后不得补发对应 release 或 ack。|

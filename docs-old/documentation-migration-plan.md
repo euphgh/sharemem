@@ -259,6 +259,19 @@ reservation 检查路径，但正文尚不依赖任何组件内部算法。
 `warp_group`，已有 case 因 MADDR 高位恒为 0 未暴露该问题。迁移 `shm-reference.md`
 时需要按新地址模型登记并修复，不能把现有 reference 写法反向解释成 DUT 规则。
 
+阶段 2 后新增的已知实现缺口需要在对应组件迁移时处理：
+
+- `creq_tmsk[THD_N]` 已进入接口规范，但当前 `RpuShmTop`、`shmins_interface`、
+  transaction、driver、monitor 和 reference 尚未添加该字段；
+- 从当前设计代码推测，write reservation port 1 承载 V2M m-write（包括 VTRANS），
+  port 0 承载 M2V v-write。该路由不是稳定 DUT 协议，不能用于接口级对齐判定；
+- 当前 reservation checker 仍按 write port 0/1 判断对齐。后续应只保留 read
+  reservation 的固定对齐检查，write alignment 由持有原始 creq 类型的 scoreboard
+  按普通 V2M、M2V v-write 和 VTRANS 分别检查；
+- 当前 VLM memory driver 在 `mem_rvld` 到达时立即读取 scoreboard memory，再延迟
+  `RPORT_DLY` 输出，尚未实现 `FFD_CYC` 的写可见窗口。memory model 必须按
+  `T0+FFD_CYC-1` 建立逐 byte read snapshot，避免依赖 UVM 进程调度顺序。
+
 每篇组件文档至少覆盖：
 
 - 组件负责和不负责的功能；

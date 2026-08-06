@@ -32,7 +32,7 @@ flowchart LR
 |接口组|方向|内容|
 |---|---|---|
 |时钟与复位|输入|`clk`、低有效 `rst_n`|
-|creq|输入为主|`creq_vld` 和指令 payload；DUT 用 `creq_rls` 归还 credit|
+|creq|输入为主|`creq_vld`、thread mask 和指令 payload；DUT 用 `creq_rls` 归还 credit|
 |ack|输出|`vack_done/vack_id`、`mack_done/mack_id`|
 |MEM|读写|DUT 输出每 BANK 的读写请求，外部存储返回 `mem_rdata`|
 |VLM reservation|读写|DUT 输出 reservation，外部调度模块输入 read/write busy 表|
@@ -67,7 +67,7 @@ ut_shm 从 `shm_util_package` 取值，并在 `shm_tb_top` 实例化 DUT 时显�
 |`WARP_STEP`|12 KiB|同一 BANK 内相邻 WARP 地址区域的步长|
 |`OTF_N`|4|creq 初始 credit 数|
 |`PRIO_W`|4|线程优先级宽度；当前 RTL 端口固定写成 4 bit|
-|`FFD_CYC`|1|DUT 内部 feed-forward 周期参数|
+|`FFD_CYC`|1|MEM 读可见的前向写窗口；当前值表示读可见同周期写|
 |`RPORT_DLY`|4|MEM 读请求到读数据返回的固定周期数|
 |`VTAB_D`|12|reservation busy 窗口深度，表达式为 `6+RPORT_DLY-FFD_CYC+1+1+1`|
 |`ID_W`|8|creq 和 ack ID 宽度|
@@ -88,14 +88,22 @@ ut_shm 从 `shm_util_package` 取值，并在 `shm_tb_top` 实例化 DUT 时显�
 到 BANK，先发出写 reservation，再在预约到期时通过 `mem_wvld`、`mem_waddr`、
 `mem_wstrb` 和 `mem_wdata` 写入外部存储。若请求使能 ack，完成事件走 `mack`。
 
+普通 V2M 只有从 MADDR 产生的 m-write，最终 VLM/MEM write beat 地址必须 32 Byte
+对齐。原始 element MADDR 本身不要求对齐；DUT 用对齐的 beat 地址和 byte strobe
+表达其中的有效 byte。
+
 VTRANS 是受限的特殊 V2M：16 个线程各提供 16 个元素，DUT 先把这个 16×16 数据
 矩阵转置，再沿用普通 V2M 的地址计算和写路径。其他地址、offset或其他控制字段都不改变。
+VTRANS 是 m-write 的特例，其最终 write beat 地址允许非对齐。
 
 ### 5.2 M2V 读路径
 
 `creq_rw == SHM_M2V` 时，DUT 从映射后的 BANK 地址发起 MEM 读，等待固定延迟的
 `mem_rdata`，再把数据写回 `creq_vaddr` 对应的线程本地区域。若请求使能 ack，完成
 事件走 `vack`。
+
+M2V 包含两类访问：从 MADDR 产生的 m-read 必须使用对齐的 read beat 地址；从
+`creq_vaddr` 产生的 v-write 允许使用非对齐 write beat 地址。接口中不存在 v-read。
 
 ### 5.3 Reservation 路径
 
@@ -116,5 +124,6 @@ DUT 必须取消所有 outstanding creq、尚未到期 reservation 和 MEM read 
 ## 7. 协议边界
 
 creq release 和 ack 都没有规定最大延迟；测试环境可以配置超时以发现疑似挂死，
-但该超时不是 DUT 协议的一部分。同一周期对同一 MEM BANK 的重叠地址读写返回旧值
-还是新值也未定义，测试不得依赖其中一种结果。
+但该超时不是 DUT 协议的一部分。MEM 重叠读写返回值由 `FFD_CYC` 定义：读请求在
+`T0` 被接受时，可见截止到 `T0+FFD_CYC-1` 接受的写；详细逐周期规则见
+[MEM/VLM 接口](mem-vlm-interface.md)。

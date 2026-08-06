@@ -19,7 +19,8 @@ BANK 内实际占用 `WARP_STEP=12 KiB`；14-bit VADDR 或某些 interleave size
 
 地址空洞属于 creq 的输入合法性约束。产生 creq 的模块和验证激励必须保证每个会
 形成存储访问的元素 MADDR 均合法，不得依赖 DUT 在收到非法 creq 后丢弃 MEM 或 VLM
-请求。无效 mask 对应的元素不形成访问，其地址不参与这项检查。
+请求。inactive thread 或无效 element mask 对应的元素不形成访问，其地址不参与这项
+检查。
 
 ## 2. 两阶段地址计算流程
 
@@ -45,15 +46,16 @@ creq payload
 
 |阶段|依赖信息|作用|
 |---|---|---|
-|有效元素选择|`creq_len`、`creq_vmsk`、`creq_dtype`|确定哪些 thread、element 和 byte 会形成访问|
+|有效元素选择|`creq_tmsk`、`creq_len`、`creq_vmsk`、`creq_dtype`|确定哪些 thread、element 和 byte 会形成访问|
 |Offset 解码|`creq_offs`、`creq_atype_w`、`creq_atype_s`、`creq_atype_g`、`creq_dtype`|确定 raw offset 的宽度、扩展方式和缩放单位|
 |MADDR 计算|`creq_base`、解码后的 offset、`creq_itype`|计算每个有效 element 的统一字节地址|
 |空间选择|MADDR、`creq_space`|选择 SPACE_LOC、SPACE_WRP 或 SPACE_BLK 映射|
 |Interleave|MADDR、`creq_inv_size`、`BANK_N`|得到交织块内偏移、BANK 和交织块索引|
 |WARP 定位|`creq_wpid`、`creq_wpnum`、thread index、`WARP_STEP`|选择或检查目标 WARP，并形成最终 BADDR|
 
-`creq_prio` 只影响请求调度顺序，不参与 MADDR、BANK 或 BADDR 的数值计算。VTRANS
-只转置数据，仍使用相同的两阶段地址计算。
+`creq_tmsk[t]==0` 的 thread 不进入后续地址计算。`creq_prio` 只影响请求调度顺序，
+不参与 MADDR、BANK 或 BADDR 的数值计算。VTRANS 只转置数据，仍使用相同的两阶段
+地址计算。
 
 ## 3. 从 creq 生成统一地址
 
@@ -95,12 +97,15 @@ MADDR[t][k] = creq_base[MADDR_W-1:0] + address_offset[t][k]
 
 ### 3.3 Mask 和尾部 byte
 
-`creq_vmsk[t][k]==0` 时，元素 `k` 不产生有效 byte。mask 有效时，元素内 byte lane
-`lane` 的有效条件为：
+`creq_tmsk[t]==0` 时，整个 thread 不产生访问。thread 有效时，
+`creq_vmsk[t][k]==0` 的元素也不产生有效 byte。元素内 byte lane `lane` 的有效条件
+为：
 
 ```text
 byte_valid(t,k,lane) =
-    creq_vmsk[t][k] && (k*D + lane < creq_len[t])
+    creq_tmsk[t] &&
+    creq_vmsk[t][k] &&
+    (k*D + lane < creq_len[t])
 ```
 
 V2M 使用这些有效 byte 形成写数据和 byte strobe；M2V 使用相同范围确定读数据写回
@@ -326,7 +331,31 @@ creq_wpid / P == warp_index / P
 `0 .. 16 KiB*BANK_N*WARP_N`，但每个 WARP 中满足
 `12 KiB <= local_offs < 16 KiB` 的编码均为地址空洞。
 
-## 8. M2V 写回地址
+## 8. 访问来源与 MEM beat 对齐
+
+MADDR 和 element BADDR 都是 byte address，本身不要求 32 Byte 对齐。对齐要求作用于
+最终发布到 VLM reservation 和 MEM 接口的 beat 地址，并由访问来源决定：
+
+|访问|地址来源|最终 beat 地址|
+|---|---|---|
+|普通 V2M m-write|MADDR 映射后的 BADDR|必须 32 Byte 对齐|
+|M2V m-read|MADDR 映射后的 BADDR|必须 32 Byte 对齐|
+|M2V v-write|`creq_vaddr` 写回地址|允许非对齐|
+|VTRANS write|MADDR 映射后的 BADDR|允许非对齐|
+
+普通 m-read/m-write 将 element BADDR 归入 32-Byte beat：
+
+```text
+beat_addr = BADDR & ~(32 Byte - 1)
+byte_lane = BADDR[4:0]
+```
+
+写访问用 `byte_lane` 生成 strobe；一次访问跨过 32-Byte 边界时，必须拆成两个对齐
+beat。M2V 的 v-write 必须保留 `creq_vaddr` 计算出的完整写回地址低位。接口中不存在
+v-read。最终 VLM/MEM 端口的逐周期对齐契约见
+[MEM/VLM 接口](mem-vlm-interface.md)。
+
+## 9. M2V 写回地址
 
 M2V 先按前述映射从外部 MEM 读取数据，再写回线程本地区域。线程 `t`、元素 `k`、
 元素内 byte `lane` 的写回位置为：
@@ -346,14 +375,17 @@ writeback_baddr = creq_vaddr
 0 <= creq_vaddr <= W - 64 Byte
 ```
 
-## 9. VTRANS 与地址计算
+## 10. VTRANS 与地址计算
 
 VTRANS 只转置 V2M 的输入数据矩阵，不改变 `creq_base`、`creq_offs`、地址类型、
 address space 或其他控制字段。转置后的每个目标元素继续按普通 V2M 规则计算
 MADDR、BANK 和 BADDR。VTRANS 的识别方式和输入限制见
 [creq/ack 接口](creq-ack-interface.md#6-vtrans)。
 
-## 10. 三种模式对比
+VTRANS 虽然使用 MADDR 映射结果，但属于普通 m-write 对齐规则的特例，其最终 VLM
+和 MEM write beat 地址允许非对齐。
+
+## 11. 三种模式对比
 
 |项目|SPACE_LOC|SPACE_WRP|SPACE_BLK|
 |---|---|---|---|
