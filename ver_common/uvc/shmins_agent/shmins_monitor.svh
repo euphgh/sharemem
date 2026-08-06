@@ -133,7 +133,15 @@ task shmins_monitor::monitor_signals();
         shmins_trans.creq_wpnum = shmins_mon_vif.mon_cb.creq_wpnum ;
         shmins_trans.creq_typ   = shmins_mon_vif.mon_cb.creq_typ   ;
         shmins_trans.creq_vaddr = shmins_mon_vif.mon_cb.creq_vaddr ;
+        shmins_trans.creq_tmsk  = shmins_mon_vif.mon_cb.creq_tmsk  ;
         shmins_trans.creq_base  = shmins_mon_vif.mon_cb.creq_base  ;
+
+        if ($isunknown(shmins_trans.creq_tmsk)) begin
+            `uvm_error("SHMINS_TMSK_XZ", $sformatf("creq_tmsk contains X/Z: %b", shmins_trans.creq_tmsk))
+        end
+        else if (shmins_trans.creq_tmsk == '0) begin
+            `uvm_error("SHMINS_TMSK_ZERO", "creq_tmsk must enable at least one thread")
+        end
 
         for (int th_idx=0; th_idx<16; th_idx++) begin
             shmins_trans.creq_prio[th_idx] = shmins_mon_vif.mon_cb.creq_prio[th_idx];

@@ -278,9 +278,9 @@ DUT 规则。
 
 阶段 2 后新增的已知实现缺口需要在对应组件迁移时处理：
 
-- `creq_tmsk[THD_N]` 已进入接口规范；当前工作树已在 tb top、`shmins_interface` 和
-  transaction 中开始添加字段，但声明位宽和 driver、monitor、copy、reference 等数据
-  通路仍未贯通；
+- `creq_tmsk[THD_N]` 已进入接口规范；当前工作树已贯通 tb top、interface、transaction、
+  driver、monitor、copy 和 reference，并由 reference 跳过 inactive thread。该实现仍
+  需要远端 DUT/VCS 场景验证；
 - 从当前设计代码推测，write reservation port 1 承载 V2M m-write（包括 VTRANS），
   port 0 承载 M2V v-write。该路由不是稳定 DUT 协议，不能用于接口级对齐判定；
 - 当前 reservation checker 仍按 write port 0/1 判断对齐。后续应只保留 read

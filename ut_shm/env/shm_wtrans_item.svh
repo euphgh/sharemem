@@ -142,17 +142,31 @@ class shm_wtrans_item extends shmins_sequence_item;
         const string action = creq_rw == SHM_V2M ? "W" : "R";
         const string space_name = creq_space_e_to_str(creq_space);
 
-        /* malloc 2d array */
+        // Inactive thread payload may contain X/Z. Keep its derived arrays empty
+        // so no address, reservation, MEM request, or writeback expectation is built.
         for (int i = 0; i < BANK_N; i++) begin
-            baddr_2d_array[i] = new[this_max_elem_cnt];
-            bid_2d_array [i] = new[this_max_elem_cnt];
-            wstrb_2d_array[i] = new[this_max_elem_cnt];
+            if (creq_tmsk[i] === 1'b1) begin
+                baddr_2d_array[i] = new[this_max_elem_cnt];
+                bid_2d_array [i] = new[this_max_elem_cnt];
+                wstrb_2d_array[i] = new[this_max_elem_cnt];
+            end
+            else begin
+                baddr_2d_array[i] = new[0];
+                bid_2d_array [i] = new[0];
+                wstrb_2d_array[i] = new[0];
+            end
         end
 
         for (int tidx = 0; tidx < THD_N; tidx ++) begin: each_thread
-            // 1. calculate offset
             bit [MADDR_W-1:0] elem_unify_addr[];
             int eoff_val[];
+
+            if (creq_tmsk[tidx] !== 1'b1) begin
+                `uvm_info(get_type_name(), $sformatf("Skip inactive thread %0d", tidx), UVM_FULL)
+                continue;
+            end
+
+            // 1. calculate offset
             cal_unify_addr(tidx, elem_unify_addr, eoff_val);
 
             foreach(elem_unify_addr[eidx]) begin

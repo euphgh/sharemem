@@ -120,6 +120,7 @@ task shmins_unit_sequence::body();
                 creq_dtype inside {DTYP_16, DTYP_8};
                 creq_itype inside {LDST_S, LDST_V};
                 creq_space  == SPACE_LOC;
+                creq_tmsk   == '1;
                 foreach (elem_num[tidx]) { elem_num[tidx] == 16 };
                 foreach (creq_vmsk[tidx]) { creq_vmsk[tidx] == '1; }
             }

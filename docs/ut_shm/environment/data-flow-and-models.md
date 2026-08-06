@@ -17,9 +17,9 @@
 - 地址辅助字段 `offs_elem`、`elem_cnt_max` 和 helper function 用于约束及 reference
   计算，不是独立 DUT 端口。
 
-阶段 2 新增的 `creq_tmsk` 已开始加入该 class，但当前声明位宽与 interface 不一致，
-copy、factory field、driver 和 monitor 也尚未同步。局部声明不能作为完整 transaction
-支持，后续需要一次性贯通这些路径。
+阶段 2 新增的 `creq_tmsk` 使用 `THD_N` bit packed vector 表示。Driver 把它驱动到
+interface，monitor 采样并检查 X/Z 和全零值，transaction copy 保留该字段；reference
+只为严格等于 1 的 thread 建立派生地址和数据期望。
 
 ### 1.2 `shm_wtrans_item`
 
@@ -202,8 +202,8 @@ Reservation 到实际 MEM 的匹配键和 busy 规则由
 这里描述的是当前数据通路，不表示所有 DUT spec 都已实现。当前需要在后续组件修改中
 处理的边界包括：
 
-- `creq_tmsk` 已开始进入 tb top、interface 和 transaction，但声明位宽及 driver、
-  monitor、copy、reference 尚未贯通；
+- `creq_tmsk` 数据链已经贯通，但尚缺 inactive payload X/Z、稀疏 mask 和 DUT 输出
+  抑制的远端定向验证；
 - MEM read 服务尚未按 `FFD_CYC` 建立截止周期快照；
 - 各组件能避开初始 reset 期间的采样，但运行中 reset 对 reference item、scoreboard
   outstanding、memory read response 和 reservation scheduler state 的清理尚未统一；

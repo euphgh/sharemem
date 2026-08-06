@@ -59,7 +59,10 @@ SPACE_BLK 对非零 `warp_group` 的展开不完整，见 `REF-001`。
 当 `creq_info=='1` 表示 VTRANS 时，reference 把 16 个 thread、每个 thread 16 个
 element 视为 16×16 方阵。目标 `[thread][element]` 的数据来自转置前
 `creq_vdat[element][thread]` 对应位置；转置只改变数据选择，MADDR、offset、mask 之外
-的地址控制仍沿用普通 V2M 计算。`creq_tmsk` 加入后，VTRANS 必须要求全 1。
+的地址控制仍沿用普通 V2M 计算。VTRANS sequence 将 `creq_tmsk` 约束为全 1。
+
+普通 V2M/M2V 中，reference 为 inactive thread 创建空的地址、BANK 和 strobe 数组，
+因此不会解释该 thread 允许为 X/Z 的 payload，也不会生成 MEM/reservation 或写回期望。
 
 ## 6. M2V
 
@@ -106,7 +109,7 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 ## 11. 当前实现状态
 
 - `REF-001`：SPACE_BLK 映射遗漏非零 `warp_group`。
-- `SHMINS-001`：reference 尚未处理 `creq_tmsk`。
+- `SHMINS-001`：reference mask 已实现，等待远端 DUT/VCS 定向验证。
 - `SHMINS-002`：输入 transaction copy 会丢失关键字段。
 - `SHMINS-003`：生成约束可能给 reference 输入非法地址。
 - `ENV-001`：运行中 reset 未重建 `ref_banks` 或取消旧期望。

@@ -37,7 +37,7 @@
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
 |`COV-001`|P1|待实现|跨组件|ut_shm 尚未建立 functional coverage 模型|
-|`SHMINS-001`|P0|实现中|shmins agent|`creq_tmsk` 只有局部声明和接线，尚未贯通验证数据通路|
+|`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 数据通路和 reference mask 已实现，待远端验证|
 |`SHMINS-002`|P0|待实现|shmins transaction|`do_copy()` 遗漏或错误复制关键字段|
 |`SHMINS-003`|P0|待实现|shmins constraints|地址约束没有实现 12 KiB 编码和地址空洞规则|
 |`SHMINS-004`|P1|待实现|unit sequence|signedness/granularity 配置没有约束到 item|
@@ -91,11 +91,13 @@
 
 ### `SHMINS-001` `creq_tmsk` 数据通路
 
-- 现状：当前工作树已在 tb top、interface 和 transaction 中添加 `creq_tmsk`，公共
-  constraint 要求非全零；但 transaction 使用 `[THD_N]`，与 interface 的
-  `[THD_N-1:0]` 位宽不一致，copy、factory field、driver、monitor 和 reference 也未
-  贯通，VTRANS 没有约束为全 1。
-- 影响：无法生成或验证 inactive thread，VTRANS 也无法约束 `creq_tmsk=='1`。
+- 现状：tb top、interface、transaction、copy、factory field、driver 和 monitor 已贯通
+  `THD_N` bit `creq_tmsk`。普通请求约束非全零，VTRANS 约束全 1；monitor 报告 X/Z 和
+  全零值，reference 为非 active thread 创建空的地址/BANK/strobe 数组，不解释 inactive
+  payload，也不生成对应读写期望。本地 Slang 语义检查已通过，尚未在远端 DUT/VCS
+  环境执行定向场景。
+- 影响：代码路径已具备 mask 行为，但在稀疏 mask、inactive payload X/Z 和 DUT 意外
+  输出场景验证完成前，不能确认功能关闭。
 - 目标依据：[creq/ack 接口](spec/creq-ack-interface.md)。
 - 验收：覆盖非全零普通 mask、inactive thread X/Z、全零非法请求和 VTRANS 全 1。
 

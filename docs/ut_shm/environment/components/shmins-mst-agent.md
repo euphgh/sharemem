@@ -64,9 +64,8 @@ CREQ_SPACE
 ```
 
 枚举字符串通过 `shmins_enum_field.svh` 转换。普通请求从这些配置约束 item；VTRANS
-强制 V2M、SPACE_LOC、16 个 element 和全 element mask。`creq_tmsk` 已有初始 item
-声明和非全零约束，但尚未贯通驱动与监测，VTRANS 也没有约束为全 1，因此仍不能满足
-完整协议。
+强制 V2M、SPACE_LOC、16 个 element、全 element mask 和全 thread mask。普通请求的
+`creq_tmsk` 随机化约束为非全零，driver 和 monitor 已贯通该字段。
 
 ## 5. Driver 和 credit
 
@@ -128,15 +127,15 @@ plusarg 改变 transaction 数量和部分 creq 字段。当前没有独立的 c
 
 - Reference 的架构顺序以 monitor 发布的 creq 顺序为准；DUT 乱序调度不得改变最终
   memory 结果。
-- 完成 `creq_tmsk` 时必须统一 interface 与 transaction 位宽，并一次性更新 copy、
-  factory field、constraints、driver、monitor 和 reference。
+- 修改 `creq_tmsk` 时必须保持 interface、transaction、copy、factory field、constraints、
+  driver、monitor 和 reference 同步；inactive thread 不得产生 reference 期望。
 - 生成约束必须以地址 spec 为输入，并为 12 KiB 空洞提供定向测试。
 - Public sequence knob 必须实际约束 item；不能只解析 plusarg 而忽略字段。
 - Runtime reset 必须释放 credit wait、取消 ack timeout，并阻止 reset 前 item 继续驱动。
 
 ## 11. 当前实现状态
 
-- `SHMINS-001`：`creq_tmsk` 只有局部声明和接线，尚未贯通。
+- `SHMINS-001`：`creq_tmsk` 数据链已实现，等待远端 DUT/VCS 定向验证。
 - `SHMINS-002`：transaction copy 不完整。
 - `SHMINS-003`：地址约束与 12 KiB 地址模型不一致。
 - `SHMINS-004`：部分 unit-sequence 配置未作用到 item。

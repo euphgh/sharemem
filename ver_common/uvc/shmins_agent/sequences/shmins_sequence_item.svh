@@ -75,7 +75,7 @@ class shmins_sequence_item extends uvm_sequence_item;
   rand logic [7:0] creq_len[THD_N]  = '{THD_N{'0}}; // element total byte number length:0~32, align with data type
   rand byte elem_num[THD_N]         = '{THD_N{'0}};
   rand logic [VEC_BYTE_N-1:0] creq_vmsk[THD_N] = '{THD_N{'0}}; // element mask
-  rand logic [THD_N]          creq_tmsk = '{THD_N{'0}}; // thread mask, 1: active, 0: inactive
+  rand logic [THD_N-1:0] creq_tmsk = '0; // thread mask, 1: active, 0: inactive
   logic [VEC_W-1:0] creq_offs_packed[THD_N]; // packed form, filled in post_randomize
   rand logic [VEC_BYTE_N-1:0][7:0] creq_vdat[THD_N] = '{THD_N{'0}};
   rand int delay_cycle = '0;
@@ -315,6 +315,7 @@ class shmins_sequence_item extends uvm_sequence_item;
     this.wpid_width      = rhs_.wpid_width;
     this.creq_vaddr      = rhs_.creq_vaddr;
     this.creq_base       = rhs_.creq_base;
+    this.creq_tmsk       = rhs_.creq_tmsk;
     this.delay_cycle     = rhs_.delay_cycle;
 
     foreach(creq_prio[i]) begin
@@ -409,6 +410,7 @@ class shmins_sequence_item extends uvm_sequence_item;
   `uvm_field_int(creq_wpnum        , UVM_DEFAULT)
   `uvm_field_int(creq_vaddr        , UVM_DEFAULT)
   `uvm_field_int(creq_base         , UVM_DEFAULT)
+  `uvm_field_int(creq_tmsk         , UVM_DEFAULT)
   `uvm_field_int(delay_cycle       , UVM_DEFAULT)
 
   `uvm_field_sarray_int(creq_prio  , UVM_DEFAULT)

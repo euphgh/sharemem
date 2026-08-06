@@ -36,6 +36,7 @@ interface shmins_interface (
     output creq_len   ;
     output creq_typ   ;
     output creq_vaddr ;
+    output creq_tmsk  ;
     output creq_vmsk  ;
     output creq_base  ;
     output creq_offs  ;
@@ -57,6 +58,7 @@ interface shmins_interface (
     input  creq_len   ;
     input  creq_typ   ;
     input  creq_vaddr ;
+    input  creq_tmsk  ;
     input  creq_vmsk  ;
     input  creq_base  ;
     input  creq_offs  ;

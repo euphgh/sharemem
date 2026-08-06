@@ -98,6 +98,7 @@ task shmins_mst_driver::reset_signals();
     shmins_mst_vif.mst_cb.creq_len   <= '0;
     shmins_mst_vif.mst_cb.creq_typ   <= '0;
     shmins_mst_vif.mst_cb.creq_vaddr <= '0;
+    shmins_mst_vif.mst_cb.creq_tmsk  <= '0;
     shmins_mst_vif.mst_cb.creq_vmsk  <= '0;
     shmins_mst_vif.mst_cb.creq_base  <= '0;
     shmins_mst_vif.mst_cb.creq_offs  <= '0;
@@ -121,6 +122,7 @@ task shmins_mst_driver::drive_signals(shmins_sequence_item trans);
     shmins_mst_vif.mst_cb.creq_wpnum <= trans.creq_wpnum;
     shmins_mst_vif.mst_cb.creq_typ   <= trans.creq_typ ;
     shmins_mst_vif.mst_cb.creq_vaddr <= trans.creq_vaddr;
+    shmins_mst_vif.mst_cb.creq_tmsk  <= trans.creq_tmsk;
     shmins_mst_vif.mst_cb.creq_base  <= trans.creq_base ;
 
     for (int th_idx=0; th_idx<16; th_idx++) begin

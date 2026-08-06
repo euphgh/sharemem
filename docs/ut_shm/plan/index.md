@@ -47,7 +47,7 @@ Testpoint 只引用其中能为目标行为提供证据的检查，不复制实�
 - 当前没有任何有效 functional covergroup 或 coverpoint。所有 testpoint 的 functional
   coverage 状态均为“未实现”，case 或 checker 不能替代 coverage。
 - 当前 sequence 中有固定字段和不完整约束，例如普通请求固定 `creq_info==0`、
-  `creq_wpid==0`、`creq_tmsk` 尚未贯通，地址空洞约束也尚未完成。完整限制见
+  `creq_wpid==0`，`creq_tmsk` 缺少定向 case，地址空洞约束也尚未完成。完整限制见
   [Testcase 与 regression](testcases-and-regression.md#5-当前激励能力和限制)。
 
 ## 4. 阅读路径

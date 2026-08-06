@@ -157,9 +157,9 @@ sequence 默认值或 transaction 随机值。
 - direction、DTYPE、ATYPE_W、ITYPE 和 SPACE 等于 case 配置。
 
 `CREQ_ATYPE_S` 和 `CREQ_ATYPE_G` 虽能被解析到 sequence，但没有约束到 request，见
-`SHMINS-004`。`creq_tmsk` 已开始加入 transaction、interface 和 tb top，但声明位宽及
-copy、driver、monitor、reference 尚未贯通，见 `SHMINS-001`。地址约束仍使用部分 2
-的幂边界，不能保证排除 12 KiB 编码空洞，见 `SHMINS-003`。
+`SHMINS-004`。`creq_tmsk` 在普通请求中随机为非全零值，已贯通 driver、monitor 和
+reference，但没有 plusarg 或定向 case 控制其具体 pattern，见 `SHMINS-001`。地址约束
+仍使用部分 2 的幂边界，不能保证排除 12 KiB 编码空洞，见 `SHMINS-003`。
 
 `creq_inv_size`、`creq_ack_en`、priority、length、element mask、base、offset、vaddr 和
 wpnum 等字段主要依赖随机化。没有 functional coverage 时，单个 seed 不能证明这些
@@ -176,9 +176,8 @@ wpnum 等字段主要依赖随机化。没有 functional coverage 时，单个 s
 - 所有 element mask 为 1；
 - `creq_wpid==0`。
 
-Spec 还要求 `creq_tmsk=='1`。当前公共约束只有非全零要求，且信号数据通路尚未贯通，
-因此 VTRANS 仍不满足该规则。VTRANS 只有一个 case，DTYPE 和 ITYPE 由 seed 随机选择；
-没有 coverage 时，不能确认四个合法组合都出现。
+VTRANS sequence 已按 spec 约束 `creq_tmsk=='1`。VTRANS 仍只有一个 case，DTYPE 和
+ITYPE 由 seed 随机选择；没有 coverage 时，不能确认四个合法组合都出现。
 
 ### 5.4 `LDSTE_S + SPACE_WRP/SPACE_BLK`
 
