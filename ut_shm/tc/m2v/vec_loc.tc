@@ -1,0 +1,41 @@
+m2v_vec_loc_dtyp32_atyp32: m2v_unit_test
++CREQ_DTYPE=DTYP_32
++CREQ_ATYPE_W=ATYP_32
++CREQ_ITYPE=LDST_V
++CREQ_SPACE=SPACE_LOC
+endargs
+
+m2v_vec_loc_dtyp32_atyp16: m2v_unit_test
++CREQ_DTYPE=DTYP_32
++CREQ_ATYPE_W=ATYP_16
++CREQ_ITYPE=LDST_V
++CREQ_SPACE=SPACE_LOC
+endargs
+
+m2v_vec_loc_dtyp16_atyp32: m2v_unit_test
++CREQ_DTYPE=DTYP_16
++CREQ_ATYPE_W=ATYP_32
++CREQ_ITYPE=LDST_V
++CREQ_SPACE=SPACE_LOC
+endargs
+
+m2v_vec_loc_dtyp16_atyp16: m2v_unit_test
++CREQ_DTYPE=DTYP_16
++CREQ_ATYPE_W=ATYP_16
++CREQ_ITYPE=LDST_V
++CREQ_SPACE=SPACE_LOC
+endargs
+
+m2v_vec_loc_dtyp8_atyp32: m2v_unit_test
++CREQ_DTYPE=DTYP_8
++CREQ_ATYPE_W=ATYP_32
++CREQ_ITYPE=LDST_V
++CREQ_SPACE=SPACE_LOC
+endargs
+
+m2v_vec_loc_dtyp8_atyp16: m2v_unit_test
++CREQ_DTYPE=DTYP_8
++CREQ_ATYPE_W=ATYP_16
++CREQ_ITYPE=LDST_V
++CREQ_SPACE=SPACE_LOC
+endargs

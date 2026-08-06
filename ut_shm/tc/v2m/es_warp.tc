@@ -1,0 +1,41 @@
+v2m_es_warp_dtyp32_atyp32: v2m_unit_test
++CREQ_DTYPE=DTYP_32
++CREQ_ATYPE_W=ATYP_32
++CREQ_ITYPE=LDSTE_S
++CREQ_SPACE=SPACE_WRP
+endargs
+
+v2m_es_warp_dtyp32_atyp16: v2m_unit_test
++CREQ_DTYPE=DTYP_32
++CREQ_ATYPE_W=ATYP_16
++CREQ_ITYPE=LDSTE_S
++CREQ_SPACE=SPACE_WRP
+endargs
+
+v2m_es_warp_dtyp16_atyp32: v2m_unit_test
++CREQ_DTYPE=DTYP_16
++CREQ_ATYPE_W=ATYP_32
++CREQ_ITYPE=LDSTE_S
++CREQ_SPACE=SPACE_WRP
+endargs
+
+v2m_es_warp_dtyp16_atyp16: v2m_unit_test
++CREQ_DTYPE=DTYP_16
++CREQ_ATYPE_W=ATYP_16
++CREQ_ITYPE=LDSTE_S
++CREQ_SPACE=SPACE_WRP
+endargs
+
+v2m_es_warp_dtyp8_atyp32: v2m_unit_test
++CREQ_DTYPE=DTYP_8
++CREQ_ATYPE_W=ATYP_32
++CREQ_ITYPE=LDSTE_S
++CREQ_SPACE=SPACE_WRP
+endargs
+
+v2m_es_warp_dtyp8_atyp16: v2m_unit_test
++CREQ_DTYPE=DTYP_8
++CREQ_ATYPE_W=ATYP_16
++CREQ_ITYPE=LDSTE_S
++CREQ_SPACE=SPACE_WRP
+endargs
