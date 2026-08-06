@@ -236,13 +236,17 @@ credit/ack、运行中复位和 MEM/VLM reservation 的当前规则均已纳入�
 
 ### 阶段 3：迁移环境总体架构和数据模型
 
-- [ ] 编写 `environment/architecture.md`，覆盖 tb top、UVM hierarchy、interface、Config DB、TLM 和 phase。
-- [ ] 编写 `environment/data-flow-and-models.md`，覆盖 transaction、reference/implementation memory 和数据所有权。
-- [ ] 用当前 `shm_env_package.sv`、`shm_environment.svh`、filelist 和 tb top 校正旧文档。
-- [ ] 删除旧架构描述中的历史类名和已经废弃的数据通路。
+- [x] 编写 `environment/architecture.md`，覆盖 tb top、UVM hierarchy、interface、Config DB、TLM 和 phase。
+- [x] 编写 `environment/data-flow-and-models.md`，覆盖 transaction、reference/implementation memory 和数据所有权。
+- [x] 用当前 `shm_env_package.sv`、`shm_environment.svh`、filelist 和 tb top 校正旧文档。
+- [x] 删除旧架构描述中的历史类名和已经废弃的数据通路。
 
 验收条件：读者可以从顶层连接追踪一笔 creq 到 reference、scoreboard、MEM 和
 reservation 检查路径，但正文尚不依赖任何组件内部算法。
+
+状态：已于 2026-08-06 完成。正文以当前 source hierarchy 和连接为准，分别追踪
+V2M、M2V 与 reservation 数据流；阶段 2 已定义但尚未进入验证代码的行为只登记为
+实现边界，没有反向改写 DUT 协议。
 
 ### 阶段 4：逐个迁移组件文档
 
