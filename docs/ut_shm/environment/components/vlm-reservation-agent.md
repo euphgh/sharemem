@@ -49,6 +49,18 @@ agent.drive_busy()          驱动下一接口周期
 Checker 和 coverage 必须在 scheduler 更新前运行，否则采样到的 busy、record 和
 transaction cycle 不再属于同一状态。
 
+环境连接和周期调度异常使用以下 report ID：
+
+|位置|条件|Report ID|
+|---|---|---|
+|Agent/monitor 配置|缺少 config 或必要的 reservation/MEM interface|`VLM_RESERVATION_NO_CFG`、`VLM_RESERVATION_NO_VIF`|
+|External busy 配置|`EXTERNAL_BUSY_PERCENT` 超出 0～100；合法值也用同一 ID 打印最终配置|`VLM_RESERVATION_EXTERNAL_PERCENT`|
+|Monitor|开始采样时缺少 clock、reservation 或 MEM interface|`VLM_RESERVATION_MONITOR_NOT_READY`|
+|Agent|驱动 busy 时缺少 reservation interface 或 scheduler|`VLM_RESERVATION_AGENT_NOT_READY`|
+|Scheduler|transaction cycle 与共享 cycle 不同，或相邻 transaction 不连续|`VLM_RESERVATION_CYCLE_MISMATCH`、`VLM_RESERVATION_NONCONSECUTIVE_CYCLE`|
+
+这些错误表示 testbench 连接、配置或内部处理顺序损坏，不属于 DUT 协议失败。
+
 ## 4. Cycle transaction
 
 Monitor 把同一采样沿的接口值归一化到
@@ -76,6 +88,16 @@ busy 不会再触发 `VLM_RESERVATION_BUSY_XZ`。
 Reset 释放后，monitor 对 busy、reservation valid/address/delay 和 MEM valid/address
 执行四态检查。X/Z 会被报告，并在 two-state transaction 中归一化为 inactive/0，且
 设置 `input_error`，防止 checker 把不可靠的 observed busy 再报成普通 mismatch。
+
+|采样内容|触发条件|Error ID|
+|---|---|---|
+|Read/write busy bit|任意 delay、sub-bank 的值含 X/Z|`VLM_RESERVATION_BUSY_XZ`|
+|Read reservation request|`rreq` 含 X/Z|`VLM_RESERVATION_RREQ_XZ`|
+|Read reservation payload|active `raddr` 或 `rdly` 含 X/Z|`VLM_RESERVATION_RADDR_XZ`、`VLM_RESERVATION_RDLY_XZ`|
+|Write reservation request|任一 port 的 `wreq` 含 X/Z|`VLM_RESERVATION_WREQ_XZ`|
+|Write reservation payload|active `waddr` 或 `wdly` 含 X/Z|`VLM_RESERVATION_WADDR_XZ`、`VLM_RESERVATION_WDLY_XZ`|
+|MEM request valid|`mem_rvld` 或 `mem_wvld` 含 X/Z|`VLM_RESERVATION_MEM_RVLD_XZ`、`VLM_RESERVATION_MEM_WVLD_XZ`|
+|MEM request address|active `mem_raddr` 或 `mem_waddr` 含 X/Z|`VLM_RESERVATION_MEM_RADDR_XZ`、`VLM_RESERVATION_MEM_WADDR_XZ`|
 
 Monitor 只负责采样与归一化，不判断 reservation 是否能接纳，也不匹配 MEM 数据。
 

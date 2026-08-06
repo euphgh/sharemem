@@ -90,7 +90,7 @@ shm_unit_test
 |`TRANS_DELAY_MIN`|64|相邻 creq 的最小间隔|
 |`TRANS_DELAY_MAX`|128|相邻 creq 的最大间隔|
 |`TRANS_NUM`|16|每个 run 生成的 creq 数量|
-|`EXTERNAL_BUSY_PERCENT`|40|reservation scheduler 注入 external busy 的概率|
+|`EXTERNAL_BUSY_PERCENT`|10|reservation scheduler 注入 external busy 的概率|
 
 `v2m_unit_test` 追加 `CREQ_RW=SHM_V2M`，`m2v_unit_test` 追加
 `CREQ_RW=SHM_M2V`。`v2m_vtrans_test` 只追加 `VTRANS_EN=1`；VTRANS sequence 自身再约束
@@ -204,7 +204,7 @@ case_name : RUN=1 SEED=num
 1. 所列 case 必须存在于根 TC 能解析到的定义中。
 2. `RUN=n` 表示用不同随机 seed 执行同一个 case `n` 次。
 3. `SEED=num` 固定 seed；指定固定 seed 时 `RUN` 必须为 1。
-4. `INCLUDE: child.lst` 把子 regression 列表加入当前列表。
+4. 当前根列表使用 `INCLUDE : child.lst` 把子 regression 列表加入当前列表。
 
 固定 seed 适合复现失败，不应长期代替 functional coverage。增加 `RUN` 只能提高随机
 命中概率，也不能证明目标 bin 已经覆盖。

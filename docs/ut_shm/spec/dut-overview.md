@@ -74,6 +74,12 @@ ut_shm 从 `shm_util_package` 取值，并在 `shm_tb_top` 实例化 DUT 时显�
 |`VADDR_W`|14|线程本地地址编码宽度|
 |`MADDR_W`|21|统一地址宽度|
 |`BADDR_W`|17|BANK 内地址宽度，等于 `MADDR_W-$clog2(BANK_N)`|
+|`VEC_W`|512 bit|一条线程向量的数据位宽|
+|`VEC_BYTE_N`|64 Byte|一条线程向量包含的 byte 数|
+|`VLM_DATA_BIT_W`|256 bit|一次 VLM/MEM beat 的数据位宽|
+|`VLM_DATA_BYTE_W`|32 Byte|一次 VLM/MEM beat 包含的 byte 数|
+|`VLM_SUB_BANK_N`|4|每个 BANK 的 reservation sub-bank 数量|
+|`WRITE_PORT_N`|2|每个 BANK 的 write reservation port 数量|
 
 当前配置满足 `THD_N == BANK_N`。reference 的 SPACE_LOC 映射依赖这一关系，每个
 线程固定落到同编号 BANK。若要支持两者不相等，必须先重新定义映射契约。

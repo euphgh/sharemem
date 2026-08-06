@@ -2,7 +2,7 @@
 
 本文集中记录 ut_shm 验证环境与当前 DUT spec 之间的实现差异，以及组件开发中已经
 确认的问题。组件文档只引用这里的稳定问题 ID，不重复维护修复过程。当前清单于
-2026-08-06 按源码提交 `d931e6b` 复核；Phase 6 的 macOS/Ubuntu 构建结果见
+2026-08-06 按源码提交 `304c232` 复核；Phase 6 的 macOS/Ubuntu 构建结果见
 [实测快照](guide/ubuntu-vcs-check.md#6-2026-08-06-实测快照)，不作为闭环以下功能问题的证据。
 
 ## 1. 状态和优先级
@@ -83,7 +83,7 @@
 - 现状：driver、monitor 多数只等待初始 reset 释放；reference memory、scoreboard
   outstanding、MEM read fork 和 reservation scheduler 没有统一取消或重建。
 - 影响：运行中 reset 后可能继续兑现 reset 前事务，违反 DUT reset 契约。
-- 目标依据：[DUT 概览的 reset 行为](spec/dut-overview.md#6-reset-行为)。
+- 目标依据：[DUT 概览的 reset 行为](spec/dut-overview.md#6-复位边界)。
 - 验收：在 creq、reservation 和 MEM read 均有在途状态时拉低 reset；释放后不得出现
   旧 ack、旧 MEM response、旧 reservation 到期或旧 scoreboard timeout。
 
@@ -242,7 +242,7 @@
 - 现状：`shm_wtrans_item.generate_wdata()` 把 `warp_index` 直接设为 `warp_offs`，没有
   加入 `warp_group * creq_wpnum`。
 - 影响：非零 MADDR 高位对应的 SPACE_BLK BADDR 和 WARP 选择错误。
-- 目标依据：[地址模型的 SPACE_BLK 映射](spec/address-model.md#7-space_blk-映射)。
+- 目标依据：[地址模型的 SPACE_BLK 映射](spec/address-model.md#7-space_blk)。
 - 验收：使用非零 `warp_group`、`creq_wpnum` 为 1/2/4 的定向 reference 测试。
 
 ### `SCB-001` 来源相关 write alignment

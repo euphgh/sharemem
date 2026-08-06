@@ -16,7 +16,8 @@
 
 ## 文档迁移
 
-旧文档仍保存在 `docs-old/`，只作为迁移验收输入，不在其中继续维护设计正文。迁移的
-目录设计和执行顺序见[迁移计划](../docs-old/documentation-migration-plan.md)，已经
-确认的旧名称、失效路径和当前代码清单见
-[阶段 0 基线](../docs-old/documentation-migration-baseline.md)。
+旧文档仍保存在 `docs-old/`，只作为已完成迁移的一致性验收输入，不在其中继续维护
+设计正文。迁移阶段和最终核对结果见
+[迁移计划](../docs-old/documentation-migration-plan.md)，已经确认的旧名称、失效路径
+和代码基线见[阶段 0 基线](../docs-old/documentation-migration-baseline.md)。是否继续
+保留 `docs-old/` 由迁移验收后另行决定。
