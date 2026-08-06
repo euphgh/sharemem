@@ -1,0 +1,38 @@
+shm_unit_test
++TRANS_DELAY_MIN=64
++TRANS_DELAY_MAX=128
++TRANS_NUM=16
++EXTERNAL_BUSY_PERCENT=40
+endargs
+
+v2m_unit_test: shm_unit_test
++CREQ_RW=SHM_V2M
+endargs
+
+m2v_unit_test: shm_unit_test
++CREQ_RW=SHM_M2V
+endargs
+
+v2m_vtrans_test: shm_unit_test
++VTRANS_EN=1
+endargs
+
+INCLUDE: v2m/vec_loc.tc
+INCLUDE: v2m/es_loc.tc
+INCLUDE: v2m/ev_loc.tc
+INCLUDE: v2m/vec_warp.tc
+# not support for must addr conflict INCLUDE: v2m/es_warp.tc
+INCLUDE: v2m/ev_warp.tc
+INCLUDE: v2m/vec_blk.tc
+# not support for must addr conflict INCLUDE: v2m/es_blk.tc
+INCLUDE: v2m/ev_blk.tc
+
+INCLUDE: m2v/vec_loc.tc
+INCLUDE: m2v/es_loc.tc
+INCLUDE: m2v/ev_loc.tc
+INCLUDE: m2v/vec_warp.tc
+INCLUDE: m2v/es_warp.tc
+INCLUDE: m2v/ev_warp.tc
+INCLUDE: m2v/vec_blk.tc
+INCLUDE: m2v/es_blk.tc
+INCLUDE: m2v/ev_blk.tc

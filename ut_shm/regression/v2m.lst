@@ -1,0 +1,50 @@
+v2m_vec_loc_dtyp32_atyp32 : RUN=1
+v2m_vec_loc_dtyp32_atyp16 : RUN=1
+v2m_vec_loc_dtyp16_atyp32 : RUN=1
+v2m_vec_loc_dtyp16_atyp16 : RUN=1
+v2m_vec_loc_dtyp8_atyp32  : RUN=1
+v2m_vec_loc_dtyp8_atyp16  : RUN=1
+
+v2m_es_loc_dtyp32_atyp32  : RUN=1
+v2m_es_loc_dtyp32_atyp16  : RUN=1
+v2m_es_loc_dtyp16_atyp32  : RUN=1
+v2m_es_loc_dtyp16_atyp16  : RUN=1
+v2m_es_loc_dtyp8_atyp32   : RUN=1
+v2m_es_loc_dtyp8_atyp16   : RUN=1
+
+v2m_ev_loc_dtyp32_atyp32  : RUN=1
+v2m_ev_loc_dtyp32_atyp16  : RUN=1
+v2m_ev_loc_dtyp16_atyp32  : RUN=1
+v2m_ev_loc_dtyp16_atyp16  : RUN=1
+v2m_ev_loc_dtyp8_atyp32   : RUN=1
+v2m_ev_loc_dtyp8_atyp16   : RUN=1
+
+v2m_vec_warp_dtyp32_atyp32 : RUN=1
+v2m_vec_warp_dtyp32_atyp16 : RUN=1
+v2m_vec_warp_dtyp16_atyp32 : RUN=1
+v2m_vec_warp_dtyp16_atyp16 : RUN=1
+v2m_vec_warp_dtyp8_atyp32  : RUN=1
+v2m_vec_warp_dtyp8_atyp16  : RUN=1
+
+v2m_ev_warp_dtyp32_atyp32  : RUN=1
+v2m_ev_warp_dtyp32_atyp16  : RUN=1
+v2m_ev_warp_dtyp16_atyp32  : RUN=1
+v2m_ev_warp_dtyp16_atyp16  : RUN=1
+v2m_ev_warp_dtyp8_atyp32   : RUN=1
+v2m_ev_warp_dtyp8_atyp16   : RUN=1
+
+v2m_vec_blk_dtyp32_atyp32  : RUN=1
+v2m_vec_blk_dtyp32_atyp16  : RUN=1
+v2m_vec_blk_dtyp16_atyp32  : RUN=1
+v2m_vec_blk_dtyp16_atyp16  : RUN=1
+v2m_vec_blk_dtyp8_atyp32   : RUN=1
+v2m_vec_blk_dtyp8_atyp16   : RUN=1
+
+v2m_ev_blk_dtyp32_atyp32   : RUN=1
+v2m_ev_blk_dtyp32_atyp16   : RUN=1
+v2m_ev_blk_dtyp16_atyp32   : RUN=1
+v2m_ev_blk_dtyp16_atyp16   : RUN=1
+v2m_ev_blk_dtyp8_atyp32    : RUN=1
+v2m_ev_blk_dtyp8_atyp16    : RUN=1
+
+v2m_vtrans_test : RUN=1
