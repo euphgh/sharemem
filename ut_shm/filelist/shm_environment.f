@@ -1,6 +1,3 @@
-$RPU_DIR/RhCommon/usr_ref.sv
-//-f $RPU_DIR/RpuCommon/RpuCommon.f
-
 # Sub-Environment List Files
 +incdir+$AXI_VIP_DIR/src/sverilog/vcs
 +incdir+$AXI_VIP_DIR/src/include/sverilog
