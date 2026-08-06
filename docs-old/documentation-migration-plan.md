@@ -5,6 +5,9 @@
 和已经确认的接口行为为校正依据；执行时应先建立索引和目录骨架，再逐层迁移
 DUT 规范、环境架构、组件实现、验证计划和使用指南。
 
+阶段 0 的盘点结果记录在
+[`documentation-migration-baseline.md`](documentation-migration-baseline.md)。
+
 ## 1. 迁移目标
 
 迁移后的文档需要满足以下要求：
@@ -188,40 +191,48 @@ scheduler、checker、coverage、单周期顺序、配置和开发说明。
 
 ### 阶段 0：建立迁移基线
 
-- [ ] 保存 `docs-old/` 作为迁移期间的历史输入，不在旧正文中继续开发新内容。
-- [ ] 记录旧文档的章节清单，确保每个有效章节都有目标位置。
-- [ ] 搜索仓库中所有指向原 `docs/` 路径的链接，包括根 `AGENTS.md`。
-- [ ] 列出旧文档中的历史名称、失效路径、未完成方案和相互矛盾的状态说明。
-- [ ] 根据当前代码建立组件、package、filelist、interface 和 test 的实际清单。
+- [x] 保存 `docs-old/` 作为迁移期间的历史输入，不在旧正文中继续开发新内容。
+- [x] 记录旧文档的章节清单，确保每个有效章节都有目标位置。
+- [x] 搜索仓库中所有指向原 `docs/` 路径的链接，包括根 `AGENTS.md`。
+- [x] 列出旧文档中的历史名称、失效路径、未完成方案和相互矛盾的状态说明。
+- [x] 根据当前代码建立组件、package、filelist、interface 和 test 的实际清单。
 
 验收条件：旧内容有完整迁移映射，所有已知失效信息都有记录，不开始盲目复制正文。
 
+状态：已于 2026-08-05 基于提交 `aa5a2e3` 完成，详见阶段 0 迁移基线。
+
 ### 阶段 1：创建目录和索引骨架
 
-- [ ] 创建目标目录。
-- [ ] 创建 `docs/index.md`。
-- [ ] 创建 `docs/ut_shm/index.md`。
-- [ ] 创建 spec、environment、components、plan 和 guide 的目录索引。
-- [ ] 在索引中只链接已经存在且至少有有效首段说明的文档。
-- [ ] 在新路径稳定后更新根 `AGENTS.md` 的必读文档链接。
+- [x] 创建目标目录。
+- [x] 创建 `docs/index.md`。
+- [x] 创建 `docs/ut_shm/index.md`。
+- [x] 创建 spec、environment、components、plan 和 guide 的目录索引。
+- [x] 在索引中只链接已经存在且至少有有效首段说明的文档。
+- [x] 在新路径稳定后更新根 `AGENTS.md` 的必读文档链接。
 
 验收条件：从 `docs/index.md` 可以进入 ut_shm，每个目录的职责和阅读路径清晰，
 不存在指向空文件的有效链接。
+
+状态：已于 2026-08-06 完成。详细正文仍按后续阶段迁移，索引中的待迁移文件不
+提供链接。
 
 ### 阶段 2：迁移 DUT 规范
 
 按以下顺序迁移：
 
-1. `dut-overview.md`；
-2. `address-model.md`；
-3. `creq-ack-interface.md`；
-4. `mem-vlm-interface.md`。
+1. [x] `dut-overview.md`；
+2. [x] `address-model.md`；
+3. [x] `creq-ack-interface.md`；
+4. [x] `mem-vlm-interface.md`。
 
 每篇文档都需要与当前 RTL 端口、`shm_util_package`、interface 和已确认设计行为
 核对。不同文档之间使用链接，地址公式、接口规则和参数定义只保留一个详细版本。
 
 验收条件：读者不阅读 UVM 代码也能理解验证视角下的 DUT 行为；规范之间没有冲突，
 所有当前未定义行为均被明确列出。
+
+状态：已于 2026-08-06 完成。地址模型已按 12 KiB WARP 空间重新定义，VTRANS、
+credit/ack、运行中复位和 MEM/VLM reservation 的当前规则均已纳入新 spec。
 
 ### 阶段 3：迁移环境总体架构和数据模型
 
@@ -243,6 +254,10 @@ reservation 检查路径，但正文尚不依赖任何组件内部算法。
 4. `shm-reference.md`；
 5. `shm-scoreboard.md`；
 6. `vlm-reservation-agent.md`。
+
+已知实现差异：当前 `shm_wtrans_item.svh` 的 SPACE_BLK 映射没有正确处理非零
+`warp_group`，已有 case 因 MADDR 高位恒为 0 未暴露该问题。迁移 `shm-reference.md`
+时需要按新地址模型登记并修复，不能把现有 reference 写法反向解释成 DUT 规则。
 
 每篇组件文档至少覆盖：
 
