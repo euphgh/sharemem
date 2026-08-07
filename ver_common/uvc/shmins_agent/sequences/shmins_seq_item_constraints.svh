@@ -11,9 +11,7 @@ constraint c_elem_cnt_max {
   (creq_itype == LDSTE_V && creq_dtype == DTYP_32) -> elem_cnt_max == (VEC_W / 32);
   (creq_itype == LDSTE_V && creq_atype_w == ATYP_32) -> elem_cnt_max == (VEC_W / 32);
   (creq_itype == LDSTE_V && creq_dtype == DTYP_16 && creq_atype_w == ATYP_16) -> elem_cnt_max == (VEC_W / 16);
-  (creq_itype == LDSTE_V && creq_dtype == DTYP_16 && creq_atype_w == ATYP_8) -> elem_cnt_max == (VEC_W / 16);
   (creq_itype == LDSTE_V && creq_dtype == DTYP_8 && creq_atype_w == ATYP_16) -> elem_cnt_max == (VEC_W / 16);
-  (creq_itype == LDSTE_V && creq_dtype == DTYP_8 && creq_atype_w == ATYP_8) -> elem_cnt_max == (VEC_W / 8);
 
   // Other itypes: data_elem_max only
   (creq_itype != LDSTE_V && creq_dtype == DTYP_32) -> elem_cnt_max == (VEC_W / 32);
@@ -56,14 +54,6 @@ constraint c_offs_width {
     (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_16) -> (offs_elem[t][k] >= -65536 && offs_elem[t][k] <= 65534);
     (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_U && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_8) -> (offs_elem[t][k] >= 0 && offs_elem[t][k] <= 65535);
     (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_8) -> (offs_elem[t][k] >= -32768 && offs_elem[t][k] <= 32767);
-    (creq_atype_w == ATYP_8 && creq_atype_s == ATYP_U && creq_atype_g == GAUTO_1B) -> (offs_elem[t][k] >= 0 && offs_elem[t][k] <= 255);
-    (creq_atype_w == ATYP_8 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_1B) -> (offs_elem[t][k] >= -128 && offs_elem[t][k] <= 127);
-    (creq_atype_w == ATYP_8 && creq_atype_s == ATYP_U && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_32) -> (offs_elem[t][k] >= 0 && offs_elem[t][k] <= 1020);
-    (creq_atype_w == ATYP_8 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_32) -> (offs_elem[t][k] >= -512 && offs_elem[t][k] <= 508);
-    (creq_atype_w == ATYP_8 && creq_atype_s == ATYP_U && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_16) -> (offs_elem[t][k] >= 0 && offs_elem[t][k] <= 510);
-    (creq_atype_w == ATYP_8 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_16) -> (offs_elem[t][k] >= -256 && offs_elem[t][k] <= 254);
-    (creq_atype_w == ATYP_8 && creq_atype_s == ATYP_U && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_8) -> (offs_elem[t][k] >= 0 && offs_elem[t][k] <= 255);
-    (creq_atype_w == ATYP_8 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_8) -> (offs_elem[t][k] >= -128 && offs_elem[t][k] <= 127);
   }
 }
 
@@ -131,30 +121,44 @@ constraint c_addr_bound {
   }
 }
 
-// -- physical address < addr_max ----------------------------------
-constraint c_addr_offs_elem_ne {
-  // 1. 必须先确定 elem_cnt_max, 因为它决定了唯一性范围的难度
-  solve elem_cnt_max, creq_len, creq_itype, creq_space, creq_atype_s, creq_atype_g, creq_atype_w, creq_dtype  before offs_elem;
+// -- solver-order experiment --------------------------------------
+constraint c_offs_elem_solve_order {
+  solve elem_cnt_max, creq_len, creq_itype, creq_space,
+        creq_atype_s, creq_atype_g, creq_atype_w, creq_dtype
+      before offs_elem;
+}
 
+// -- LDSTE_V per-thread uniqueness in SPACE_LOC -------------------
+`ifndef SHMINS_DISABLE_SOLVER_COLLISION_CONSTRAINTS
+constraint c_ldste_v_loc_unique {
   if (creq_itype == LDSTE_V && creq_space == SPACE_LOC) {
     foreach(offs_elem[t]) {
       unique { offs_elem[t] };
     }
   }
+}
 
+// -- LDSTE_V global uniqueness in SPACE_WRP/SPACE_BLK -------------
+constraint c_ldste_v_global_unique {
   if (creq_itype == LDSTE_V && (creq_space == SPACE_WRP || creq_space == SPACE_BLK)) {
     unique { offs_elem };
   }
+}
 
-  if ((creq_itype == LDST_V || creq_itype == LDST_S) && (creq_space == SPACE_WRP || creq_space == SPACE_BLK)) {
+// -- LDST thread-range non-overlap in SPACE_WRP/SPACE_BLK ---------
+constraint c_ldst_thread_range_no_overlap {
+  if ((creq_itype == LDST_V || creq_itype == LDST_S) &&
+      (creq_space == SPACE_WRP || creq_space == SPACE_BLK)) {
     foreach (offs_elem[ti]) {
       foreach (offs_elem[tj]) {
         if (ti < tj) {
-          (offs_elem[ti][0] + creq_len[ti] <= offs_elem[tj][0]) || (offs_elem[tj][0] + creq_len[tj] <= offs_elem[ti][0]);
+          (offs_elem[ti][0] + creq_len[ti] <= offs_elem[tj][0]) ||
+          (offs_elem[tj][0] + creq_len[tj] <= offs_elem[ti][0]);
         }
       }
     }
   }
 }
+`endif // SHMINS_DISABLE_SOLVER_COLLISION_CONSTRAINTS
 
 `endif // INC_SHMINS_SEQ_ITEM_CONSTRAINTS_SVH

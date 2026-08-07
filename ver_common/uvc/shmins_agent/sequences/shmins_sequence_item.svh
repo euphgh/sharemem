@@ -19,8 +19,7 @@ typedef enum bit[1:0] {
 
 typedef enum bit[1:0] {
   ATYP_32 = 2'h0,
-  ATYP_16 = 2'h1,
-  ATYP_8  = 2'h2
+  ATYP_16 = 2'h1
 } creq_atype_w_e;
 
 typedef enum bit {
@@ -130,7 +129,6 @@ class shmins_sequence_item extends uvm_sequence_item;
     case (creq_atype_w)
       ATYP_32: return 32;
       ATYP_16: return 16;
-      ATYP_8 : return 8;
       default: return 32;
     endcase
   endfunction
@@ -260,7 +258,6 @@ class shmins_sequence_item extends uvm_sequence_item;
         case (obw)
           32: creq_offs_packed[t][k*32 +: 32] = raw_bits[31:0];
           16: creq_offs_packed[t][k*16 +: 16] = raw_bits[15:0];
-          8:  creq_offs_packed[t][k*8  +:  8] = raw_bits[7:0];
           default: ;
         endcase
       end

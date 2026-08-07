@@ -72,7 +72,6 @@
         case (e)
             ATYP_32: return "ATYP_32";
             ATYP_16: return "ATYP_16";
-            ATYP_8: return "ATYP_8";
             default: return "UNKNOWN";
         endcase
     endfunction
@@ -81,8 +80,7 @@
         string s_upper;
         s_upper = str_toupper(s);
         if (s_upper == "ATYP_32") return ATYP_32;
-        else if (s_upper == "ATYP_16") return ATYP_16;
-        else return ATYP_8;
+        else return ATYP_16;
     endfunction
 
     function automatic bit value_creq_atype_w_e_plusargs(string name, ref creq_atype_w_e var_ref);
