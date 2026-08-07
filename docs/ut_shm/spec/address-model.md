@@ -74,7 +74,7 @@ creq payload
 
 ### 3.2 Offset 解码
 
-`creq_atype_w` 选择 offset 元素宽度 32、16 或 8 bit。每个 raw offset 先按
+`creq_atype_w` 选择 offset 元素宽度 32 或 16 bit；8-bit offset 不受支持。每个 raw offset 先按
 `creq_atype_s` 做符号扩展或零扩展；当 `creq_atype_g==GAUTO_DW` 时，再乘以数据
 元素字节数 `D`。`GAUTO_1B` 不缩放。
 

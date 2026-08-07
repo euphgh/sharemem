@@ -65,7 +65,7 @@ ack。协议不规定 credit 的最晚归还周期。
 |---|---|
 |`creq_rw`|`SHM_V2M=0`，`SHM_M2V=1`|
 |`creq_dtype`|`DTYP_32=0`，`DTYP_16=1`，`DTYP_8=2`|
-|`creq_atype_w`|`ATYP_32=0`，`ATYP_16=1`，`ATYP_8=2`|
+|`creq_atype_w`|`ATYP_32=0`，`ATYP_16=1`；其他编码不受支持|
 |`creq_atype_s`|`ATYP_U=0`，`ATYP_S=1`|
 |`creq_atype_g`|`GAUTO_1B=0`，`GAUTO_DW=1`|
 |`creq_itype`|`LDST_S=0`，`LDST_V=1`，`LDSTE_S=2`，`LDSTE_V=3`|

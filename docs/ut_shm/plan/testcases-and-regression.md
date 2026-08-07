@@ -119,7 +119,6 @@ V2M 和 M2V 各 54 个。
 当前普通矩阵没有覆盖：
 
 - `LDST_S`；`vec` 当前只表示 `LDST_V`；
-- `ATYP_8`；
 - `ATYP_S` 与 `GAUTO_DW` 的定向组合；
 - interleave size、WARP ID、WARP group、thread mask、ack 和 priority 的定向取值。
 

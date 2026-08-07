@@ -3,7 +3,11 @@ package shmins_random_benchmark_pkg;
   import shm_util_package::*;
 
   `include "uvm_macros.svh"
+`ifdef SHMINS_USE_POST_RANDOMIZE_ITEM
+  `include "shmins_post_randomize_sequence_item.svh"
+`else
   `include "shmins_sequence_item.svh"
+`endif
 
   import "DPI-C" pure function longint shmins_benchmark_monotonic_ns();
 
@@ -22,7 +26,26 @@ package shmins_random_benchmark_pkg;
     int unsigned warmup_iterations = 2;
 
     // Fixed branch selection used by each randomize attempt.
-    string profile = "RANDOM";
+    string profile = "LDSTE_V_BLK";
+
+    // Compile-time-selected transaction implementation reported in results.
+`ifdef SHMINS_USE_POST_RANDOMIZE_ITEM
+    string item_implementation = "POST_RANDOMIZE";
+`else
+    string item_implementation = "ORIGINAL";
+`endif
+
+    // Fixed instruction direction used by non-RANDOM profiles.
+    string rw = "V2M";
+
+    // Allows optional uniqueness checks for M2V. V2M always checks uniqueness.
+    bit m2v_unique_enable = 1'b0;
+
+    // Decoded profile fields used by the inline randomize constraint.
+    bit random_profile;
+    creq_rw_e benchmark_rw;
+    creq_itype_e benchmark_itype;
+    creq_space_e benchmark_space;
 
     // Constraint subset used to isolate expensive address and uniqueness logic.
     string constraint_set = "ALL";
@@ -101,48 +124,79 @@ package shmins_random_benchmark_pkg;
   function void shmins_random_benchmark_test::build_phase(uvm_phase phase);
     int unsigned reuse_item_value;
     int unsigned suppress_item_warnings_value;
+    int unsigned m2v_unique_value;
 
     super.build_phase(phase);
 
     reuse_item_value = reuse_item;
     suppress_item_warnings_value = suppress_item_warnings;
+    m2v_unique_value = m2v_unique_enable;
     void'($value$plusargs("BENCH_ITERATIONS=%d", iterations));
     void'($value$plusargs("BENCH_WARMUP=%d", warmup_iterations));
     void'($value$plusargs("BENCH_PROFILE=%s", profile));
+    void'($value$plusargs("BENCH_RW=%s", rw));
+    void'($value$plusargs("M2V_UNIQUE=%d", m2v_unique_value));
     void'($value$plusargs("BENCH_CONSTRAINT_SET=%s", constraint_set));
     void'($value$plusargs("BENCH_REUSE_ITEM=%d", reuse_item_value));
     void'($value$plusargs("BENCH_SUPPRESS_ITEM_WARNINGS=%d", suppress_item_warnings_value));
     reuse_item = reuse_item_value != 0;
     suppress_item_warnings = suppress_item_warnings_value != 0;
+    m2v_unique_enable = m2v_unique_value != 0;
 
     profile = str_toupper(profile);
+    rw = str_toupper(rw);
     constraint_set = str_toupper(constraint_set);
 
     if (iterations == 0) begin
       `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG", "BENCH_ITERATIONS must be greater than zero")
     end
 
+    random_profile = 1'b0;
     case (profile)
-      "RANDOM",
-      "LDST_V_LOC",
-      "LDST_V_WRP",
-      "LDST_V_BLK",
-      "LDSTE_V_LOC",
-      "LDSTE_V_WRP",
-      "LDSTE_V_BLK": ;
+      "RANDOM": random_profile = 1'b1;
+      "LDST_S_LOC":  begin benchmark_itype = LDST_S;  benchmark_space = SPACE_LOC; end
+      "LDST_S_WRP":  begin benchmark_itype = LDST_S;  benchmark_space = SPACE_WRP; end
+      "LDST_S_BLK":  begin benchmark_itype = LDST_S;  benchmark_space = SPACE_BLK; end
+      "LDST_V_LOC":  begin benchmark_itype = LDST_V;  benchmark_space = SPACE_LOC; end
+      "LDST_V_WRP":  begin benchmark_itype = LDST_V;  benchmark_space = SPACE_WRP; end
+      "LDST_V_BLK":  begin benchmark_itype = LDST_V;  benchmark_space = SPACE_BLK; end
+      "LDSTE_S_LOC": begin benchmark_itype = LDSTE_S; benchmark_space = SPACE_LOC; end
+      "LDSTE_S_WRP": begin benchmark_itype = LDSTE_S; benchmark_space = SPACE_WRP; end
+      "LDSTE_S_BLK": begin benchmark_itype = LDSTE_S; benchmark_space = SPACE_BLK; end
+      "LDSTE_V_LOC": begin benchmark_itype = LDSTE_V; benchmark_space = SPACE_LOC; end
+      "LDSTE_V_WRP": begin benchmark_itype = LDSTE_V; benchmark_space = SPACE_WRP; end
+      "LDSTE_V_BLK": begin benchmark_itype = LDSTE_V; benchmark_space = SPACE_BLK; end
       default: begin
         `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
                    $sformatf("unsupported BENCH_PROFILE=%s", profile))
       end
     endcase
 
+    case (rw)
+      "V2M": benchmark_rw = SHM_V2M;
+      "M2V": benchmark_rw = SHM_M2V;
+      default: begin
+        `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                   $sformatf("unsupported BENCH_RW=%s", rw))
+      end
+    endcase
+
     case (constraint_set)
-      "ALL", "NO_ADDR_BOUND", "NO_UNIQUENESS", "CORE": ;
+      "ALL",
+      "NO_ADDR_BOUND",
+      "NO_SOLVE_ORDER",
+      "NO_LDSTE_LOC_UNIQUE",
+      "NO_LDSTE_GLOBAL_UNIQUE",
+      "NO_LDST_RANGE",
+      "NO_COLLISION",
+      "NO_UNIQUENESS",
+      "CORE": ;
       default: begin
         `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
                    $sformatf("unsupported BENCH_CONSTRAINT_SET=%s", constraint_set))
       end
     endcase
+
   endfunction : build_phase
 
   task shmins_random_benchmark_test::run_phase(uvm_phase phase);
@@ -150,7 +204,8 @@ package shmins_random_benchmark_pkg;
     longint start_ns;
     longint stop_ns;
     longint elapsed_ns;
-    real ns_per_attempt;
+    real elapsed_ms;
+    real ms_per_attempt;
     real attempts_per_second;
 
     phase.raise_objection(this);
@@ -164,9 +219,10 @@ package shmins_random_benchmark_pkg;
     end
 
     `uvm_info("SHMINS_RANDOM_BENCH_START",
-              $sformatf({"profile=%s constraint_set=%s warmup=%0d iterations=%0d ",
-                         "reuse_item=%0d suppress_item_warnings=%0d"},
-                        profile, constraint_set, warmup_iterations, iterations,
+              $sformatf({"profile=%s rw=%s item_impl=%s m2v_unique=%0d constraint_set=%s ",
+                         "warmup=%0d iterations=%0d reuse_item=%0d suppress_item_warnings=%0d"},
+                        profile, rw, item_implementation, m2v_unique_enable, constraint_set,
+                        warmup_iterations, iterations,
                         reuse_item, suppress_item_warnings),
               UVM_NONE)
 
@@ -214,17 +270,22 @@ package shmins_random_benchmark_pkg;
     end
 
     elapsed_ns = stop_ns - start_ns;
-    ns_per_attempt = real'(elapsed_ns) / real'(iterations);
+    elapsed_ms = real'(elapsed_ns) / 1.0e6;
+    ms_per_attempt = elapsed_ms / real'(iterations);
     attempts_per_second = (elapsed_ns == 0)
         ? 0.0
         : real'(iterations) * 1.0e9 / real'(elapsed_ns);
 
     `uvm_info("SHMINS_RANDOM_BENCH_RESULT",
-              $sformatf({"profile=%s constraint_set=%s iterations=%0d successes=%0d failures=%0d ",
-                         "elapsed_ns=%0d ns_per_attempt=%0.3f attempts_per_second=%0.3f ",
+              $sformatf({"profile=%s item_impl=%s constraint_set=%s iterations=%0d ",
+                         "successes=%0d failures=%0d ",
+                         "rw=%s m2v_unique=%0d elapsed_ms=%0.6f ms_per_attempt=%0.6f ",
+                         "attempts_per_second=%0.3f ",
                          "reuse_item=%0d checksum=0x%016h"},
-                        profile, constraint_set, iterations, success_count, failure_count,
-                        elapsed_ns, ns_per_attempt, attempts_per_second, reuse_item, checksum),
+                        profile, item_implementation, constraint_set,
+                        iterations, success_count, failure_count,
+                        rw, m2v_unique_enable, elapsed_ms, ms_per_attempt,
+                        attempts_per_second, reuse_item, checksum),
               UVM_NONE)
 
     if (failure_count != 0) begin
@@ -239,88 +300,64 @@ package shmins_random_benchmark_pkg;
   function shmins_sequence_item shmins_random_benchmark_test::create_item(string item_name);
     shmins_sequence_item item;
 
-    item = new(item_name);
+    item = shmins_sequence_item::type_id::create(item_name);
+`ifdef SHMINS_USE_POST_RANDOMIZE_ITEM
+    item.m2v_unique_enable = m2v_unique_enable;
+`endif
     if (constraint_set inside {"NO_ADDR_BOUND", "CORE"}) begin
       item.c_addr_bound.constraint_mode(0);
     end
-    if (constraint_set inside {"NO_UNIQUENESS", "CORE"}) begin
-      item.c_addr_offs_elem_ne.constraint_mode(0);
+    if (constraint_set inside {"NO_SOLVE_ORDER", "NO_UNIQUENESS", "CORE"}) begin
+      item.c_offs_elem_solve_order.constraint_mode(0);
+    end
+    if (constraint_set inside {"NO_LDSTE_LOC_UNIQUE", "NO_COLLISION", "NO_UNIQUENESS", "CORE"}) begin
+      item.c_ldste_v_loc_unique.constraint_mode(0);
+    end
+    if (constraint_set inside {"NO_LDSTE_GLOBAL_UNIQUE", "NO_COLLISION", "NO_UNIQUENESS", "CORE"}) begin
+      item.c_ldste_v_global_unique.constraint_mode(0);
+    end
+    if (constraint_set inside {"NO_LDST_RANGE", "NO_COLLISION", "NO_UNIQUENESS", "CORE"}) begin
+      item.c_ldst_thread_range_no_overlap.constraint_mode(0);
     end
 
     return item;
   endfunction : create_item
 
   function bit shmins_random_benchmark_test::randomize_item(shmins_sequence_item item);
-    case (profile)
-      "RANDOM": begin
-        return item.randomize();
-      end
-      "LDST_V_LOC": begin
-        return item.randomize() with {
-          creq_dtype == DTYP_8;
-          creq_atype_w == ATYP_16;
-          creq_atype_s == ATYP_U;
-          creq_atype_g == GAUTO_1B;
-          creq_itype == LDST_V;
-          creq_space == SPACE_LOC;
-        };
-      end
-      "LDST_V_WRP": begin
-        return item.randomize() with {
-          creq_dtype == DTYP_8;
-          creq_atype_w == ATYP_16;
-          creq_atype_s == ATYP_U;
-          creq_atype_g == GAUTO_1B;
-          creq_itype == LDST_V;
-          creq_space == SPACE_WRP;
-        };
-      end
-      "LDST_V_BLK": begin
-        return item.randomize() with {
-          creq_dtype == DTYP_8;
-          creq_atype_w == ATYP_16;
-          creq_atype_s == ATYP_U;
-          creq_atype_g == GAUTO_1B;
-          creq_itype == LDST_V;
-          creq_space == SPACE_BLK;
-        };
-      end
-      "LDSTE_V_LOC": begin
-        return item.randomize() with {
-          creq_dtype == DTYP_8;
-          creq_atype_w == ATYP_16;
-          creq_atype_s == ATYP_U;
-          creq_atype_g == GAUTO_1B;
-          creq_itype == LDSTE_V;
-          creq_space == SPACE_LOC;
-        };
-      end
-      "LDSTE_V_WRP": begin
-        return item.randomize() with {
-          creq_dtype == DTYP_8;
-          creq_atype_w == ATYP_16;
-          creq_atype_s == ATYP_U;
-          creq_atype_g == GAUTO_1B;
-          creq_itype == LDSTE_V;
-          creq_space == SPACE_WRP;
-        };
-      end
-      "LDSTE_V_BLK": begin
-        return item.randomize() with {
-          creq_dtype == DTYP_8;
-          creq_atype_w == ATYP_16;
-          creq_atype_s == ATYP_U;
-          creq_atype_g == GAUTO_1B;
-          creq_itype == LDSTE_V;
-          creq_space == SPACE_BLK;
-        };
-      end
-      default: begin
-        `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
-                   $sformatf("unsupported BENCH_PROFILE=%s", profile))
-        return 1'b0;
-      end
-    endcase
+    if (random_profile) begin
+      return item.randomize() with {
+        creq_rw == local::benchmark_rw;
+      };
+    end
+
+    return item.randomize() with {
+      creq_rw == local::benchmark_rw;
+      creq_dtype == DTYP_8;
+      creq_atype_w == ATYP_16;
+      creq_atype_s == ATYP_U;
+      creq_atype_g == GAUTO_1B;
+      creq_itype == local::benchmark_itype;
+      creq_space == local::benchmark_space;
+      if (local::benchmark_space == SPACE_LOC) {
+        creq_base < (1 << VADDR_W) - 4096;
+      } else if (local::benchmark_space == SPACE_WRP) {
+        creq_base < (1 << BADDR_W) - 4096;
+      } else if (local::benchmark_space == SPACE_BLK) {
+        creq_wpid == 0;
+        if (creq_inv_size <= 10) {
+          creq_base < WARP_STEP * BANK_N * creq_wpnum - 4096;
+        } else {
+          creq_base < 16 * 1024 * BANK_N * creq_wpnum - 4096;
+        }
+      }
+      if (local::benchmark_rw == SHM_V2M &&
+          local::benchmark_itype == LDSTE_S &&
+          local::benchmark_space inside {SPACE_WRP, SPACE_BLK}) {
+        foreach (creq_vmsk[thread_idx]) {
+          creq_tmsk[thread_idx] -> creq_vmsk[thread_idx][0] == 1'b0;
+        }
+      }
+    };
   endfunction : randomize_item
 
   function void shmins_random_benchmark_test::update_checksum(shmins_sequence_item item);

@@ -10,19 +10,23 @@ usage() {
   scripts/ubuntu/run_shmins_random_benchmark.sh <目标> [simv 参数...]
 
 目标：
-  compile  编译最小 UVM benchmark
-  run      必要时先编译，再运行一次；后续参数原样传给 simv
-  sweep    依次运行 README 中的七个 profile；后续参数原样传给每次 simv
+  compile  编译 BENCH_IMPL 选择的最小 UVM benchmark
+  run      必要时先编译 BENCH_IMPL，再运行一次
+  compare  分别编译并运行 original 与 post_randomize
+  sweep    用 BENCH_IMPL 和 LDSTE_V_BLK 运行 constraint 拆分实验
   clean    删除本 example 的 build 目录
 
 环境变量：
-  VCS             VCS 可执行文件，默认 vcs
-  UVM_VERSION     VCS -ntb_opts 使用的 UVM 版本，默认 uvm-1.2
-  VCS_USER_OPTS   追加到 VCS 编译命令的空白分隔参数
-  BENCH_ITERATIONS  sweep 每个 profile 的次数，默认 10
-  BENCH_WARMUP      sweep 每个 profile 的预热次数，默认 2
+  BENCH_IMPL       compile、run、sweep 使用的实现，默认 original
+                   可选 original 或 post_randomize
+  VCS              VCS 可执行文件，默认 vcs
+  UVM_VERSION      VCS -ntb_opts 使用的 UVM 版本，默认 uvm-1.2
+  VCS_USER_OPTS    追加到 VCS 编译命令的空白分隔参数
+  BENCH_ITERATIONS compare、sweep 的迭代次数，默认 10
+  BENCH_WARMUP     compare、sweep 的预热次数，默认 2
 
-所有生成文件写入 examples/shmins_random_benchmark/build/。
+两个实现使用独立 filelist 和 build/<implementation>/simv，不能在同一次
+编译中同时定义 shmins_sequence_item。
 EOF
 }
 
@@ -39,7 +43,7 @@ case "$target" in
         usage
         exit 0
         ;;
-    compile | run | sweep | clean)
+    compile | run | compare | sweep | clean)
         ;;
     *)
         printf '错误：未知目标：%s\n' "$target" >&2
@@ -51,28 +55,33 @@ esac
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(git -C "$script_dir/../.." rev-parse --show-toplevel)"
 example_dir="$repo_root/examples/shmins_random_benchmark"
-build_dir="$example_dir/build"
+build_root="$example_dir/build"
 utility_dir="$repo_root/ut_shm/util"
 sequence_dir="$repo_root/ver_common/uvc/shmins_agent/sequences"
 
+selected_impl="${BENCH_IMPL:-original}"
 vcs_bin="${VCS:-vcs}"
 uvm_version="${UVM_VERSION:-uvm-1.2}"
-simv="$build_dir/simv"
 time_bin="/usr/bin/time"
 vcs_user_opts=()
-benchmark_sources=(
-    "$utility_dir/shm_util_package.sv"
-    "$utility_dir/bit_rt_range.svh"
-    "$sequence_dir/shmins_sequence_item.svh"
-    "$sequence_dir/shmins_seq_item_constraints.svh"
-    "$example_dir/shmins_random_benchmark_pkg.sv"
-    "$example_dir/tb.sv"
-    "$example_dir/benchmark_clock.c"
-)
 
 if [[ -n "${VCS_USER_OPTS:-}" ]]; then
     read -r -a vcs_user_opts <<<"$VCS_USER_OPTS"
 fi
+
+validate_implementation() {
+    local implementation="$1"
+
+    case "$implementation" in
+        original | post_randomize)
+            ;;
+        *)
+            printf '错误：BENCH_IMPL 必须是 original 或 post_randomize：%s\n' \
+                "$implementation" >&2
+            exit 2
+            ;;
+    esac
+}
 
 require_file() {
     local path="$1"
@@ -83,31 +92,53 @@ require_file() {
     fi
 }
 
+collect_sources() {
+    local implementation="$1"
+
+    benchmark_sources=(
+        "$utility_dir/shm_util_package.sv"
+        "$utility_dir/bit_rt_range.svh"
+        "$sequence_dir/shmins_seq_item_constraints.svh"
+        "$example_dir/shmins_random_benchmark_pkg.sv"
+        "$example_dir/tb.sv"
+        "$example_dir/benchmark_clock.c"
+        "$example_dir/${implementation}.f"
+    )
+    if [[ "$implementation" == "original" ]]; then
+        benchmark_sources+=("$sequence_dir/shmins_sequence_item.svh")
+    else
+        benchmark_sources+=("$sequence_dir/shmins_post_randomize_sequence_item.svh")
+    fi
+}
+
 compile_benchmark() {
+    local implementation="$1"
+    local build_dir="$build_root/$implementation"
+    local filelist="$example_dir/${implementation}.f"
+    local simv="$build_dir/simv"
+
+    validate_implementation "$implementation"
     if ! command -v -- "$vcs_bin" >/dev/null 2>&1; then
         printf '错误：找不到 VCS 可执行文件：%s\n' "$vcs_bin" >&2
         exit 2
     fi
 
+    collect_sources "$implementation"
     for source_file in "${benchmark_sources[@]}"; do
         require_file "$source_file"
     done
     mkdir -p -- "$build_dir"
 
-    printf 'Ubuntu VCS：编译 shmins randomize benchmark\n'
+    printf 'Ubuntu VCS：编译 %s shmins randomize benchmark\n' "$implementation"
     (
+        export RPU_DIR="$repo_root"
         cd -- "$build_dir"
         "$vcs_bin" \
             -full64 \
             -sverilog \
             -ntb_opts "$uvm_version" \
             -timescale=1ns/1ps \
-            "+incdir+$utility_dir" \
-            "+incdir+$sequence_dir" \
-            "$utility_dir/shm_util_package.sv" \
-            "$example_dir/shmins_random_benchmark_pkg.sv" \
-            "$example_dir/tb.sv" \
-            "$example_dir/benchmark_clock.c" \
+            -f "$filelist" \
             "${vcs_user_opts[@]}" \
             -top shmins_random_benchmark_tb \
             -o "$simv" \
@@ -116,34 +147,40 @@ compile_benchmark() {
 }
 
 ensure_compiled() {
-    local source_file
+    local implementation="$1"
+    local simv="$build_root/$implementation/simv"
 
+    collect_sources "$implementation"
     if [[ ! -x "$simv" ]]; then
-        compile_benchmark
+        compile_benchmark "$implementation"
         return
     fi
 
     for source_file in "${benchmark_sources[@]}"; do
         require_file "$source_file"
         if [[ "$source_file" -nt "$simv" ]]; then
-            printf '检测到 benchmark 源码更新，重新编译\n'
-            compile_benchmark
+            printf '检测到 %s benchmark 源码更新，重新编译\n' "$implementation"
+            compile_benchmark "$implementation"
             return
         fi
     done
 }
 
 run_benchmark() {
-    local log_name="$1"
-    shift
+    local implementation="$1"
+    local log_name="$2"
+    local build_dir="$build_root/$implementation"
+    local simv="$build_dir/simv"
+    shift 2
 
-    ensure_compiled
+    validate_implementation "$implementation"
+    ensure_compiled "$implementation"
     if [[ ! -x "$time_bin" ]]; then
         printf '错误：缺少计时工具：%s\n' "$time_bin" >&2
         exit 2
     fi
 
-    printf 'Ubuntu VCS：运行 shmins randomize benchmark\n'
+    printf 'Ubuntu VCS：运行 %s shmins randomize benchmark\n' "$implementation"
     (
         cd -- "$build_dir"
         "$time_bin" -p "$simv" \
@@ -153,21 +190,38 @@ run_benchmark() {
 }
 
 run_sweep() {
+    local implementation="$1"
+    shift
     local iterations="${BENCH_ITERATIONS:-10}"
     local warmup="${BENCH_WARMUP:-2}"
-    local profiles=(
-        RANDOM
-        LDST_V_LOC
-        LDST_V_WRP
-        LDST_V_BLK
-        LDSTE_V_LOC
-        LDSTE_V_WRP
-        LDSTE_V_BLK
+    local constraint_sets=(
+        ALL
+        NO_SOLVE_ORDER
+        NO_LDSTE_GLOBAL_UNIQUE
+        NO_COLLISION
+        NO_UNIQUENESS
+        NO_ADDR_BOUND
+        CORE
     )
 
-    for profile in "${profiles[@]}"; do
-        run_benchmark "${profile,,}.log" \
-            "+BENCH_PROFILE=$profile" \
+    for constraint_set in "${constraint_sets[@]}"; do
+        run_benchmark "$implementation" "ldste_v_blk_${constraint_set,,}.log" \
+            +BENCH_PROFILE=LDSTE_V_BLK \
+            "+BENCH_CONSTRAINT_SET=$constraint_set" \
+            "+BENCH_ITERATIONS=$iterations" \
+            "+BENCH_WARMUP=$warmup" \
+            "$@"
+    done
+}
+
+run_compare() {
+    local iterations="${BENCH_ITERATIONS:-10}"
+    local warmup="${BENCH_WARMUP:-2}"
+
+    for implementation in original post_randomize; do
+        run_benchmark "$implementation" "compare.log" \
+            +BENCH_PROFILE=LDSTE_V_BLK \
+            +BENCH_CONSTRAINT_SET=ALL \
             "+BENCH_ITERATIONS=$iterations" \
             "+BENCH_WARMUP=$warmup" \
             "$@"
@@ -175,19 +229,23 @@ run_sweep() {
 }
 
 clean_build() {
-    rm -rf -- "$build_dir"
-    printf '已删除：%s\n' "$build_dir"
+    rm -rf -- "$build_root"
+    printf '已删除：%s\n' "$build_root"
 }
 
+validate_implementation "$selected_impl"
 case "$target" in
     compile)
-        compile_benchmark
+        compile_benchmark "$selected_impl"
         ;;
     run)
-        run_benchmark "run.log" "$@"
+        run_benchmark "$selected_impl" "run.log" "$@"
+        ;;
+    compare)
+        run_compare "$@"
         ;;
     sweep)
-        run_sweep "$@"
+        run_sweep "$selected_impl" "$@"
         ;;
     clean)
         clean_build

@@ -80,7 +80,7 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh compile +define+MY_DEBUG
 |`VTRANS_EN`|`0`/`1`|`shmins_unit_sequence`|启用 VTRANS 专用 inline constraint|
 |`CREQ_RW`|`SHM_V2M`、`SHM_M2V`|`shmins_unit_sequence`|普通请求方向|
 |`CREQ_DTYPE`|`DTYP_32`、`DTYP_16`、`DTYP_8`|`shmins_unit_sequence`|普通请求数据元素宽度|
-|`CREQ_ATYPE_W`|`ATYP_32`、`ATYP_16`、`ATYP_8`|`shmins_unit_sequence`|普通请求 offset 元素宽度|
+|`CREQ_ATYPE_W`|`ATYP_32`、`ATYP_16`|`shmins_unit_sequence`|普通请求 offset 元素宽度|
 |`CREQ_ATYPE_S`|`ATYP_U`、`ATYP_S`|`shmins_unit_sequence`|能被解析，但当前没有约束到 item，见 `SHMINS-004`|
 |`CREQ_ATYPE_G`|`GAUTO_1B`、`GAUTO_DW`|`shmins_unit_sequence`|能被解析，但当前没有约束到 item，见 `SHMINS-004`|
 |`CREQ_ITYPE`|`LDST_S`、`LDST_V`、`LDSTE_S`、`LDSTE_V`|`shmins_unit_sequence`|普通请求地址生成类型|
