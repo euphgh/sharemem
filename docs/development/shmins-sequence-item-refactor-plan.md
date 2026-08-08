@@ -221,16 +221,22 @@ Benchmark 还需增加或确认以下可控字段，不能继续只固定 DTYP_8
 9. **结果复核**：记录命令、VCS 版本、seed、三次重复结果和未覆盖范围，再决定是否进入
    正式环境集成阶段。
 
+截至 2026-08-08，阶段 1～3 已完成第一版，阶段 7 已完成 SPLIT
+contiguous profile 与定向地址字段控制，阶段 8 已完成 compile 和三个
+100-attempt 代表配置。阶段 4～6、完整矩阵和三次基线对比仍待完成，
+因此 `SHMINS-012` 保持“实现中”。
+
 本阶段不得顺带修改 driver、monitor、reference、scoreboard、TC/LST 或正式 package。
 若开发中发现这些组件 contract 与新 validator 冲突，只记录到 verification status，
 不扩大本阶段实现范围。
 
 ## 8. hx16 验证矩阵和证据
 
-本地工作区没有 EDA 工具，不运行 VCS。使用 `~/.local/bin/hx16-run`，在映射到
-`/usrdata/proj/yiwen.ding/runs/guanghui.hu/sharemem` 的 hx16 工作区执行；只传输 benchmark
-所需的 `examples/shmins_random_benchmark/`、相关 sequence item、共享参数和运行脚本。
-生成的 simv、日志和计时结果留在远端 build 目录。
+本地工作区没有 EDA 工具，不运行 VCS。先加载本地 `.env`，再使用
+`scripts/local/sync_remote_repo.sh` 同步必要输入，并通过
+`scripts/local/run_remote_command.sh` 在 `.env` 指定的 hx16 工作区执行。
+生成的 simv、日志和计时结果留在远端
+`examples/shmins_random_benchmark/build/` 目录；`.env` 本身不同步。
 
 最低矩阵包括：
 

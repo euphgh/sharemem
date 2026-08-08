@@ -3,7 +3,8 @@
 本文集中记录 ut_shm 验证环境与当前 DUT spec 之间的实现差异，以及组件开发中已经
 确认的问题。组件文档只引用这里的稳定问题 ID，不重复维护修复过程。原有清单于
 2026-08-06 按源码提交 `304c232` 复核；2026-08-08 基于提交 `77626b4` 新增
-`SHMINS-012` 的 benchmark-only 拆分计划。Phase 6 的 macOS/Ubuntu 构建结果见
+`SHMINS-012` 的 benchmark-only 拆分计划；同日已完成公共基类和
+contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结果见
 [实测快照](guide/ubuntu-vcs-check.md#6-2026-08-06-实测快照)，不作为闭环以下功能问题的证据。
 
 ## 1. 状态和优先级
@@ -217,12 +218,12 @@
 
 ### `SHMINS-012` Sequence item 随机化性能与结构拆分
 
-- 现状：solver-based `shmins_sequence_item` 让大型 offset 数组参与地址范围、全局
-  uniqueness 和 thread non-overlap 求解，部分配置随机化耗时过长。已有独立
-  `shmins_post_randomize_sequence_item` benchmark 原型把 collision 移到后随机阶段，但
-  contiguous、strided 和 indexed 地址算法仍集中在一个 class 中；它保留旧
-  `c_addr_bound`，从完整 ATYPE 域抽取候选时也可能耗尽 retry。新拆分实现尚未开始，
-  正式 `ut_shm` 仍使用原 solver-based item。
+- 现状：solver-based `shmins_sequence_item` 仍是正式 `ut_shm` 实现。Benchmark-only
+  SPLIT 原型已增加公共基类和 `shmins_contiguous_sequence_item`：大型 offset
+  数组不再进入 solver，基类负责 offset 编解码、LOC/WRP/BLK 映射、物理
+  byte collision 和最终 transaction validator，contiguous 子类从 base、ATYPE
+  可编码范围和 active element 边界反推起始 MADDR 区间。Strided、indexed
+  和 VTRANS 子类尚未实现，也尚未进行三实现的三次性能对比。
 - 影响：随机化可能长时间停滞或以 retry exhaustion 结束，阻止 testcase 稳定产生合法
   creq；把全部地址形态和方向策略放在一个 class 中也使修复容易引入交叉回归。
 - 目标：按 MADDR 生成拓扑拆分为公共基类、contiguous、strided、indexed 和 VTRANS
@@ -240,6 +241,16 @@
   exhaustion 为 0；已知慢配置完成不少于 100 次 measured attempt，三次运行的 median
   `ms_per_attempt` 低于两个基线。日志必须记录命令、工具版本、seed、checksum 和 reject
   统计。Benchmark 通过不作为正式 ut_shm 集成或 DUT 功能通过证据。
+- 2026-08-08 阶段证据：使用 `.env` 和 `scripts/local/` 同步/执行脚本，
+  hx16 VCS `T-2022.06-SP2-5_Full64` 完成 SPLIT compile。三个 100-attempt
+  代表配置均为 `successes=100`、`failures=0`、`validation_errors=0`：
+  `LDST_V/LOC, V2M, DTYP_32, ATYP_32/U/1B` 为 0.300077 ms/attempt；
+  `LDST_S/BLK, V2M, DTYP_8, ATYP_32/S/1B, G=16 KiB, WPID=7, WPNUM=4`
+  为 0.464200 ms/attempt；`LDST_V/WRP, M2V, DTYP_16, ATYP_16/S/DW,
+  G=8 KiB` 为 0.314345 ms/attempt。最后一次脚本运行日志保留在远端
+  `examples/shmins_random_benchmark/build/split/run.log`，其余阶段结果记录于本节；
+  后续完整矩阵需改用每 profile 独立日志。这些结果只支持 contiguous
+  阶段，不满足整个 `SHMINS-012` 的关闭条件。
 - 与其他问题的关系：本阶段可以为 `SHMINS-003`、`SHMINS-004` 和 `SHMINS-007` 提供
   helper、算法和 benchmark 证据，但因未接入正式环境，不能关闭这些问题。
 

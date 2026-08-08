@@ -50,8 +50,8 @@ constraint c_offs_width {
     (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_1B) -> (offs_elem[t][k] >= -32768 && offs_elem[t][k] <= 32767);
     (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_U && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_32) -> (offs_elem[t][k] >= 0 && offs_elem[t][k] <= 262140);
     (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_32) -> (offs_elem[t][k] >= -131072 && offs_elem[t][k] <= 131068);
-    (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_U && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_16) -> (offs_elem[t][k] >= 0 && offs_elem[t][k] <= 131070);
     (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_16) -> (offs_elem[t][k] >= -65536 && offs_elem[t][k] <= 65534);
+    (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_U && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_16) -> (offs_elem[t][k] >= 0 && offs_elem[t][k] <= 131070);
     (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_U && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_8) -> (offs_elem[t][k] >= 0 && offs_elem[t][k] <= 65535);
     (creq_atype_w == ATYP_16 && creq_atype_s == ATYP_S && creq_atype_g == GAUTO_DW && creq_dtype == DTYP_8) -> (offs_elem[t][k] >= -32768 && offs_elem[t][k] <= 32767);
   }

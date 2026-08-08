@@ -12,20 +12,20 @@ usage() {
 目标：
   compile  编译 BENCH_IMPL 选择的最小 UVM benchmark
   run      必要时先编译 BENCH_IMPL，再运行一次
-  compare  分别编译并运行 original 与 post_randomize
+  compare  分别编译并运行 original、post_randomize 与 split
   sweep    用 BENCH_IMPL 和 LDSTE_V_BLK 运行 constraint 拆分实验
   clean    删除本 example 的 build 目录
 
 环境变量：
   BENCH_IMPL       compile、run、sweep 使用的实现，默认 original
-                   可选 original 或 post_randomize
+                   可选 original、post_randomize 或 split
   VCS              VCS 可执行文件，默认 vcs
   UVM_VERSION      VCS -ntb_opts 使用的 UVM 版本，默认 uvm-1.2
   VCS_USER_OPTS    追加到 VCS 编译命令的空白分隔参数
   BENCH_ITERATIONS compare、sweep 的迭代次数，默认 10
   BENCH_WARMUP     compare、sweep 的预热次数，默认 2
 
-两个实现使用独立 filelist 和 build/<implementation>/simv，不能在同一次
+三个实现使用独立 filelist 和 build/<implementation>/simv，不能在同一次
 编译中同时定义 shmins_sequence_item。
 EOF
 }
@@ -53,7 +53,7 @@ case "$target" in
 esac
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-repo_root="$(git -C "$script_dir/../.." rev-parse --show-toplevel)"
+repo_root="$(cd -- "$script_dir/../.." && git rev-parse --show-toplevel)"
 example_dir="$repo_root/examples/shmins_random_benchmark"
 build_root="$example_dir/build"
 utility_dir="$repo_root/ut_shm/util"
@@ -73,10 +73,10 @@ validate_implementation() {
     local implementation="$1"
 
     case "$implementation" in
-        original | post_randomize)
+        original | post_randomize | split)
             ;;
         *)
-            printf '错误：BENCH_IMPL 必须是 original 或 post_randomize：%s\n' \
+            printf '错误：BENCH_IMPL 必须是 original、post_randomize 或 split：%s\n' \
                 "$implementation" >&2
             exit 2
             ;;
@@ -104,11 +104,20 @@ collect_sources() {
         "$example_dir/benchmark_clock.c"
         "$example_dir/${implementation}.f"
     )
-    if [[ "$implementation" == "original" ]]; then
-        benchmark_sources+=("$sequence_dir/shmins_sequence_item.svh")
-    else
-        benchmark_sources+=("$sequence_dir/shmins_post_randomize_sequence_item.svh")
-    fi
+    case "$implementation" in
+        original)
+            benchmark_sources+=("$sequence_dir/shmins_sequence_item.svh")
+            ;;
+        post_randomize)
+            benchmark_sources+=("$sequence_dir/shmins_post_randomize_sequence_item.svh")
+            ;;
+        split)
+            benchmark_sources+=(
+                "$sequence_dir/shmins_split_sequence_item.svh"
+                "$sequence_dir/shmins_contiguous_sequence_item.svh"
+            )
+            ;;
+    esac
 }
 
 compile_benchmark() {
@@ -131,6 +140,8 @@ compile_benchmark() {
 
     printf 'Ubuntu VCS：编译 %s shmins randomize benchmark\n' "$implementation"
     (
+        # hx16 的旧 Bash 在 nounset 模式下展开空数组会报 unbound variable。
+        set +u
         export RPU_DIR="$repo_root"
         cd -- "$build_dir"
         "$vcs_bin" \
@@ -187,6 +198,14 @@ run_benchmark() {
             +UVM_TESTNAME=shmins_random_benchmark_test \
             "$@"
     ) 2>&1 | tee "$build_dir/$log_name"
+
+    # UVM_FATAL can terminate this VCS build with process status zero. Treat a
+    # non-zero UVM error/fatal summary as a failed benchmark invocation.
+    if grep -Eq 'UVM_(ERROR|FATAL) :[[:space:]]+[1-9][0-9]*' \
+        "$build_dir/$log_name"; then
+        printf '错误：%s benchmark 报告 UVM_ERROR/UVM_FATAL\n' "$implementation" >&2
+        return 1
+    fi
 }
 
 run_sweep() {
@@ -218,9 +237,9 @@ run_compare() {
     local iterations="${BENCH_ITERATIONS:-10}"
     local warmup="${BENCH_WARMUP:-2}"
 
-    for implementation in original post_randomize; do
+    for implementation in original post_randomize split; do
         run_benchmark "$implementation" "compare.log" \
-            +BENCH_PROFILE=LDSTE_V_BLK \
+            +BENCH_PROFILE=LDST_V_LOC \
             +BENCH_CONSTRAINT_SET=ALL \
             "+BENCH_ITERATIONS=$iterations" \
             "+BENCH_WARMUP=$warmup" \

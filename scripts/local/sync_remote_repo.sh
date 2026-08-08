@@ -97,6 +97,7 @@ rsync_args=(
     --timeout=60
     --rsh="$rsync_ssh_command"
     --exclude=.git
+    --exclude=.env
     --exclude=.venv/
     --exclude=resources/
     --exclude=__pycache__/

@@ -3,7 +3,10 @@ package shmins_random_benchmark_pkg;
   import shm_util_package::*;
 
   `include "uvm_macros.svh"
-`ifdef SHMINS_USE_POST_RANDOMIZE_ITEM
+`ifdef SHMINS_USE_SPLIT_ITEM
+  `include "shmins_split_sequence_item.svh"
+  `include "shmins_contiguous_sequence_item.svh"
+`elsif SHMINS_USE_POST_RANDOMIZE_ITEM
   `include "shmins_post_randomize_sequence_item.svh"
 `else
   `include "shmins_sequence_item.svh"
@@ -26,10 +29,16 @@ package shmins_random_benchmark_pkg;
     int unsigned warmup_iterations = 2;
 
     // Fixed branch selection used by each randomize attempt.
+`ifdef SHMINS_USE_SPLIT_ITEM
+    string profile = "LDST_V_LOC";
+`else
     string profile = "LDSTE_V_BLK";
+`endif
 
     // Compile-time-selected transaction implementation reported in results.
-`ifdef SHMINS_USE_POST_RANDOMIZE_ITEM
+`ifdef SHMINS_USE_SPLIT_ITEM
+    string item_implementation = "SPLIT";
+`elsif SHMINS_USE_POST_RANDOMIZE_ITEM
     string item_implementation = "POST_RANDOMIZE";
 `else
     string item_implementation = "ORIGINAL";
@@ -38,12 +47,28 @@ package shmins_random_benchmark_pkg;
     // Fixed instruction direction used by non-RANDOM profiles.
     string rw = "V2M";
 
+    // Fixed dtype and ATYPE fields used by non-RANDOM profiles.
+    string dtype = "DTYP_8";
+    string atype_w = "ATYP_16";
+    string atype_s = "ATYP_U";
+    string atype_g = "GAUTO_1B";
+
+    // Optional directed address-space controls. A negative value leaves the
+    // field randomized; WARP ID defaults to group zero for baseline parity.
+    int benchmark_inv_size = -1;
+    int benchmark_wpid = 0;
+    int benchmark_wpnum = -1;
+
     // Allows optional uniqueness checks for M2V. V2M always checks uniqueness.
     bit m2v_unique_enable = 1'b0;
 
     // Decoded profile fields used by the inline randomize constraint.
     bit random_profile;
     creq_rw_e benchmark_rw;
+    creq_dtype_e benchmark_dtype;
+    creq_atype_w_e benchmark_atype_w;
+    creq_atype_s_e benchmark_atype_s;
+    creq_atype_g_e benchmark_atype_g;
     creq_itype_e benchmark_itype;
     creq_space_e benchmark_space;
 
@@ -59,6 +84,10 @@ package shmins_random_benchmark_pkg;
     // Number of successful and failed measured randomize attempts.
     int unsigned success_count;
     int unsigned failure_count;
+
+    // Aggregate generator diagnostics for measured successful attempts.
+    longint unsigned total_retry_count;
+    longint unsigned total_validation_error_count;
 
     // Changes with generated data so the measured result remains observable.
     longint unsigned checksum;
@@ -135,6 +164,13 @@ package shmins_random_benchmark_pkg;
     void'($value$plusargs("BENCH_WARMUP=%d", warmup_iterations));
     void'($value$plusargs("BENCH_PROFILE=%s", profile));
     void'($value$plusargs("BENCH_RW=%s", rw));
+    void'($value$plusargs("BENCH_DTYPE=%s", dtype));
+    void'($value$plusargs("BENCH_ATYPE_W=%s", atype_w));
+    void'($value$plusargs("BENCH_ATYPE_S=%s", atype_s));
+    void'($value$plusargs("BENCH_ATYPE_G=%s", atype_g));
+    void'($value$plusargs("BENCH_INV_SIZE=%d", benchmark_inv_size));
+    void'($value$plusargs("BENCH_WPID=%d", benchmark_wpid));
+    void'($value$plusargs("BENCH_WPNUM=%d", benchmark_wpnum));
     void'($value$plusargs("M2V_UNIQUE=%d", m2v_unique_value));
     void'($value$plusargs("BENCH_CONSTRAINT_SET=%s", constraint_set));
     void'($value$plusargs("BENCH_REUSE_ITEM=%d", reuse_item_value));
@@ -145,10 +181,26 @@ package shmins_random_benchmark_pkg;
 
     profile = str_toupper(profile);
     rw = str_toupper(rw);
+    dtype = str_toupper(dtype);
+    atype_w = str_toupper(atype_w);
+    atype_s = str_toupper(atype_s);
+    atype_g = str_toupper(atype_g);
     constraint_set = str_toupper(constraint_set);
 
     if (iterations == 0) begin
       `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG", "BENCH_ITERATIONS must be greater than zero")
+    end
+    if (benchmark_inv_size < -1 || benchmark_inv_size > 12) begin
+      `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                 "BENCH_INV_SIZE must be -1 or in the range 0 through 12")
+    end
+    if (benchmark_wpid < 0 || benchmark_wpid >= WARP_N) begin
+      `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                 "BENCH_WPID must select an implemented WARP")
+    end
+    if (!(benchmark_wpnum inside {-1, 1, 2, 4})) begin
+      `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                 "BENCH_WPNUM must be -1, 1, 2, or 4")
     end
 
     random_profile = 1'b0;
@@ -181,6 +233,43 @@ package shmins_random_benchmark_pkg;
       end
     endcase
 
+    case (dtype)
+      "DTYP_32": benchmark_dtype = DTYP_32;
+      "DTYP_16": benchmark_dtype = DTYP_16;
+      "DTYP_8":  benchmark_dtype = DTYP_8;
+      default: begin
+        `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                   $sformatf("unsupported BENCH_DTYPE=%s", dtype))
+      end
+    endcase
+
+    case (atype_w)
+      "ATYP_32": benchmark_atype_w = ATYP_32;
+      "ATYP_16": benchmark_atype_w = ATYP_16;
+      default: begin
+        `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                   $sformatf("unsupported BENCH_ATYPE_W=%s", atype_w))
+      end
+    endcase
+
+    case (atype_s)
+      "ATYP_U": benchmark_atype_s = ATYP_U;
+      "ATYP_S": benchmark_atype_s = ATYP_S;
+      default: begin
+        `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                   $sformatf("unsupported BENCH_ATYPE_S=%s", atype_s))
+      end
+    endcase
+
+    case (atype_g)
+      "GAUTO_1B": benchmark_atype_g = GAUTO_1B;
+      "GAUTO_DW": benchmark_atype_g = GAUTO_DW;
+      default: begin
+        `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                   $sformatf("unsupported BENCH_ATYPE_G=%s", atype_g))
+      end
+    endcase
+
     case (constraint_set)
       "ALL",
       "NO_ADDR_BOUND",
@@ -196,6 +285,21 @@ package shmins_random_benchmark_pkg;
                    $sformatf("unsupported BENCH_CONSTRAINT_SET=%s", constraint_set))
       end
     endcase
+
+`ifdef SHMINS_USE_SPLIT_ITEM
+    if (random_profile) begin
+      `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                 "SPLIT currently supports only fixed contiguous profiles")
+    end
+    if (!(benchmark_itype inside {LDST_S, LDST_V})) begin
+      `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                 $sformatf("SPLIT contiguous phase does not support profile=%s", profile))
+    end
+    if (constraint_set != "ALL") begin
+      `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                 "SPLIT supports only BENCH_CONSTRAINT_SET=ALL")
+    end
+`endif
 
   endfunction : build_phase
 
@@ -219,9 +323,13 @@ package shmins_random_benchmark_pkg;
     end
 
     `uvm_info("SHMINS_RANDOM_BENCH_START",
-              $sformatf({"profile=%s rw=%s item_impl=%s m2v_unique=%0d constraint_set=%s ",
+              $sformatf({"profile=%s rw=%s dtype=%s atype_w=%s atype_s=%s atype_g=%s ",
+                         "inv_size=%0d wpid=%0d wpnum=%0d ",
+                         "item_impl=%s m2v_unique=%0d constraint_set=%s ",
                          "warmup=%0d iterations=%0d reuse_item=%0d suppress_item_warnings=%0d"},
-                        profile, rw, item_implementation, m2v_unique_enable, constraint_set,
+                        profile, rw, dtype, atype_w, atype_s, atype_g,
+                        benchmark_inv_size, benchmark_wpid, benchmark_wpnum,
+                        item_implementation, m2v_unique_enable, constraint_set,
                         warmup_iterations, iterations,
                         reuse_item, suppress_item_warnings),
               UVM_NONE)
@@ -239,6 +347,8 @@ package shmins_random_benchmark_pkg;
 
     success_count = 0;
     failure_count = 0;
+    total_retry_count = 0;
+    total_validation_error_count = 0;
     checksum = 0;
     start_ns = shmins_benchmark_monotonic_ns();
     `uvm_info("SHMINS_RANDOM_BENCH_MEASURE",
@@ -255,12 +365,12 @@ package shmins_random_benchmark_pkg;
         update_checksum(item);
         `uvm_info("SHMINS_RANDOM_BENCH_RANDOMIZE",
                   $sformatf("measured randomize succeeded at iteration %0d", index),
-                  UVM_NONE)
+                  UVM_HIGH)
       end else begin
         failure_count++;
         `uvm_info("SHMINS_RANDOM_BENCH_RANDOMIZE",
                   $sformatf("measured randomize failed at iteration %0d", index),
-                  UVM_NONE)
+                  UVM_HIGH)
       end
     end
 
@@ -279,12 +389,18 @@ package shmins_random_benchmark_pkg;
     `uvm_info("SHMINS_RANDOM_BENCH_RESULT",
               $sformatf({"profile=%s item_impl=%s constraint_set=%s iterations=%0d ",
                          "successes=%0d failures=%0d ",
-                         "rw=%s m2v_unique=%0d elapsed_ms=%0.6f ms_per_attempt=%0.6f ",
+                         "rw=%s dtype=%s atype_w=%s atype_s=%s atype_g=%s ",
+                         "inv_size=%0d wpid=%0d wpnum=%0d ",
+                         "m2v_unique=%0d retries=%0d validation_errors=%0d ",
+                         "elapsed_ms=%0.6f ms_per_attempt=%0.6f ",
                          "attempts_per_second=%0.3f ",
                          "reuse_item=%0d checksum=0x%016h"},
                         profile, item_implementation, constraint_set,
                         iterations, success_count, failure_count,
-                        rw, m2v_unique_enable, elapsed_ms, ms_per_attempt,
+                        rw, dtype, atype_w, atype_s, atype_g,
+                        benchmark_inv_size, benchmark_wpid, benchmark_wpnum,
+                        m2v_unique_enable, total_retry_count,
+                        total_validation_error_count, elapsed_ms, ms_per_attempt,
                         attempts_per_second, reuse_item, checksum),
               UVM_NONE)
 
@@ -300,6 +416,10 @@ package shmins_random_benchmark_pkg;
   function shmins_sequence_item shmins_random_benchmark_test::create_item(string item_name);
     shmins_sequence_item item;
 
+`ifdef SHMINS_USE_SPLIT_ITEM
+    item = shmins_contiguous_sequence_item::type_id::create(item_name);
+    item.m2v_unique_enable = m2v_unique_enable;
+`else
     item = shmins_sequence_item::type_id::create(item_name);
 `ifdef SHMINS_USE_POST_RANDOMIZE_ITEM
     item.m2v_unique_enable = m2v_unique_enable;
@@ -319,6 +439,7 @@ package shmins_random_benchmark_pkg;
     if (constraint_set inside {"NO_LDST_RANGE", "NO_COLLISION", "NO_UNIQUENESS", "CORE"}) begin
       item.c_ldst_thread_range_no_overlap.constraint_mode(0);
     end
+`endif
 
     return item;
   endfunction : create_item
@@ -330,24 +451,50 @@ package shmins_random_benchmark_pkg;
       };
     end
 
+`ifdef SHMINS_USE_SPLIT_ITEM
     return item.randomize() with {
       creq_rw == local::benchmark_rw;
-      creq_dtype == DTYP_8;
-      creq_atype_w == ATYP_16;
-      creq_atype_s == ATYP_U;
-      creq_atype_g == GAUTO_1B;
+      creq_dtype == local::benchmark_dtype;
+      creq_atype_w == local::benchmark_atype_w;
+      creq_atype_s == local::benchmark_atype_s;
+      creq_atype_g == local::benchmark_atype_g;
       creq_itype == local::benchmark_itype;
       creq_space == local::benchmark_space;
+      creq_wpid == local::benchmark_wpid;
+      (local::benchmark_inv_size < 0) ||
+          (creq_inv_size == local::benchmark_inv_size);
+      (local::benchmark_wpnum < 0) ||
+          (creq_wpnum == local::benchmark_wpnum);
+    };
+`else
+    return item.randomize() with {
+      creq_rw == local::benchmark_rw;
+      creq_dtype == local::benchmark_dtype;
+      creq_atype_w == local::benchmark_atype_w;
+      creq_atype_s == local::benchmark_atype_s;
+      creq_atype_g == local::benchmark_atype_g;
+      creq_itype == local::benchmark_itype;
+      creq_space == local::benchmark_space;
+      creq_wpid == local::benchmark_wpid;
+      (local::benchmark_inv_size < 0) ||
+          (creq_inv_size == local::benchmark_inv_size);
+      (local::benchmark_wpnum < 0) ||
+          (creq_wpnum == local::benchmark_wpnum);
       if (local::benchmark_space == SPACE_LOC) {
         creq_base < (1 << VADDR_W) - 4096;
       } else if (local::benchmark_space == SPACE_WRP) {
         creq_base < (1 << BADDR_W) - 4096;
       } else if (local::benchmark_space == SPACE_BLK) {
-        creq_wpid == 0;
         if (creq_inv_size <= 10) {
-          creq_base < WARP_STEP * BANK_N * creq_wpnum - 4096;
+          creq_base >= (creq_wpid / creq_wpnum) *
+                       WARP_STEP * BANK_N * creq_wpnum;
+          creq_base < ((creq_wpid / creq_wpnum) + 1) *
+                      WARP_STEP * BANK_N * creq_wpnum - 4096;
         } else {
-          creq_base < 16 * 1024 * BANK_N * creq_wpnum - 4096;
+          creq_base >= (creq_wpid / creq_wpnum) *
+                       16 * 1024 * BANK_N * creq_wpnum;
+          creq_base < ((creq_wpid / creq_wpnum) + 1) *
+                      16 * 1024 * BANK_N * creq_wpnum - 4096;
         }
       }
       if (local::benchmark_rw == SHM_V2M &&
@@ -358,6 +505,7 @@ package shmins_random_benchmark_pkg;
         }
       }
     };
+`endif
   endfunction : randomize_item
 
   function void shmins_random_benchmark_test::update_checksum(shmins_sequence_item item);
@@ -365,6 +513,12 @@ package shmins_random_benchmark_pkg;
     checksum = checksum ^ longint'(item.creq_tmsk);
     checksum = checksum ^ longint'(item.offs_elem[0][0]);
     checksum = checksum ^ longint'(item.creq_vdat[THD_N-1]);
+`ifdef SHMINS_USE_SPLIT_ITEM
+    total_retry_count += item.generation_retry_count;
+    total_validation_error_count += item.validation_error_count;
+`elsif SHMINS_USE_POST_RANDOMIZE_ITEM
+    total_retry_count += item.post_randomize_retry_count;
+`endif
   endfunction : update_checksum
 
 endpackage : shmins_random_benchmark_pkg
