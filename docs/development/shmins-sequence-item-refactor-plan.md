@@ -23,7 +23,8 @@ solve-order、全局 uniqueness 和 thread range non-overlap 求解。许多 ina
 本阶段目标是：
 
 1. 按 MADDR 生成形态拆分随机算法，避免 `itype × space × direction` 的组合类爆炸；
-2. 只让低成本公共字段进入 solver，offset 由子类从合法地址域过程式构造；
+2. 只让低成本公共字段进入 solver，MADDR、base 和 offset 由子类与基类 helper
+   过程式构造；
 3. 由独立 validator 复查 packed offset 和最终 transaction，不信任生成算法自身；
 4. 保留 original 和 monolithic post-randomize 实现作为性能基线；
 5. 仅在 hx16 上编译、运行和比较 `examples/shmins_random_benchmark/`。
@@ -107,9 +108,15 @@ SPACE_LOC/WRP/BLK 在第一版作为基类公共 helper 中的策略分支，不
 - 完整的 `do_copy()` 和明确的 compare contract；
 - dtype、atype、length、mask、delay 和 creq payload 字段。
 
-`offs_elem` 可以保留为公开的调试结果，但不再声明为 `rand`。基类只保留低成本 solver
-约束：合法 enum、interleave、WARP、thread mask、length/element capacity、M2V vaddr
-以及本阶段采用的 base 自然对齐限制。
+`offs_elem` 和 `elem_maddr` 保留为公开的过程式生成与调试结果，不声明为
+`rand`。`elem_maddr[t][k]` 保存每个 active element 的完整 MADDR；inactive entry
+每次生成前清零，不参加合法性判定。`creq_base` 也不再声明为 `rand`，由子类在
+MADDR 确定后通过基类 helper 生成。
+
+基类只保留低成本 solver 约束：合法 enum、interleave、WARP、thread mask、
+length/element capacity 和 M2V vaddr。`creq_wpid` 和 `creq_wpnum` 仍为低成本随机
+控制字段，并在 SPACE_BLK 中决定 MADDR 候选 group。base 范围与对齐不再由
+solver constraint 表达。
 
 基类提供下列公共或 protected helper；具体命名可在实现 review 中调整，但职责不能重新
 混回子类：
@@ -124,54 +131,111 @@ is_active_element(thread_idx, elem_idx);
 check_offset_encodable(offset);
 pack_offsets();
 decode_packed_offset(thread_idx, elem_idx);
+fast_legal_space_range(space_lower, space_upper);
+legal_space_maddr_check(thread_idx, maddr);
 map_maddr(thread_idx, maddr, result);
-check_maddr(thread_idx, maddr);
 physical_byte_key(bank_id, baddr);
 uniqueness_required();
+check_active_maddr_byte_uniqueness();
+decoded_offset_range(decode_lower, decode_upper);
+intersect_creq_base_range(target, base_lower, base_upper);
 validate_transaction();
 ```
 
+其中 `fast_legal_space_range()` 返回左闭右开的快速编码域：
+
+```text
+SPACE_LOC: [0, WARP_STEP)
+SPACE_WRP: [0, coded_warp_bytes * BANK_N)
+SPACE_BLK: [selected_group * group_span, (selected_group + 1) * group_span)
+```
+
+该范围不排除 8/16 KiB interleave 下的地址空洞。候选 MADDR 随机后必须通过
+`legal_space_maddr_check()` 复查数值范围、dtype 自然对齐、空洞、BANK 和
+SPACE_BLK WARP group。
+
 地址映射结果至少包含 `valid`、`bank_id`、完整 `baddr`、`local_offset` 和 `warp_index`。
-collision 使用最终物理 byte key，不能只比较 element 起始 MADDR。
+`check_active_maddr_byte_uniqueness()` 对 V2M 和显式开启 uniqueness 的 M2V 使用最终
+物理 byte key，逐 byte 检查 1/2/4-byte element，不能只比较 element 起始 MADDR。
+SPACE_LOC 中不同 thread 自然按 BANK 分域；SPACE_WRP/BLK 对全部 active element
+使用同一物理 byte key 集合。
+
+`decoded_offset_range()` 按 ATYPE_W/S/G 和 dtype 计算 decoded offset 闭区间
+`[decode_lower, decode_upper]`。若某个 topology 目标值满足
+`target=creq_base+decoded_offset`，则该 target 对 base 的约束为：
+
+```text
+target - decode_upper <= creq_base <= target - decode_lower
+```
+
+所有 target 取交集后：
+
+```text
+max(target) - decode_upper <= creq_base <= min(target) - decode_lower
+```
+
+`intersect_creq_base_range()` 增量完成该交集，并把 base 范围限制到
+`[0, 2**MADDR_W-1]`。GAUTO_DW 下 decoded offset 是 dtype byte width 的倍数，已对齐
+MADDR 会自然推出 base 对齐。GAUTO_1B 第一版仍从交集中选择 dtype 对齐
+base，作为激励限制而非协议要求。
 
 基类 `post_randomize()` 只负责编排：
 
 ```systemverilog
 function void shmins_sequence_item::post_randomize();
-  reset_generation_stats();
-  generate_offsets();
+  reset_generation_state();
+  generate_address_fields();
+  check_generated_maddrs();
   pack_offsets();
   validate_transaction();
 endfunction
 ```
 
-`generate_offsets()` 由子类覆盖。基类仍需能被 monitor 类似的非随机化消费者构造，因此
+`generate_address_fields()` 由子类覆盖，填充 `elem_maddr`、`creq_base` 和 `offs_elem`。
+基类仍需能被 monitor 类似的非随机化消费者构造，因此
 不声明为 virtual class；直接随机化基类必须用稳定 report ID 明确拒绝。Validator 必须
-从 `creq_offs_packed` 重新解码并计算 MADDR，不能只检查 `offs_elem` 中间结果。
+从 `creq_offs_packed` 重新解码并计算 MADDR，与 `elem_maddr` 比较后再独立检查
+space 和 collision，不能只检查过程式中间结果。
 
 ## 5. 子类随机算法
 
 ### 5.1 Contiguous
 
-每个 active thread 先找 active element 的最小和最大 index，再从当前 space 的合法 MADDR
-窗口反推可编码的起始 offset。选中候选后检查所有 active element 的自然对齐、hole、
-WARP group 和物理 byte。V2M 接受一个 thread 后提交其 byte key，后续 thread 避开重叠。
+每个 active thread 从 `fast_legal_space_range()` 返回的编码域中生成一个 dtype 对齐
+`start_maddr[t]`，再按以下公式回填完整 active MADDR 数组：
 
-候选必须从合法地址域或其反推区间产生，不能从完整 ATYP32 空间盲抽。该路径优先解决
-已观察到的 `V2M + LDST_V + SPACE_LOC + DTYP_32 + ATYP_32` 慢随机问题。
+```text
+elem_maddr[t][k] = start_maddr[t] + k*D
+```
+
+快速 start 范围根据最大 active index 从 space 上界向下收缩。因为该范围不能排除
+地址空洞，候选后必须对全部 active element 调用 `legal_space_maddr_check()`。
+
+Contiguous 的 decoded offset 只有 `offs_elem[t][0]`，因此 base 交集使用
+`start_maddr[t]`，不直接使用每个 `elem_maddr[t][k]`。若从完整数组推导，需先归一化为
+`elem_maddr[t][k]-k*D`，其结果应全部等于 `start_maddr[t]`。所有 thread 完成后从
+base 交集中生成 `creq_base`，再计算 `offs_elem[t][0]=start_maddr[t]-creq_base`。
+
+最后对完整 `elem_maddr` 执行逐 byte uniqueness 检查；冲突或 base 交集为空时重新
+生成候选。候选必须从 space 编码域产生，不能从完整 ATYP32 空间盲抽。该
+路径优先解决已观察到的 `V2M + LDST_V + SPACE_LOC + DTYP_32 + ATYP_32`
+慢随机问题。
 
 ### 5.2 Strided
 
-每个 active thread 生成一个 stride，并对全部 active index 验证
+每个 active thread 生成一个 stride，按公式回填 `elem_maddr`，并对全部 active index 验证
 `MADDR[k]=base+k*stride`。算法必须覆盖 signed stride、向低地址增长、零 stride 重叠和
 非连续 active mask。V2M WRP/BLK 的 element 0 在 solver 基础约束中直接 mask；M2V 不
-应用该限制。
+应用该限制。由于 encoded offset 表示 stride，不表示 `elem_maddr-base`，strided 不能
+直接对所有 MADDR 套用 contiguous/indexed 的 base 交集公式。
 
 ### 5.3 Indexed
 
-每个 active element 先从 space 的合法 MADDR 集合选择目标地址，再计算
-`offset=target_maddr-base` 并检查 ATYPE/S/G 可编码。V2M 在接受候选后提交物理 byte key；
-M2V 默认允许选择已有地址。
+每个 active element 先从 space 的快速 MADDR 编码域生成目标地址，通过
+`legal_space_maddr_check()` 后写入 `elem_maddr[t][k]`。Indexed 的每个 MADDR 都是
+`base+decoded_offset` 的 target，因此逐 element 更新 base 交集，最后计算
+`offset[t][k]=elem_maddr[t][k]-base`。V2M 和显式 unique M2V 使用基类逐 byte
+uniqueness 检查；M2V 默认允许重复地址。
 
 ### 5.4 VTRANS
 
