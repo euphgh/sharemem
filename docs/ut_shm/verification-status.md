@@ -1,8 +1,9 @@
 # ut_shm 验证实现状态
 
 本文集中记录 ut_shm 验证环境与当前 DUT spec 之间的实现差异，以及组件开发中已经
-确认的问题。组件文档只引用这里的稳定问题 ID，不重复维护修复过程。当前清单于
-2026-08-06 按源码提交 `304c232` 复核；Phase 6 的 macOS/Ubuntu 构建结果见
+确认的问题。组件文档只引用这里的稳定问题 ID，不重复维护修复过程。原有清单于
+2026-08-06 按源码提交 `304c232` 复核；2026-08-08 基于提交 `77626b4` 新增
+`SHMINS-012` 的 benchmark-only 拆分计划。Phase 6 的 macOS/Ubuntu 构建结果见
 [实测快照](guide/ubuntu-vcs-check.md#6-2026-08-06-实测快照)，不作为闭环以下功能问题的证据。
 
 ## 1. 状态和优先级
@@ -64,6 +65,7 @@
 |`SHMINS-009`|P1|待实现|shmins monitor|credit/release 和 unexpected/duplicate ack 缺少完备检查|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
 |`SHMINS-011`|P2|待实现|shmins transaction|`compare_item()` 是无条件 fatal 的伪 API|
+|`SHMINS-012`|P0|实现中|shmins transaction/benchmark|sequence item 随机化过慢且 monolithic post-randomize 难以维护|
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
@@ -212,6 +214,34 @@
   完整实现并定义字段、四态和返回值语义。
 - 验收：无用 API 被删除且现有编译通过，或保留的 compare 有正反例定向测试且不使用
   无条件 fatal。
+
+### `SHMINS-012` Sequence item 随机化性能与结构拆分
+
+- 现状：solver-based `shmins_sequence_item` 让大型 offset 数组参与地址范围、全局
+  uniqueness 和 thread non-overlap 求解，部分配置随机化耗时过长。已有独立
+  `shmins_post_randomize_sequence_item` benchmark 原型把 collision 移到后随机阶段，但
+  contiguous、strided 和 indexed 地址算法仍集中在一个 class 中；它保留旧
+  `c_addr_bound`，从完整 ATYPE 域抽取候选时也可能耗尽 retry。新拆分实现尚未开始，
+  正式 `ut_shm` 仍使用原 solver-based item。
+- 影响：随机化可能长时间停滞或以 retry exhaustion 结束，阻止 testcase 稳定产生合法
+  creq；把全部地址形态和方向策略放在一个 class 中也使修复容易引入交叉回归。
+- 目标：按 MADDR 生成拓扑拆分为公共基类、contiguous、strided、indexed 和 VTRANS
+  子类；space 由公共 helper 处理，V2M/M2V 由 collision 策略处理。Offset 应从合法
+  MADDR 域反推，不再从完整 ATYP32 空间盲目 rejection。完整方案见
+  [拆分开发计划](../development/shmins-sequence-item-refactor-plan.md)。
+- 对齐边界：协议只要求 active element 的最终 MADDR 按 dtype 自然对齐；本阶段允许把
+  base 和 decoded offset 分别对齐作为更强的激励限制，但独立 validator 必须直接检查
+  最终 MADDR。
+- 本阶段范围：只增加和验证 `examples/shmins_random_benchmark/` 的 SPLIT 实现，不修改
+  `shm_seq_item_package`、driver、monitor、reference、scoreboard、TC/LST 或 regression。
+  Original 和 monolithic post-randomize 实现继续作为对照基线。
+- 验收：在 hx16 上用相同 VCS、profile、字段配置、seed、iteration、warmup 和 reuse
+  设置比较三种实现。Required profile 必须 `failures==0`、validator error 为 0、retry
+  exhaustion 为 0；已知慢配置完成不少于 100 次 measured attempt，三次运行的 median
+  `ms_per_attempt` 低于两个基线。日志必须记录命令、工具版本、seed、checksum 和 reject
+  统计。Benchmark 通过不作为正式 ut_shm 集成或 DUT 功能通过证据。
+- 与其他问题的关系：本阶段可以为 `SHMINS-003`、`SHMINS-004` 和 `SHMINS-007` 提供
+  helper、算法和 benchmark 证据，但因未接入正式环境，不能关闭这些问题。
 
 ### `VMEM-001` `FFD_CYC` read snapshot
 

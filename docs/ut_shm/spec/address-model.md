@@ -95,6 +95,11 @@ MADDR[t][k] = creq_base[MADDR_W-1:0] + address_offset[t][k]
 使用有符号 offset 时可以向低地址移动，但结果仍必须落在所选 address space 的合法
 范围内。禁止依靠 `MADDR_W` 截断产生回绕访问。
 
+每个有效元素的最终 MADDR 必须按数据元素字节数 `D` 自然对齐。该规则只约束
+`creq_base` 与解码后 address offset 相加得到的结果，不要求 `creq_base` 和 offset
+分别自然对齐。验证激励可以暂时采用“base 与 offset 分别对齐”的更强生成限制，但
+checker 必须直接检查最终 MADDR，不能把该激励限制解释为 DUT 协议。
+
 ### 3.3 Mask 和尾部 byte
 
 `creq_tmsk[t]==0` 时，整个 thread 不产生访问。thread 有效时，
