@@ -332,10 +332,28 @@ class shmins_sequence_item extends uvm_sequence_item;
                                                 inout longint signed base_upper);
 
   //----------------------------------------------------------------------------
+  // @brief Divides a signed numerator by a positive divisor and rounds down.
+  //
+  // @param numerator Signed dividend.
+  // @param divisor Positive divisor.
+  // @return Mathematical floor of numerator divided by divisor.
+  //----------------------------------------------------------------------------
+  extern function longint signed floor_divide_signed(longint signed numerator, longint signed divisor);
+
+  //----------------------------------------------------------------------------
+  // @brief Divides a signed numerator by a positive divisor and rounds up.
+  //
+  // @param numerator Signed dividend.
+  // @param divisor Positive divisor.
+  // @return Mathematical ceiling of numerator divided by divisor.
+  //----------------------------------------------------------------------------
+  extern function longint signed ceil_divide_signed(longint signed numerator, longint signed divisor);
+
+  //----------------------------------------------------------------------------
   // @brief Samples an aligned integer from a left-closed, right-open range.
   //
-  // @param range_lower Inclusive non-negative lower bound.
-  // @param range_upper Exclusive non-negative upper bound.
+  // @param range_lower Inclusive signed lower bound.
+  // @param range_upper Exclusive signed upper bound.
   // @param alignment Required positive power-of-two alignment.
   // @param sampled_value Selected value when the function succeeds.
   // @return 1 when the range contains at least one aligned value.
@@ -816,19 +834,59 @@ function bit shmins_sequence_item::intersect_creq_base_range(longint signed targ
   return base_lower <= base_upper;
 endfunction : intersect_creq_base_range
 
+function longint signed shmins_sequence_item::floor_divide_signed(longint signed numerator,
+                                                                  longint signed divisor);
+  longint signed quotient;
+  longint signed remainder;
+
+  if (divisor <= 0) begin
+    return 0;
+  end
+  quotient = numerator / divisor;
+  remainder = numerator % divisor;
+  if (remainder != 0 && numerator < 0) begin
+    quotient--;
+  end
+  return quotient;
+endfunction : floor_divide_signed
+
+function longint signed shmins_sequence_item::ceil_divide_signed(longint signed numerator,
+                                                                 longint signed divisor);
+  longint signed quotient;
+  longint signed remainder;
+
+  if (divisor <= 0) begin
+    return 0;
+  end
+  quotient = numerator / divisor;
+  remainder = numerator % divisor;
+  if (remainder != 0 && numerator > 0) begin
+    quotient++;
+  end
+  return quotient;
+endfunction : ceil_divide_signed
+
 function bit shmins_sequence_item::sample_aligned_value(longint signed range_lower,
                                                         longint signed range_upper,
                                                         int unsigned alignment,
                                                         output longint signed sampled_value);
   longint signed first_value;
+  longint signed remainder;
   longint unsigned slot_count;
   longint unsigned selected_slot;
 
   sampled_value = 0;
-  if (range_lower < 0 || range_upper <= range_lower || alignment == 0) begin
+  if (range_upper <= range_lower || alignment == 0) begin
     return 1'b0;
   end
-  first_value = ((range_lower + alignment - 1) / alignment) * alignment;
+  remainder = range_lower % longint'(alignment);
+  if (remainder == 0) begin
+    first_value = range_lower;
+  end else if (range_lower > 0) begin
+    first_value = range_lower + alignment - remainder;
+  end else begin
+    first_value = range_lower - remainder;
+  end
   if (first_value >= range_upper) begin
     return 1'b0;
   end

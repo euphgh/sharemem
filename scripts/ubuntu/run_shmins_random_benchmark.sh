@@ -100,6 +100,7 @@ collect_sources() {
         "$utility_dir/bit_rt_range.svh"
         "$sequence_dir/shmins_seq_item_constraints.svh"
         "$example_dir/shmins_random_benchmark_pkg.sv"
+        "$example_dir/shmins_random_cross_benchmark_test.svh"
         "$example_dir/tb.sv"
         "$example_dir/benchmark_clock.c"
         "$example_dir/${implementation}.f"
@@ -115,6 +116,8 @@ collect_sources() {
             benchmark_sources+=(
                 "$sequence_dir/shmins_split_sequence_item.svh"
                 "$sequence_dir/shmins_contiguous_sequence_item.svh"
+                "$sequence_dir/shmins_strided_sequence_item.svh"
+                "$sequence_dir/shmins_indexed_sequence_item.svh"
             )
             ;;
     esac

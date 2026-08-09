@@ -6,7 +6,7 @@
 #   SSH 主机：chatgpt
 #   远端目录：~/sharemem（相对于远端 HOME 的 sharemem）
 #
-# 可通过 SHAREMEM_REMOTE_HOST 和 SHAREMEM_REMOTE_DIR 覆盖默认值。
+# 可通过 SHAREMEM_REMOTE_HOST、SHAREMEM_REMOTE_DIR 和 SHAREMEM_SSH_OPTION 覆盖默认值。
 
 set -euo pipefail
 
@@ -23,6 +23,7 @@ usage() {
 环境变量：
   SHAREMEM_REMOTE_HOST  SSH 主机或别名，默认 chatgpt
   SHAREMEM_REMOTE_DIR   远端 HOME 下的仓库路径，默认 sharemem
+  SHAREMEM_SSH_OPTION   追加到 ssh/rsync 的 SSH 选项，以空白分隔，默认为空
 
 同步会保留远端 .git，跳过本地 UVM resources、构建目录和密码文件。默认删除
 远端多余的源码文件，使远端测试工作区与本地一致。
@@ -68,7 +69,17 @@ ssh_args=(
     -o ServerAliveInterval=10
     -o ServerAliveCountMax=3
 )
-rsync_ssh_command='ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3'
+
+# 将用户配置的 SSH 选项作为独立参数追加，避免整段字符串被 ssh 当作一个参数。
+# 此变量用于命令行选项，不支持选项值中包含空白字符。
+if [[ -n "${SHAREMEM_SSH_OPTION:-}" ]]; then
+    read -r -a ssh_extra_args <<<"$SHAREMEM_SSH_OPTION"
+    ssh_args+=("${ssh_extra_args[@]}")
+fi
+
+# rsync 的 --rsh 接收单个命令字符串，因此需要重新转义参数数组。
+printf -v rsync_ssh_command ' %q' ssh "${ssh_args[@]}"
+rsync_ssh_command="${rsync_ssh_command# }"
 
 if [[ -z "$remote_host" ]]; then
     printf '错误：SHAREMEM_REMOTE_HOST 不能为空\n' >&2

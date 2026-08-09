@@ -6,6 +6,8 @@ package shmins_random_benchmark_pkg;
 `ifdef SHMINS_USE_SPLIT_ITEM
   `include "shmins_split_sequence_item.svh"
   `include "shmins_contiguous_sequence_item.svh"
+  `include "shmins_strided_sequence_item.svh"
+  `include "shmins_indexed_sequence_item.svh"
 `elsif SHMINS_USE_POST_RANDOMIZE_ITEM
   `include "shmins_post_randomize_sequence_item.svh"
 `else
@@ -289,11 +291,7 @@ package shmins_random_benchmark_pkg;
 `ifdef SHMINS_USE_SPLIT_ITEM
     if (random_profile) begin
       `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
-                 "SPLIT currently supports only fixed contiguous profiles")
-    end
-    if (!(benchmark_itype inside {LDST_S, LDST_V})) begin
-      `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
-                 $sformatf("SPLIT contiguous phase does not support profile=%s", profile))
+                 "SPLIT currently supports only fixed topology profiles")
     end
     if (constraint_set != "ALL") begin
       `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
@@ -417,7 +415,15 @@ package shmins_random_benchmark_pkg;
     shmins_sequence_item item;
 
 `ifdef SHMINS_USE_SPLIT_ITEM
-    item = shmins_contiguous_sequence_item::type_id::create(item_name);
+    case (benchmark_itype)
+      LDST_S, LDST_V: item = shmins_contiguous_sequence_item::type_id::create(item_name);
+      LDSTE_S: item = shmins_strided_sequence_item::type_id::create(item_name);
+      LDSTE_V: item = shmins_indexed_sequence_item::type_id::create(item_name);
+      default: begin
+        `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
+                   $sformatf("SPLIT does not support itype=%0d", benchmark_itype))
+      end
+    endcase
     item.m2v_unique_enable = m2v_unique_enable;
 `else
     item = shmins_sequence_item::type_id::create(item_name);
@@ -520,5 +526,9 @@ package shmins_random_benchmark_pkg;
     total_retry_count += item.post_randomize_retry_count;
 `endif
   endfunction : update_checksum
+
+`ifdef SHMINS_USE_SPLIT_ITEM
+  `include "shmins_random_cross_benchmark_test.svh"
+`endif
 
 endpackage : shmins_random_benchmark_pkg

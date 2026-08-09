@@ -32,8 +32,34 @@ monolithic post-randomize 实现和按地址生成拓扑拆分的新实现。三
 `shmins_sequence_item` 的 class，因此不能出现在同一次编译中；编译结果分别写入对应的
 `build/<implementation>/`。
 
-SPLIT 当前处于 contiguous 开发阶段，只支持 `LDST_S`、`LDST_V` 的 LOC/WRP/BLK 固定
-profile。它不接入正式 `ut_shm` package，不能用于系统仿真或 DUT 功能结论。
+SPLIT 当前支持 contiguous `LDST_S/LDST_V`、strided `LDSTE_S` 和 indexed `LDSTE_V`
+的 LOC/WRP/BLK 固定 profile。三个 topology 已通过远端 Ubuntu VCS benchmark 编译和参数
+交叉测试。SPLIT 不接入正式 `ut_shm` package，不能用于系统仿真或 DUT 功能结论。
+
+## SPLIT 参数交叉与无 inline constraint 基准
+
+下面的脚本只适用于 `split` 实现。`matrix` 在一次仿真进程中遍历 topology、space、RW、
+dtype、ATYPE width、signedness 和 granularity 的 432 种组合；contiguous 固定选择地址算法
+相同的 `LDST_V`，`INV_SIZE` 固定为 10，LOC/WRP 使用 `WPID=0/WPNUM=1`，BLK 使用最后一个
+WPID 和 `WPNUM=4`。M2V optional uniqueness 保持关闭。
+
+`unconstrained` 分别创建 contiguous、strided 和 indexed 子类，并直接调用
+`item.randomize()`，不添加 inline `with` constraint。子类自身用于选择地址拓扑的 native
+constraint 仍然生效。
+
+```sh
+BENCH_ITERATIONS=100 BENCH_WARMUP=5 \
+  scripts/ubuntu/run_shmins_random_cross_benchmark.sh matrix
+
+BENCH_ITERATIONS=1000 BENCH_WARMUP=10 \
+  scripts/ubuntu/run_shmins_random_cross_benchmark.sh unconstrained
+
+BENCH_ITERATIONS=100 BENCH_WARMUP=5 \
+  scripts/ubuntu/run_shmins_random_cross_benchmark.sh all
+```
+
+逐组合结果写入 `build/split/cross_matrix.csv`，无 inline constraint 结果写入
+`build/split/unconstrained.csv`。对应日志保存在同一目录，不进入源码仓库。
 
 macOS 只能检查语法和 C 计时代码，不能产生 randomize 性能数据：
 

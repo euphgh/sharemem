@@ -17,6 +17,7 @@ usage() {
 环境变量：
   SHAREMEM_REMOTE_HOST  SSH 主机或别名，默认 chatgpt
   SHAREMEM_REMOTE_DIR   远端 HOME 下的仓库路径，默认 sharemem
+  SHAREMEM_SSH_OPTION   追加到 ssh 的 SSH 选项，以空白分隔，默认为空
 
 命令及其参数会被安全地逐项转义，然后在远端仓库目录中执行。需要管道、重定向
 或其他 shell 语法时，请显式使用：
@@ -40,6 +41,21 @@ esac
 remote_host="${SHAREMEM_REMOTE_HOST:-chatgpt}"
 remote_dir="${SHAREMEM_REMOTE_DIR:-sharemem}"
 remote_dir="${remote_dir%/}"
+
+# Bound connection setup and prevent an authentication prompt from looking like a hung command.
+ssh_args=(
+    -o BatchMode=yes
+    -o ConnectTimeout=10
+    -o ServerAliveInterval=10
+    -o ServerAliveCountMax=3
+)
+
+# 将用户配置的 SSH 选项作为独立参数追加，避免整段字符串被 ssh 当作一个参数。
+# 此变量用于命令行选项，不支持选项值中包含空白字符。
+if [[ -n "${SHAREMEM_SSH_OPTION:-}" ]]; then
+    read -r -a ssh_extra_args <<<"$SHAREMEM_SSH_OPTION"
+    ssh_args+=("${ssh_extra_args[@]}")
+fi
 
 if [[ -z "$remote_host" ]]; then
     printf '错误：SHAREMEM_REMOTE_HOST 不能为空\n' >&2
@@ -65,5 +81,5 @@ printf '远端执行：%s:%s$' "$remote_host" "$remote_dir"
 printf ' %q' "$@"
 printf '\n'
 
-ssh -- "$remote_host" \
+ssh "${ssh_args[@]}" -- "$remote_host" \
     "cd -- ${remote_dir_quoted} && exec${remote_command}"

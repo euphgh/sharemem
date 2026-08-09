@@ -3,6 +3,6 @@ module shmins_random_benchmark_tb;
   import shmins_random_benchmark_pkg::*;
 
   initial begin
-    run_test("shmins_random_benchmark_test");
+    run_test();
   end
 endmodule : shmins_random_benchmark_tb
