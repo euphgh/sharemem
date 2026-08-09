@@ -141,7 +141,8 @@ function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_
     else begin: m2v
         byte unsigned rdata[BANK_N][VEC_BYTE_N];
         int elem_byte_n = wgolden.data_byte_w();
-        baddr_t waddr_base = baddr_t'(wgolden.creq_vaddr) + baddr_t'(WARP_STEP * int'(wgolden.creq_wpid));
+        // baddr_t waddr_base = baddr_t'(wgolden.creq_vaddr) + baddr_t'(WARP_STEP * int'(wgolden.creq_wpid));
+        baddr_t waddr_base = baddr_t'(wgolden.creq_vaddr);
         // tidx: thread index, eidx: element index
         foreach(wgolden.baddr_2d_array[tidx, eidx]) begin
             // the value of wmap in read mode is the element/byte index
