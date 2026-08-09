@@ -4,7 +4,11 @@ import uvm_pkg::*;
 import shm_util_package::*;
 
 `include "uvm_macros.svh"
-`include "shmins_sequence_item.svh"
+`include "shmins_split_sequence_item.svh"
+`include "shmins_contiguous_sequence_item.svh"
+`include "shmins_strided_sequence_item.svh"
+`include "shmins_indexed_sequence_item.svh"
+`include "shmins_vtrans_sequence_item.svh"
 `include "shmins_enum_field.svh"
 `include "vlm_memory_sequence_item.svh"
 `include "vlm2aa.svh"

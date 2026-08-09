@@ -118,6 +118,7 @@ collect_sources() {
                 "$sequence_dir/shmins_contiguous_sequence_item.svh"
                 "$sequence_dir/shmins_strided_sequence_item.svh"
                 "$sequence_dir/shmins_indexed_sequence_item.svh"
+                "$sequence_dir/shmins_vtrans_sequence_item.svh"
             )
             ;;
     esac

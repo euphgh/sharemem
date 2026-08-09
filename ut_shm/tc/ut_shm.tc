@@ -14,7 +14,7 @@ m2v_unit_test: shm_unit_test
 endargs
 
 v2m_vtrans_test: shm_unit_test
-+VTRANS_EN=1
++VTRANS_EN=100
 endargs
 
 INCLUDE: v2m/vec_loc.tc

@@ -17,12 +17,12 @@ function shm_unit_test::new(string name = "shm_unit_test", uvm_component parent)
 endfunction :new
 
 task shm_unit_test::main_phase(uvm_phase phase);
-    shmins_unit_sequence seq;
+    shmins_mst_unit_sequence seq;
     phase.raise_objection(this);
     `uvm_info(get_type_name(), "In main_phase...!!", UVM_DEBUG);
 
     // get simulate args
-    seq = shmins_unit_sequence::type_id::create("shmins_unit_seq");
+    seq = shmins_mst_unit_sequence::type_id::create("shmins_mst_unit_seq");
     seq.plusargs_override_config();
     `uvm_info(get_type_name(),
               $sformatf("Smoke configuration: TRANS_NUM=%0d", seq.m_seq_trans_num),

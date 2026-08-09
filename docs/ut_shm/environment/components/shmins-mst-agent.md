@@ -26,9 +26,12 @@ Agent 从 Config DB 获取 `shmins_mst_agent_config` 和 `shmins_vif`。默认�
 |`ver_common/uvc/shmins_agent/shmins_mst_agent.svh`|agent 创建和连接|
 |`ver_common/uvc/shmins_agent/shmins_mst_driver.svh`|credit 控制和 creq 驱动|
 |`ver_common/uvc/shmins_agent/shmins_monitor.svh`|creq 采集和 ack timeout|
-|`ver_common/uvc/shmins_agent/sequences/shmins_sequence_item.svh`|creq transaction、编码和 helper|
-|`ver_common/uvc/shmins_agent/sequences/shmins_seq_item_constraints.svh`|生成的随机约束|
-|`ver_common/uvc/shmins_agent/sequences/shmins_unit_sequence.svh`|plusarg 可配置的 unit sequence|
+|`ver_common/uvc/shmins_agent/sequences/shmins_split_sequence_item.svh`|正式公共 creq transaction、编码和 helper|
+|`ver_common/uvc/shmins_agent/sequences/shmins_mst_unit_sequence.svh`|domain 和 plusarg 可配置的 master unit sequence|
+|`ver_common/uvc/shmins_agent/sequences/shmins_contiguous_sequence_item.svh`|LDST_S/LDST_V 地址生成|
+|`ver_common/uvc/shmins_agent/sequences/shmins_strided_sequence_item.svh`|LDSTE_S 地址生成|
+|`ver_common/uvc/shmins_agent/sequences/shmins_indexed_sequence_item.svh`|LDSTE_V 地址生成|
+|`ver_common/uvc/shmins_agent/sequences/shmins_vtrans_sequence_item.svh`|继承 contiguous 的 VTRANS 请求|
 
 ## 3. Transaction 与 `creq_typ`
 
@@ -47,7 +50,7 @@ helper 从 dtype、atype 和 itype 计算 element 数、offset 宽度和 MADDR�
 
 ## 4. Sequence 配置
 
-`shmins_unit_sequence` 支持以下大写 plusarg：
+`shmins_mst_unit_sequence` 支持以下大写 plusarg：
 
 ```text
 TRANS_NUM
@@ -63,9 +66,13 @@ CREQ_ITYPE
 CREQ_SPACE
 ```
 
-枚举字符串通过 `shmins_enum_field.svh` 转换。普通请求从这些配置约束 item；VTRANS
-强制 V2M、SPACE_LOC、16 个 element、全 element mask 和全 thread mask。普通请求的
-`creq_tmsk` 随机化约束为非全零，driver 和 monitor 已贯通该字段。
+枚举字符串通过 `shmins_enum_field.svh` 转换。未出现的 `CREQ_*` 保持完整 normal
+allowed-value domain；出现的字段通过 `set_fix_*()` 缩小为 singleton。`VTRANS_EN` 是
+0～100 的全局 transaction 概率，不再是 bit enable。
+
+VTRANS 使用独立 dtype/atype/itype domain，并由 `shmins_vtrans_sequence_item` 强制 V2M、
+SPACE_LOC、16 个 element、全 element mask 和全 thread mask。Normal 配置不覆盖 VTRANS
+配置，两类请求可以在同一个 sequence 中混合生成。
 
 ## 5. Driver 和 credit
 
@@ -117,8 +124,8 @@ Transaction 的 `compare_item()` 仍是 placeholder，调用会 fatal；字段�
 
 ## 9. 相关测试
 
-`ut_shm/tests/shm_unit_test.svh` 通过 `shmins_unit_sequence` 覆盖当前集成激励入口，可用
-plusarg 改变 transaction 数量和部分 creq 字段。当前没有独立的 credit/release、ack
+`ut_shm/tests/shm_unit_test.svh` 通过 `shmins_mst_unit_sequence` 覆盖当前集成激励入口，
+可用 plusarg 改变 transaction 数量、normal domain 和 VTRANS 比例。当前没有独立的 credit/release、ack
 完整性、四态输入、transaction copy 或 reset 静默单元测试；V2M
 `LDSTE_S + SPACE_WRP/SPACE_BLK` 也缺少 element-0 mask 激励。相关缺口由
 `SHMINS-001`～`SHMINS-010` 的验收项追踪。

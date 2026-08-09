@@ -93,7 +93,7 @@ interface 的 `rst_n` 处理 reset。
 ## 8. 相关测试
 
 `ut_shm/tests/shm_unit_test.svh` 是当前完整 environment 的集成 smoke：启动
-`shmins_unit_sequence`，并依赖三个 agent、reference 和 scoreboard 共同工作。当前没有
+`shmins_mst_unit_sequence`，并依赖三个 agent、reference 和 scoreboard 共同工作。当前没有
 针对 Config DB 缺失、unsupported passive 组合或运行中 reset 清理的 environment 定向
 测试；这些场景分别由 `ENV-002` 和 `ENV-001` 的验收项追踪。
 

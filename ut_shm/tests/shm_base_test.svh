@@ -38,7 +38,6 @@ class shm_base_test extends uvm_test;
     extern function        new(string name = "shm_base_test", uvm_component parent);
     extern virtual function void build_phase(uvm_phase phase);
     extern virtual function void end_of_elaboration_phase(uvm_phase phase);
-    extern virtual task     main_phase(uvm_phase phase);
     extern virtual function void report_phase(uvm_phase phase);
 
     `uvm_component_utils(shm_base_test)
@@ -67,27 +66,6 @@ function void shm_base_test::end_of_elaboration_phase(uvm_phase phase);
     `uvm_info(get_type_name(), "In end_of_elaboration_phase...!!", UVM_DEBUG);
     `uvm_info(get_type_name(), $sformatf("Printing the Test Topology : %s", this.sprint(printer)), UVM_HIGH);
 endfunction: end_of_elaboration_phase
-
-task shm_base_test::main_phase(uvm_phase phase);
-
-    int trans_num = 10; // default trans_num=10;
-    shmins_mst_sequence seq;
-    //
-    super.main_phase(phase);
-    phase.raise_objection(this);
-    `uvm_info(get_type_name(), "In main_phase...!!", UVM_DEBUG);
-
-    // get simulate args
-    $value$plusargs("trans_num=%d", trans_num);
-
-    seq = shmins_mst_sequence::type_id::create("seq");
-    seq.trans_num = trans_num;
-    seq.set_starting_phase(phase);
-    seq.start(shm_env.shmins_mst_agt.sequencer);
-    #100ns;
-    phase.drop_objection(this);
-
-endtask: main_phase
 
 function void shm_base_test::report_phase(uvm_phase phase);
     uvm_report_server svr;

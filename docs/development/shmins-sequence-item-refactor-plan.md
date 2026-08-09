@@ -1,8 +1,10 @@
 # shmins sequence item 拆分开发计划
 
 本文规定 `shmins_sequence_item` 随机化性能重构的设计边界、目标结构、开发阶段和验收
-证据。本阶段只开发并验证 `examples/shmins_random_benchmark/` 使用的新实现，不把它接入
-`ut_shm` 正式 package、driver、monitor、reference、scoreboard、testcase 或 regression。
+证据。Benchmark 阶段已经完成 contiguous、strided 和 indexed 原型及交叉性能测试；当前
+阶段把 SPLIT 实现接入 `ut_shm` 正式 sequence item package 和 master unit sequence。
+Driver、monitor、reference 和 scoreboard 继续通过公共 `shmins_sequence_item` handle
+工作，不按地址拓扑派生新的组件类型。
 
 DUT 地址与 creq 合法性仍以 [地址模型](../ut_shm/spec/address-model.md)和
 [creq/ack 接口](../ut_shm/spec/creq-ack-interface.md)为准。本文描述如何产生合法激励，
@@ -27,7 +29,8 @@ solve-order、全局 uniqueness 和 thread range non-overlap 求解。许多 ina
    过程式构造；
 3. 由独立 validator 复查 packed offset 和最终 transaction，不信任生成算法自身；
 4. 保留 original 和 monolithic post-randomize 实现作为性能基线；
-5. 仅在 hx16 上编译、运行和比较 `examples/shmins_random_benchmark/`。
+5. 保持 driver、monitor、sequencer 和 reference 使用的公共 transaction API；
+6. 在远端 EDA 服务器上完成无 DUT 的 package/sequence 编译，再进入真实 DUT testcase。
 
 ## 2. 已确认的约束边界
 
@@ -242,9 +245,116 @@ uniqueness 检查；M2V 默认允许重复地址。
 VTRANS 继承 contiguous，只增加方向、`creq_info==4'hf`、SPACE_LOC、dtype/itype、全
 thread mask、16-element length 和全 element mask 限制。它不复制 contiguous 地址算法。
 
-## 6. Benchmark 接入
+## 6. Sequence 配置与正式环境接入
 
-本阶段不修改 `ut_shm/env/shm_seq_item_package.sv`。Benchmark 增加第三种实现选择：
+### 6.1 Sequence 层级和对象创建
+
+不再维护旧的 `shmins_mst_sequence`。`shmins_unit_sequence` 重命名为
+`shmins_mst_unit_sequence`，并直接继承：
+
+```systemverilog
+uvm_sequence #(shmins_sequence_item)
+```
+
+Sequence 每笔 transaction 显式创建拓扑子类。禁止使用全局 factory override 把公共
+基类替换为某一个子类，因为同一 sequence 可以产生多种 ITYPE，monitor 也仍需创建不参与
+随机化的公共基类对象。
+
+Normal transaction 必须先从允许的 ITYPE 集合选择本笔 `selected_itype`，再创建：
+
+```text
+LDST_S、LDST_V -> shmins_contiguous_sequence_item
+LDSTE_S        -> shmins_strided_sequence_item
+LDSTE_V        -> shmins_indexed_sequence_item
+```
+
+VTRANS 直接创建 `shmins_vtrans_sequence_item`。该类继承 contiguous，只覆盖普通请求
+类型约束并增加 VTRANS 的协议限制，不重写地址生成算法。
+
+### 6.2 Normal allowed-value domain
+
+`shmins_mst_unit_sequence` 不使用 value 加 `is_fixed` 的双变量配置，也不保留位置参数较多
+的 `config_item()`。每个基本控制字段使用一个无重复元素的 queue 表示当前允许集合：
+
+```systemverilog
+creq_dtype_e   normal_dtype_domain[$];
+creq_atype_w_e normal_atype_w_domain[$];
+creq_atype_s_e normal_atype_s_domain[$];
+creq_atype_g_e normal_atype_g_domain[$];
+creq_rw_e      normal_rw_domain[$];
+creq_itype_e   normal_itype_domain[$];
+creq_space_e   normal_space_domain[$];
+```
+
+初始集合包含对应字段的全部协议合法枚举值。空配置因而表示 normal 大随机；singleton
+表示固定值；多元素子集表示受限随机。公开 setter 包括：
+
+```text
+set_fix_dtype()    set_fix_atype_w()  set_fix_atype_s()
+set_fix_atype_g()  set_fix_rw()       set_fix_itype()
+set_fix_space()
+```
+
+Setter 只允许把当前集合缩小为其中一个值。参数不在当前集合时立即报告配置错误；重复设置
+相同值是幂等操作，不额外维护 configured flag。所有 domain 在 sequence 启动前必须非空。
+
+Item randomize 使用 `inside {local::domain}` 约束 allowed-value queue，不能把 enum 字段与
+queue 用 `==` 比较。ITYPE 是唯一必须在创建 item 前选出具体值的字段；它在每笔
+transaction 重新选择，因此不属于 sequence 级 fixed 配置。
+
+### 6.3 独立 VTRANS allowed-value domain
+
+VTRANS 与 normal 使用互不修改的配置集合：
+
+```text
+dtype   = {DTYP_16, DTYP_8}
+atype_w = {ATYP_32, ATYP_16}
+atype_s = {ATYP_U, ATYP_S}
+atype_g = {GAUTO_1B, GAUTO_DW}
+itype   = {LDST_S, LDST_V}
+```
+
+公开 setter 为 `set_fix_vtrans_dtype()`、`set_fix_vtrans_atype_w()`、
+`set_fix_vtrans_atype_s()`、`set_fix_vtrans_atype_g()` 和
+`set_fix_vtrans_itype()`。VTRANS 的 `rw==SHM_V2M`、`space==SPACE_LOC` 和
+`creq_info==4'hf` 是协议常量，由 VTRANS item 约束，不提供 sequence 配置 API。
+
+`atype_g` 虽然不影响数据转置，仍参与普通 offset 解码和 MADDR 计算，因此必须保留在
+VTRANS domain 中。
+
+### 6.4 全局 VTRANS 概率
+
+`set_vtrans_en(int unsigned percentage=100)` 配置每笔 transaction 为 VTRANS 的全局
+概率，参数范围为 0～100。未调用时内部概率为 0：
+
+```text
+0   -> 只生成 normal transaction
+1～99 -> 按全局比例混合 normal 和 VTRANS
+100 -> 只生成 VTRANS transaction
+```
+
+选择 VTRANS 后只使用 VTRANS domain；选择 normal 后只使用 normal domain。两套配置
+互不求交，因此 `normal rw={SHM_M2V}` 与非零 VTRANS 概率可以合法共存。100% VTRANS
+也不缩小或覆盖 normal domain。
+
+### 6.5 时间和命令行配置
+
+`config_time(trans_num, delay_max, delay_min)` 保留，启动前检查 transaction 数量非负且
+delay 区间非空。已有 `TRANS_NUM`、`TRANS_DELAY_MIN/MAX`、`CREQ_*` 和 `VTRANS_EN`
+plusarg 保留；出现的 `CREQ_*` 通过 normal setter 缩小对应 domain，`VTRANS_EN` 解析为
+0～100 的全局概率。VTRANS 专用 domain 第一版只通过公开 API 配置，不复用 normal
+`CREQ_*` plusarg。
+
+### 6.6 Package 和兼容边界
+
+正式 `shm_seq_item_package` include 公共基类、contiguous、strided、indexed、VTRANS 和
+enum helper；`shm_seq_package` 只 include `shmins_mst_unit_sequence`。公共基类保留
+driver、monitor、reference 和 `shm_wtrans_item` 已使用的字段、copy、RTL pack/unpack 和
+地址 helper API。旧 solver item 只作为 benchmark ORIGINAL 基线，不再进入正式 package。
+
+## 7. Benchmark 基线
+
+Benchmark 保留三种实现选择：
 
 ```text
 ORIGINAL          当前 solver-based item
@@ -271,7 +381,7 @@ Benchmark 还需增加或确认以下可控字段，不能继续只固定 DTYP_8
 统计至少包括 randomize 成败、validator error、retry exhaustion、每种 reject 原因、
 `elapsed_ms`、`ms_per_attempt`、attempts per second 和 checksum。
 
-## 7. 开发阶段
+## 8. 开发阶段
 
 1. **公共 checker**：先实现 offset 编解码、active-element、三种 space 映射、自然对齐、
    hole、WARP group 和物理 byte collision 的独立 validator。
@@ -281,20 +391,17 @@ Benchmark 还需增加或确认以下可控字段，不能继续只固定 DTYP_8
 5. **Strided**：实现 stride 可达区间、element 0 和 signed stride 规则。
 6. **VTRANS**：复用 contiguous 并增加输入限制。
 7. **Benchmark**：增加 SPLIT build、字段 knobs、profile matrix 和统计。
-8. **hx16 验证**：同步 benchmark 所需最小输入，在映射工作区运行 VCS benchmark。
-9. **结果复核**：记录命令、VCS 版本、seed、三次重复结果和未覆盖范围，再决定是否进入
-   正式环境集成阶段。
+8. **Benchmark 验证**：完成三种拓扑的交叉性能和无 inline override 测量。
+9. **正式集成**：增加 VTRANS 子类、domain-based master unit sequence 和 package include。
+10. **空 design 编译**：不依赖真实 DUT，编译正式 item/sequence 源码和最小 UVM top。
+11. **系统验证**：空 design 编译通过后，由独立阶段运行真实 DUT testcase/regression。
 
-截至 2026-08-08，阶段 1～3 已完成第一版，阶段 7 已完成 SPLIT
-contiguous profile 与定向地址字段控制，阶段 8 已完成 compile 和三个
-100-attempt 代表配置。阶段 4～6、完整矩阵和三次基线对比仍待完成，
-因此 `SHMINS-012` 保持“实现中”。
+截至 2026-08-09，contiguous、strided 和 indexed 及 432 组交叉配置已经完成远端编译和
+随机化测试；阶段 9 的正式 package/sequence 接入和阶段 10 的空 design VCS 编译已经完成。
+Driver、monitor、reference、scoreboard 和真实 DUT regression 不在本次修改范围；发现
+contract 冲突时记录到 verification status，不顺带改变 DUT 检查语义。
 
-本阶段不得顺带修改 driver、monitor、reference、scoreboard、TC/LST 或正式 package。
-若开发中发现这些组件 contract 与新 validator 冲突，只记录到 verification status，
-不扩大本阶段实现范围。
-
-## 8. hx16 验证矩阵和证据
+## 9. 远端验证矩阵和证据
 
 本地工作区没有 EDA 工具，不运行 VCS。先加载本地 `.env`，再使用
 `scripts/local/sync_remote_repo.sh` 同步必要输入，并通过
@@ -302,7 +409,22 @@ contiguous profile 与定向地址字段控制，阶段 8 已完成 compile 和�
 生成的 simv、日志和计时结果留在远端
 `examples/shmins_random_benchmark/build/` 目录；`.env` 本身不同步。
 
-最低矩阵包括：
+正式集成的第一道门槛是空 design compile：最小 UVM top include 与正式 package 相同的
+公共基类、四种子类、enum helper 和 `shmins_mst_unit_sequence`，但不实例化真实 DUT，
+也不运行功能 testcase。该测试只证明 SystemVerilog/UVM 语法、继承、constraint、factory
+注册和 queue-based inline constraint 可以由目标 VCS 接受。
+
+2026-08-09 使用远端 VCS `W-2024.09-SP1_Full64` 执行：
+
+```text
+scripts/ubuntu/check_shmins_sequence_vcs.sh compile
+```
+
+公共基类、contiguous、strided、indexed、VTRANS、enum helper 和
+`shmins_mst_unit_sequence` 均完成 parse、elaboration 和 simv link，无编译 error。VCS 报告
+Linux 6.17 kernel 不在支持列表，该环境 warning 未阻止编译。
+
+后续功能最低矩阵包括：
 
 - contiguous、strided、indexed 的 LOC/WRP/BLK 固定 profile；
 - V2M 和 M2V；
@@ -317,25 +439,21 @@ contiguous profile 与定向地址字段控制，阶段 8 已完成 compile 和�
 和 seed，对三种实现各运行至少三次。先用小 iteration 排除长时间卡住，再使用不少于
 100 次 measured attempt 形成正式结果。
 
-## 9. 本阶段验收条件
+## 10. 当前集成阶段验收条件
 
-- SPLIT benchmark 在 hx16 上完成 VCS compile 和所有 required profile；
-- required run 的 `failures==0`、validator error 为 0、retry exhaustion 为 0；
-- 每笔成功 transaction 的所有 active MADDR 自然对齐且满足 range、hole 和 group；
-- V2M 没有 active 物理 byte collision，M2V 合法重复地址不误报；
-- `V2M + LDSTE_S + WRP/BLK` 的 active element 0 全部被 mask；
-- 已知慢 profile 能稳定完成不少于 100 次 attempt；
-- 同配置三次运行的 median `ms_per_attempt` 低于 ORIGINAL 和 monolithic
-  POST_RANDOMIZE；其他 required profile 若出现明显性能回退，必须记录原因后才能验收；
-- 日志保存实现名、命令、VCS 版本、seed、配置、次数、checksum 和 reject 统计；
-- 不修改或编译正式 `ut_shm` 集成路径，benchmark 通过不作为 DUT 功能或系统 regression
+- 正式 item package include 公共基类和四种 topology/request 子类；
+- `shmins_mst_unit_sequence` 不依赖已删除的 `shmins_mst_sequence`；
+- 空 normal domain 语义不存在，完整初始 domain 表示大随机；setter 只能保持或缩小集合；
+- normal 和 VTRANS domain 互不修改，全局 VTRANS 概率的 0、部分、100 语义明确；
+- sequence 显式创建正确子类，所有 queue 通过 `inside` 参与 inline constraint；
+- 远端空 design VCS compile 无 error；
+- 本阶段编译通过只作为正式激励源的语法/结构证据，不作为 DUT 功能或系统 regression
   通过证据。
 
-## 10. 暂缓项
+## 11. 暂缓项
 
 以下工作不属于本阶段：
 
-- 把新实现接入 `shm_seq_item_package` 或 unit sequence；
 - 修改 driver、monitor、reference、scoreboard；
 - 修复 `REF-001` 或以现有 reference 验证非零 SPACE_BLK group；
 - 运行真实 DUT case、TC/LST regression 或 functional coverage；
@@ -343,5 +461,5 @@ contiguous profile 与定向地址字段控制，阶段 8 已完成 compile 和�
 - 放宽 base 和 decoded offset 分别自然对齐的临时激励限制；
 - 删除 original 或 monolithic benchmark 基线。
 
-进入正式集成前必须另立阶段，重新检查 `SHMINS-002`～`SHMINS-007`、API 兼容性和完整
-ut_shm 语法/elaboration 证据。
+空 design 编译通过后仍需另立系统验证阶段，重新检查 `SHMINS-002`～`SHMINS-007`、真实
+DUT testcase、完整 ut_shm elaboration 和 regression 证据。

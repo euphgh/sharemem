@@ -218,12 +218,10 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 
 ### `SHMINS-012` Sequence item 随机化性能与结构拆分
 
-- 现状：solver-based `shmins_sequence_item` 仍是正式 `ut_shm` 实现。Benchmark-only
-  SPLIT 原型已增加公共基类和 `shmins_contiguous_sequence_item`：大型 offset
-  数组不再进入 solver，基类负责 offset 编解码、LOC/WRP/BLK 映射、物理
-  byte collision 和最终 transaction validator，contiguous 子类从 base、ATYPE
-  可编码范围和 active element 边界反推起始 MADDR 区间。Strided、indexed
-  和 VTRANS 子类尚未实现，也尚未进行三实现的三次性能对比。
+- 现状：SPLIT 公共基类、contiguous、strided、indexed 和 VTRANS 已接入正式 item
+  package；旧 master sequence 已删除，`shmins_mst_unit_sequence` 使用 normal/VTRANS
+  独立 allowed-value domain 和全局 VTRANS 概率显式创建子类。Benchmark 已完成 432 组
+  topology/space/direction/dtype/atype 交叉随机化测试，空 design 编译也已通过。
 - 影响：随机化可能长时间停滞或以 retry exhaustion 结束，阻止 testcase 稳定产生合法
   creq；把全部地址形态和方向策略放在一个 class 中也使修复容易引入交叉回归。
 - 目标：按 MADDR 生成拓扑拆分为公共基类、contiguous、strided、indexed 和 VTRANS
@@ -233,14 +231,12 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 - 对齐边界：协议只要求 active element 的最终 MADDR 按 dtype 自然对齐；本阶段允许把
   base 和 decoded offset 分别对齐作为更强的激励限制，但独立 validator 必须直接检查
   最终 MADDR。
-- 本阶段范围：只增加和验证 `examples/shmins_random_benchmark/` 的 SPLIT 实现，不修改
-  `shm_seq_item_package`、driver、monitor、reference、scoreboard、TC/LST 或 regression。
-  Original 和 monolithic post-randomize 实现继续作为对照基线。
-- 验收：在 hx16 上用相同 VCS、profile、字段配置、seed、iteration、warmup 和 reuse
-  设置比较三种实现。Required profile 必须 `failures==0`、validator error 为 0、retry
-  exhaustion 为 0；已知慢配置完成不少于 100 次 measured attempt，三次运行的 median
-  `ms_per_attempt` 低于两个基线。日志必须记录命令、工具版本、seed、checksum 和 reject
-  统计。Benchmark 通过不作为正式 ut_shm 集成或 DUT 功能通过证据。
+- 本阶段范围：把 SPLIT item 接入正式 item package，增加 VTRANS 子类并用
+  `shmins_mst_unit_sequence` 替换旧 master/unit sequence。Driver、monitor、reference、
+  scoreboard、真实 DUT TC/LST 和 regression 行为不在本次范围。
+- 验收：正式 package include 四种子类；sequence 能根据 topology 和全局 VTRANS 概率
+  显式创建对象；所有 allowed-value queue 以 `inside` 约束 item；远端空 design VCS
+  compile 无 error。该证据不等同于真实 DUT 功能或完整 ut_shm regression 通过。
 - 2026-08-08 阶段证据：使用 `.env` 和 `scripts/local/` 同步/执行脚本，
   hx16 VCS `T-2022.06-SP2-5_Full64` 完成 SPLIT compile。三个 100-attempt
   代表配置均为 `successes=100`、`failures=0`、`validation_errors=0`：
@@ -251,8 +247,16 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
   `examples/shmins_random_benchmark/build/split/run.log`，其余阶段结果记录于本节；
   后续完整矩阵需改用每 profile 独立日志。这些结果只支持 contiguous
   阶段，不满足整个 `SHMINS-012` 的关闭条件。
-- 与其他问题的关系：本阶段可以为 `SHMINS-003`、`SHMINS-004` 和 `SHMINS-007` 提供
-  helper、算法和 benchmark 证据，但因未接入正式环境，不能关闭这些问题。
+- 2026-08-09 交叉 benchmark 证据：432 组配置、每组 100 次 measured randomization，
+  共 43,200 次，`failures=0`、`validation_errors=0`；contiguous、strided、indexed
+  平均分别为 0.223491、0.253070、0.149968 ms/attempt。无 inline override 的三种
+  topology 各完成 1000 次且无失败。结果保留在远端 benchmark build 目录。
+- 2026-08-09 正式激励语法证据：远端 VCS `W-2024.09-SP1_Full64` 执行
+  `scripts/ubuntu/check_shmins_sequence_vcs.sh compile`，公共基类、四种子类、enum helper
+  和 `shmins_mst_unit_sequence` 完成 parse、elaboration 和 simv link，无编译 error。
+  Linux 6.17 unsupported-kernel warning 属于工具环境提示，不影响本次编译结论。
+- 与其他问题的关系：正式激励将应用 ATYPE_S/G domain，并为 `SHMINS-003`、
+  `SHMINS-004` 和 `SHMINS-007` 提供实现基础；在真实 DUT 验证完成前不关闭这些问题。
 
 ### `VMEM-001` `FFD_CYC` read snapshot
 

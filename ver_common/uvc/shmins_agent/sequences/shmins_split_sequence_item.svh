@@ -206,12 +206,42 @@ class shmins_sequence_item extends uvm_sequence_item;
   extern function int unsigned gran_shift();
 
   //----------------------------------------------------------------------------
+  // @brief Returns the legacy dtype alignment mask.
+  //
+  // @return 3, 1, or 0 for DTYP32, DTYP16, or DTYP8.
+  //----------------------------------------------------------------------------
+  extern function int unsigned align_mask();
+
+  //----------------------------------------------------------------------------
+  // @brief Returns the legacy encoded address upper bound for the selected space.
+  //
+  // @return One past the legacy LOC, WRP, or BLK encoded address range.
+  //----------------------------------------------------------------------------
+  extern function int unsigned addr_max();
+
+  //----------------------------------------------------------------------------
+  // @brief Returns the maximum data element count supported by dtype and ITYPE.
+  //
+  // @return Data-vector capacity, additionally limited by offset capacity for LDSTE_V.
+  //----------------------------------------------------------------------------
+  extern function int unsigned max_elem_cnt();
+
+  //----------------------------------------------------------------------------
   // @brief Returns one thread's number of data elements from creq_len.
   //
   // @param thread_idx Thread index to inspect.
   // @return Element count, or 0 for an invalid thread or dtype.
   //----------------------------------------------------------------------------
   extern function int unsigned thread_elem_cnt(int thread_idx);
+
+  //----------------------------------------------------------------------------
+  // @brief Computes one legacy MADDR from decoded procedural offset fields.
+  //
+  // @param thread_idx Source thread index.
+  // @param elem_idx Data element index.
+  // @return Address computed from creq_base, ITYPE, dtype, and offs_elem.
+  //----------------------------------------------------------------------------
+  extern function int phys_addr(int thread_idx, int elem_idx);
 
   //----------------------------------------------------------------------------
   // @brief Determines whether one thread and element produce an access.
@@ -529,12 +559,49 @@ function int unsigned shmins_sequence_item::gran_shift();
   endcase
 endfunction : gran_shift
 
+function int unsigned shmins_sequence_item::align_mask();
+  case (creq_dtype)
+    DTYP_32: return 32'h3;
+    DTYP_16: return 32'h1;
+    DTYP_8:  return 32'h0;
+    default: return 32'h0;
+  endcase
+endfunction : align_mask
+
+function int unsigned shmins_sequence_item::addr_max();
+  case (creq_space)
+    SPACE_LOC: return 1 << VADDR_W;
+    SPACE_WRP: return 1 << BADDR_W;
+    SPACE_BLK: return 1 << MADDR_W;
+    default:   return 1 << VADDR_W;
+  endcase
+endfunction : addr_max
+
+function int unsigned shmins_sequence_item::max_elem_cnt();
+  if (creq_itype == LDSTE_V) begin
+    return data_elem_max() < offs_elem_max() ? data_elem_max() : offs_elem_max();
+  end
+  return data_elem_max();
+endfunction : max_elem_cnt
+
 function int unsigned shmins_sequence_item::thread_elem_cnt(int thread_idx);
   if (thread_idx < 0 || thread_idx >= THD_N || data_byte_w() == 0) begin
     return 0;
   end
   return int'(creq_len[thread_idx]) / data_byte_w();
 endfunction : thread_elem_cnt
+
+function int shmins_sequence_item::phys_addr(int thread_idx, int elem_idx);
+  longint signed base_maddr;
+
+  base_maddr = longint'(creq_base[MADDR_W-1:0]);
+  case (creq_itype)
+    LDST_S, LDST_V: return int'(base_maddr + offs_elem[thread_idx][0] + elem_idx * data_byte_w());
+    LDSTE_S:        return int'(base_maddr + elem_idx * offs_elem[thread_idx][0]);
+    LDSTE_V:        return int'(base_maddr + offs_elem[thread_idx][elem_idx]);
+    default:        return 0;
+  endcase
+endfunction : phys_addr
 
 function bit shmins_sequence_item::is_active_element(int thread_idx, int elem_idx);
   if (thread_idx < 0 || thread_idx >= THD_N || elem_idx < 0 || elem_idx >= ELEM_MAX_N) begin

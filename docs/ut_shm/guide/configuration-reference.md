@@ -74,28 +74,27 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh compile +define+MY_DEBUG
 |Plusarg|格式或取值|读取位置|当前效果|
 |---|---|---|---|
 |`UVM_TESTNAME`|UVM test class 名|UVM|当前正常 case 使用 `shm_unit_test`|
-|`TRANS_NUM`|非负整数|`shmins_unit_sequence`|生成的 creq 数量；主 TC 当前设为 16|
-|`TRANS_DELAY_MIN`|整数|`shmins_unit_sequence`|transaction 间隔随机范围下界|
-|`TRANS_DELAY_MAX`|整数|`shmins_unit_sequence`|transaction 间隔随机范围上界|
-|`VTRANS_EN`|`0`/`1`|`shmins_unit_sequence`|启用 VTRANS 专用 inline constraint|
-|`CREQ_RW`|`SHM_V2M`、`SHM_M2V`|`shmins_unit_sequence`|普通请求方向|
-|`CREQ_DTYPE`|`DTYP_32`、`DTYP_16`、`DTYP_8`|`shmins_unit_sequence`|普通请求数据元素宽度|
-|`CREQ_ATYPE_W`|`ATYP_32`、`ATYP_16`|`shmins_unit_sequence`|普通请求 offset 元素宽度|
-|`CREQ_ATYPE_S`|`ATYP_U`、`ATYP_S`|`shmins_unit_sequence`|能被解析，但当前没有约束到 item，见 `SHMINS-004`|
-|`CREQ_ATYPE_G`|`GAUTO_1B`、`GAUTO_DW`|`shmins_unit_sequence`|能被解析，但当前没有约束到 item，见 `SHMINS-004`|
-|`CREQ_ITYPE`|`LDST_S`、`LDST_V`、`LDSTE_S`、`LDSTE_V`|`shmins_unit_sequence`|普通请求地址生成类型|
-|`CREQ_SPACE`|`SPACE_LOC`、`SPACE_WRP`、`SPACE_BLK`|`shmins_unit_sequence`|普通请求地址空间|
+|`TRANS_NUM`|非负整数|`shmins_mst_unit_sequence`|生成的 creq 数量；主 TC 当前设为 16|
+|`TRANS_DELAY_MIN`|整数|`shmins_mst_unit_sequence`|transaction 间隔随机范围下界|
+|`TRANS_DELAY_MAX`|整数|`shmins_mst_unit_sequence`|transaction 间隔随机范围上界|
+|`VTRANS_EN`|`0..100`|`shmins_mst_unit_sequence`|每笔 transaction 为 VTRANS 的全局百分比|
+|`CREQ_RW`|`SHM_V2M`、`SHM_M2V`|`shmins_mst_unit_sequence`|把 normal 请求方向 domain 缩小到该值|
+|`CREQ_DTYPE`|`DTYP_32`、`DTYP_16`、`DTYP_8`|`shmins_mst_unit_sequence`|把 normal dtype domain 缩小到该值|
+|`CREQ_ATYPE_W`|`ATYP_32`、`ATYP_16`|`shmins_mst_unit_sequence`|把 normal offset 宽度 domain 缩小到该值|
+|`CREQ_ATYPE_S`|`ATYP_U`、`ATYP_S`|`shmins_mst_unit_sequence`|把 normal offset signedness domain 缩小到该值|
+|`CREQ_ATYPE_G`|`GAUTO_1B`、`GAUTO_DW`|`shmins_mst_unit_sequence`|把 normal offset granularity domain 缩小到该值|
+|`CREQ_ITYPE`|`LDST_S`、`LDST_V`、`LDSTE_S`、`LDSTE_V`|`shmins_mst_unit_sequence`|把 normal 地址拓扑 domain 缩小到该值|
+|`CREQ_SPACE`|`SPACE_LOC`、`SPACE_WRP`、`SPACE_BLK`|`shmins_mst_unit_sequence`|把 normal address-space domain 缩小到该值|
 |`EXTERNAL_BUSY_PERCENT`|`0..100`|reservation agent|覆盖 config 中的 external busy 概率；越界会 fatal|
 |`file_debug`|无值开关|reference、memory monitor|分别创建 `vlm.ref`、`vlm_memory.rtl` 调试文件|
 |`UVM_VERBOSITY`|UVM verbosity 名称|UVM|控制 UVM report 输出级别|
 |`UVM_TOPOLOGY`|无值开关|UVM|打印 UVM topology|
 
-`shm_base_test` 还读取小写 `trans_num`，但当前 TC 使用的 `shm_unit_test` 覆盖了
-`main_phase` 并读取大写 `TRANS_NUM`。新增 case 不应混用这两个名称。
+`shm_base_test` 不再自动启动旧 master sequence。`shmins_mst_unit_sequence` 启动时检查
+`TRANS_NUM` 和 delay 区间；非法配置在生成 item 前 fatal。
 
-`TRANS_DELAY_MIN/MAX` 没有独立范围检查；下界大于上界时，sequence item randomize 会
-失败。VTRANS 会覆盖方向、info、dtype/itype 范围、space、thread mask、element 数和
-vector mask，不能把普通请求的全部 plusarg 理解成 VTRANS 的最终约束。
+`CREQ_*` 只配置 normal domain，不配置 VTRANS。VTRANS 使用独立 domain 和子类协议
+约束，因此 normal 的 `CREQ_RW=SHM_M2V` 可以与非零 `VTRANS_EN` 合法共存。
 
 ## 5. TC、LST 与 CFG
 

@@ -8,6 +8,7 @@ package shmins_random_benchmark_pkg;
   `include "shmins_contiguous_sequence_item.svh"
   `include "shmins_strided_sequence_item.svh"
   `include "shmins_indexed_sequence_item.svh"
+  `include "shmins_vtrans_sequence_item.svh"
 `elsif SHMINS_USE_POST_RANDOMIZE_ITEM
   `include "shmins_post_randomize_sequence_item.svh"
 `else

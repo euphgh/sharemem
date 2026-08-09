@@ -128,7 +128,7 @@ V2M 和 M2V 各 54 个。
 
 ### 5.1 TC 可配置字段
 
-`shmins_unit_sequence` 可以解析：
+`shmins_mst_unit_sequence` 可以解析：
 
 ```text
 TRANS_NUM
@@ -144,21 +144,16 @@ CREQ_ITYPE
 CREQ_SPACE
 ```
 
-当前叶子 case 只固定其中的方向、DTYPE、ATYPE_W、ITYPE 和 SPACE。未固定字段继续使用
-sequence 默认值或 transaction 随机值。
+出现的 `CREQ_*` 把 normal allowed-value domain 缩小到 singleton；未出现字段保持完整
+合法 domain 并在每笔 transaction 中随机。`VTRANS_EN` 配置全局 VTRANS 百分比，VTRANS
+使用独立配置域，不继承 normal 的 `CREQ_*`。
 
 ### 5.2 普通请求
 
-普通 sequence inline constraint 当前固定：
-
-- `creq_info=='0`；
-- `creq_wpid==0`；
-- direction、DTYPE、ATYPE_W、ITYPE 和 SPACE 等于 case 配置。
-
-`CREQ_ATYPE_S` 和 `CREQ_ATYPE_G` 虽能被解析到 sequence，但没有约束到 request，见
-`SHMINS-004`。`creq_tmsk` 在普通请求中随机为非全零值，已贯通 driver、monitor 和
-reference，但没有 plusarg 或定向 case 控制其具体 pattern，见 `SHMINS-001`。地址约束
-仍使用部分 2 的幂边界，不能保证排除 12 KiB 编码空洞，见 `SHMINS-003`。
+普通 sequence 先从 normal ITYPE domain 选择本笔 topology，再显式创建 contiguous、
+strided 或 indexed 子类。所有 normal domain 均通过 `inside` inline constraint 应用，
+包括 ATYPE_S 和 ATYPE_G。`creq_tmsk` 在普通请求中随机为非全零值，仍没有 plusarg 或
+定向 case 控制其具体 pattern，见 `SHMINS-001`。
 
 `creq_inv_size`、`creq_ack_en`、priority、length、element mask、base、offset、vaddr 和
 wpnum 等字段主要依赖随机化。没有 functional coverage 时，单个 seed 不能证明这些
@@ -166,7 +161,7 @@ wpnum 等字段主要依赖随机化。没有 functional coverage 时，单个 s
 
 ### 5.3 VTRANS
 
-`v2m_vtrans_test` 使能 VTRANS 后，sequence 固定：
+`v2m_vtrans_test` 把 VTRANS 全局概率设为 100 后，VTRANS 子类固定：
 
 - `SHM_V2M`、`SPACE_LOC`；
 - `DTYP_8` 或 `DTYP_16`；
