@@ -11,7 +11,7 @@ usage() {
 
 目标：
   compile        联合编译 reservation agent、memory agent 和 RpuShmTop stub
-  alignment      编译并运行 reservation 地址定向测试
+  alignment      编译并运行 reservation alignment 职责边界与完整地址定向测试
   external-busy  编译并运行 external busy plusarg 定向测试
   all            依次执行以上三个目标
   clean          删除本脚本生成的 build 目录
@@ -128,7 +128,7 @@ run_alignment() {
     prepare_build
     require_file "$example_dir/alignment_tb.sv"
 
-    printf 'Ubuntu VCS：编译并运行 reservation alignment 定向测试\n'
+    printf 'Ubuntu VCS：编译并运行 reservation alignment 职责边界与完整地址定向测试\n'
     (
         cd -- "$build_dir"
         "${vcs_common[@]}" \

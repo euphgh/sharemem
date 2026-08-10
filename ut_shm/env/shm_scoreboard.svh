@@ -265,7 +265,7 @@ task shm_scoreboard::compare_dut_with_ref();
                     `uvm_info(get_type_name(), {"rtl write fully matched with wmap_final and wmmap_expired:\n", wmap_util::sprint(vlm_wmap)}, UVM_FULL);
                     foreach(ref_record_q[i]) begin
                         shm_wtrans_item curr_trans = ref_record_q[i].tr;
-                        wmap_t trans_pair_matched = wmap_util::get_intersect(curr_trans.wmap, vlm_wmap);
+                        wmap_t trans_pair_matched = wmap_util::get_intersect(vlm_wmap, curr_trans.wmap);
                         foreach(trans_pair_matched[bank, addr]) begin
                             if (ref_record_q[i].tr.wmap[bank][addr] == trans_pair_matched[bank][addr])
                                 ref_record_q[i].matched[bank][addr] = $time;

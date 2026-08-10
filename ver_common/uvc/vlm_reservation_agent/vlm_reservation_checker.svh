@@ -247,7 +247,7 @@ function void vlm_reservation_checker::check_busy_state(
           continue;
         end
 
-        // Retain source-port provenance so the record keeps the issue-time alignment contract.
+        // Retain source-port provenance for structural validation and write-port conflict diagnostics.
         if ((direction == VLM_RESERVATION_READ && rec.write_port != 0) ||
             (direction == VLM_RESERVATION_WRITE && rec.write_port >= WRITE_PORT_N)) begin
           result.busy_error_count++;
@@ -264,18 +264,6 @@ function void vlm_reservation_checker::check_busy_state(
           `uvm_error("VLM_RESERVATION_RECORD_DELAY",
                      $sformatf("cycle %0d direction %0d delay %0d bank %0d record has issue delay %0d",
                                txn.cycle, direction, delay, bank, rec.issue_delay))
-        end
-
-        // Read and write-port-1 records remain aligned; write-port-0 records may retain low address bits.
-        if (vlm_reservation_requires_32byte_alignment(
-                vlm_reservation_direction_e'(direction), rec.write_port) &&
-            rec.address[4:0] != 5'b0) begin
-          result.busy_error_count++;
-          busy_error_count++;
-          `uvm_error("VLM_RESERVATION_RECORD_ALIGNMENT",
-                     $sformatf({"cycle %0d direction %0d delay %0d bank %0d write port %0d record ",
-                                "address 0x%0h is unaligned"},
-                               txn.cycle, direction, delay, bank, rec.write_port, rec.address))
         end
 
         expected_due_cycle = txn.cycle + delay;
@@ -417,17 +405,6 @@ function bit vlm_reservation_checker::check_reservation_request(
     return 1'b0;
   end
 
-  // Read reservations and write port 1 require alignment; write port 0 may carry a complete unaligned address.
-  if (vlm_reservation_requires_32byte_alignment(direction, write_port) &&
-      rsv.address[4:0] != 5'b0) begin
-    request_is_valid = 1'b0;
-    result.reservation_error_count++;
-    reservation_error_count++;
-    `uvm_error("VLM_RESERVATION_ALIGNMENT",
-               $sformatf("cycle %0d direction %0d bank %0d port %0d address 0x%0h is not 32-byte aligned",
-                         txn.cycle, direction, bank, write_port, rsv.address))
-  end
-
   sub_bank = rsv.address[6:5];
   observed_target_busy = !txn.input_error && txn.observed_busy[direction][rsv.delay][sub_bank];
   owned_target_busy = scheduler.external_busy[direction][rsv.delay][sub_bank] |
@@ -539,16 +516,6 @@ function void vlm_reservation_checker::check_mem_request_pair(
   request_matches = 1'b1;
   sub_bank = req.address[6:5];
   rec_due_cycle = rec.issue_cycle + rec.issue_delay;
-
-  // Read MEM requests remain aligned; write MEM legality comes from exact equality with its due record.
-  if (direction == VLM_RESERVATION_READ && req.address[4:0] != 5'b0) begin
-    request_matches = 1'b0;
-    result.mem_match_error_count++;
-    mem_match_error_count++;
-    `uvm_error("VLM_RESERVATION_MEM_ALIGNMENT",
-               $sformatf("cycle %0d direction %0d bank %0d MEM address 0x%0h is not 32-byte aligned",
-                         txn.cycle, direction, bank, req.address))
-  end
 
   // A legal MEM request requires exclusive SHM ownership of its delay-zero sub-bank slot.
   if (!scheduler.shm_busy[direction][0][sub_bank] ||

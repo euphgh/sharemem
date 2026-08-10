@@ -103,8 +103,10 @@ creq 与实际 write 的 scoreboard 路径检查：
 - M2V 的 v-write 可以非对齐；
 - VTRANS 的 V2M write 是特例，可以非对齐。
 
-当前算法尚未建立这项关联和检查，见 `SCB-001`。Reservation checker 仍负责 read
-alignment、busy/reservation 时序以及 reservation 地址与 MEM 地址完全相等。
+当前算法尚未建立这项关联和检查，见 `SCB-001` 及其
+[开发计划](../../../development/scb-001-mem-alignment-plan.md)。Reservation checker 只
+负责 busy/reservation 时序以及 reservation 地址与 MEM 地址完全相等，不再执行 read
+或 write alignment policy。
 
 ## 9. 调试观察点
 

@@ -22,15 +22,16 @@ VCS writes all generated files to `build/`. Remove them with:
 scripts/ubuntu/check_vlm_reservation_vcs.sh clean
 ```
 
-Run the directed write-address alignment and exact-match regression with:
+Run the directed alignment-ownership and exact-address regression with:
 
 ```sh
 scripts/ubuntu/check_vlm_reservation_vcs.sh alignment
 ```
 
-The regression checks that write reservation port 0 accepts and preserves a
-nonaligned address, write port 1 rejects one, and a due `mem_waddr` must match
-all address bits from the reservation.
+The regression checks that read reservations and both write ports accept and
+preserve nonaligned addresses. It also checks that a due MEM request must match
+all address bits from the reservation; alignment policy belongs outside the
+reservation agent.
 
 Run the external busy plusarg regression with:
 

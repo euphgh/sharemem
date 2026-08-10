@@ -68,15 +68,16 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh external-busy
 ```
 
 `compile` 联合编译 reservation agent、memory agent 和 `RpuShmTop` stub；`alignment`
-与 `external-busy` 分别运行现有定向 testbench。一次运行所有目标：
+验证 reservation 不执行 alignment policy 且完整地址必须一致，`external-busy` 运行
+对应 plusarg 定向 testbench。一次运行所有目标：
 
 ```bash
 scripts/ubuntu/check_vlm_reservation_vcs.sh all
 ```
 
-当前定向 testbench 仍存在 [`RSV-003`](../verification-status.md#rsv-003-reservation-example-失效)
-记录的实现差异。脚本成功接入不表示这些测试已经符合最新 spec；若测试按旧规则失败，
-应先根据问题台账判断是预期失效还是新的编译回归。
+`external-busy` testbench 的历史字段问题仍由
+[`RSV-003`](../verification-status.md#rsv-003-reservation-example-失效)跟踪；`alignment`
+目标已不再编码旧的 port-based alignment 规则。
 
 ## 4. 从 macOS 发起相同检查
 
@@ -114,3 +115,18 @@ Ubuntu 可以证明测试环境与 VCS/UVM/VIP 以及伪 design 接口能够共�
 
 这份快照只记录当时的伪 design 环境，后续代码变更后应重新执行，不能替代
 CentOS 真实 RTL 的最终结果。
+
+## 7. 2026-08-09 RSV-001 实测快照
+
+在远端 Ubuntu `chatgpt` 工作区使用 VCS `W-2024.09-SP1_Full64` 得到：
+
+- `scripts/ubuntu/check_vlm_reservation_vcs.sh alignment` 编译并运行通过，日志包含
+  `vlm reservation alignment-ownership regression: PASS`；
+- read、write port 0/1 的非对齐 reservation 均保留完整地址，同地址 MEM request 匹配，
+  仅低 5 bit 不同的 MEM request 被完整地址检查拒绝；
+- `scripts/ubuntu/check_vlm_reservation_vcs.sh compile` 完成 reservation agent、memory
+  agent 和空 design 的 parse、elaboration 与 simv link；
+- Linux 6.17 unsupported-kernel warning 是工具环境提示，没有阻止编译或定向仿真。
+
+该证据验证 reservation alignment 职责迁移和完整地址匹配，不验证暂缓中的 scoreboard
+来源相关 alignment，也不替代真实 RTL 完整 regression。

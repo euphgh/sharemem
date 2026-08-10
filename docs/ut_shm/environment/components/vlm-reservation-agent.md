@@ -138,7 +138,7 @@ Checker 的入口是同步 function `check_cycle(const ref txn)`。它不消耗�
 
 |结果字段|含义|
 |---|---|
-|`reservation_error_count`|本周期 reservation delay、alignment、busy 或到期冲突错误数|
+|`reservation_error_count`|本周期 reservation delay、busy 或到期冲突错误数|
 |`busy_error_count`|本周期 cycle、record 和 busy 状态错误数|
 |`mem_match_error_count`|本周期到期 record 与实际 MEM request 的匹配错误数|
 |`dly_zero_error_count`|本周期不支持的 `dly==0` 请求数|
@@ -171,13 +171,11 @@ Checker 遍历所有 `shm_records[direction][relative_delay][bank]`，对每个�
 |---|---|---|
 |来源端口|read record 的 `write_port!=0`，或 write record 端口越界|`VLM_RESERVATION_RECORD_WRITE_PORT`|
 |原始 delay|`issue_delay==0` 或 `issue_delay>=VTAB_D`|`VLM_RESERVATION_RECORD_DELAY`|
-|Record alignment|当前 helper 判断需要对齐，但 `address[4:0]!=0`|`VLM_RESERVATION_RECORD_ALIGNMENT`|
 |到期方程|`issue_cycle+issue_delay != txn.cycle+relative_delay`|`VLM_RESERVATION_RECORD_DUE_CYCLE`|
 
 Record 的来源、原始 delay、地址和 issue cycle 应在窗口移动过程中保持不变；到期方程
-保证 scheduler 没有把 record 提前、延后或放入错误的 relative-delay 位置。Record
-alignment 仍调用旧的 port-based helper，不是目标 spec，属于 `RSV-001`；其余
-record 自洽性检查不应随 alignment 修复一起删除。
+保证 scheduler 没有把 record 提前、延后或放入错误的 relative-delay 位置。Reservation
+agent 不再根据 direction 或 write port 对 record 地址执行 alignment policy。
 
 ### 8.4 Busy 来源一致性
 
@@ -203,7 +201,6 @@ Checker 只处理 monitor 已经创建的完整已知 request handle：
 |---|---|---|
 |零 delay|`delay==0`；立即返回，不进入其他 reservation 检查|`VLM_RESERVATION_DLY_ZERO`|
 |Delay 范围|`delay>=VTAB_D`；立即返回，避免数组越界|`VLM_RESERVATION_DLY_RANGE`|
-|请求 alignment|当前 helper 要求对齐，但 `address[4:0]!=0`|`VLM_RESERVATION_ALIGNMENT`|
 |目标 busy|可靠的 observed busy 或 scheduler-owned busy 任一个为 1|`VLM_RESERVATION_TARGET_BUSY`|
 |Pending record 冲突|同一 direction/delay/bank 已有 record|`VLM_RESERVATION_PENDING_BANK_DUE_CONFLICT`|
 |同周期 write-port 冲突|同一 BANK 的较早 write port 使用相同 delay|`VLM_RESERVATION_CURRENT_BANK_DUE_CONFLICT`|
@@ -215,8 +212,7 @@ transaction 的两个物理 write port；read 和 write 方向使用不同数组
 BANK 冲突。
 
 Checker 只报告错误并返回该 request 是否有效，不会接纳或删除 record。Scheduler 随后
-使用自己的接纳逻辑更新状态。请求 alignment 同样仍采用旧 port-based helper，修复归入
-`RSV-001`。
+使用自己的接纳逻辑更新状态，并保留 request 的完整地址低位。
 
 ### 8.6 到期 MEM 请求匹配
 
@@ -234,15 +230,14 @@ Direction 和 BANK 由数组位置构成匹配键。两边都为空表示本周�
 |---|---|---|
 |Unexpected MEM|有完整已知 MEM request，但没有到期 record|`VLM_RESERVATION_UNEXPECTED_MEM`|
 |Missing MEM|有到期 record、没有 MEM request，且 `txn.input_error==0`|`VLM_RESERVATION_MISSING_MEM`|
-|Read alignment|read MEM request 的 `address[4:0]!=0`|`VLM_RESERVATION_MEM_ALIGNMENT`|
 |到期 slot 所有权|request 对应 sub-bank 没有 `shm_busy`，或仍有 `external_busy`|`VLM_RESERVATION_MEM_BUSY`|
 |完整地址|`req.address != record.address`|`VLM_RESERVATION_MEM_ADDRESS`|
 |绝对到期周期|`record.issue_cycle+record.issue_delay != txn.cycle`|`VLM_RESERVATION_MEM_DUE_CYCLE`|
 
-Unexpected 和 missing 分支报告后立即返回；两边都存在时，其余四项可以在同一次调用中
-分别报错。只有四项全部通过才增加 `matched_mem_request_count`。Write MEM 不在这里做
-固定对齐，但 reservation 与 MEM 地址始终逐 bit 比较，禁止清除低 5 bit 或只比较 beat
-编号。
+Unexpected 和 missing 分支报告后立即返回；两边都存在时，其余三项可以在同一次调用中
+分别报错。只有三项全部通过才增加 `matched_mem_request_count`。Read/write MEM 都不在
+这里执行 alignment policy，但 reservation 与 MEM 地址始终逐 bit 比较，禁止清除低 5 bit
+或只比较 beat 编号。
 
 固定数组保证每个 direction/bank 每周期最多有一个 MEM request 和一个到期 record，
 因此上述配对同时完成“一笔 request 对一笔 record”和“一笔 record 对一笔 request”的
@@ -268,10 +263,10 @@ Unexpected 和 missing 分支报告后立即返回；两边都存在时，其余
 - `mem_rdata`、read response 延迟、`mem_wdata` 和 `mem_wstrb`：由 memory agent、
   memory model 和 scoreboard 负责；
 - memory 内容以及 creq 到 MEM 的功能映射：由 reference 和 scoreboard 负责；
-- 来源相关 write alignment：reservation transaction 缮信息，目标检查位置是
-  scoreboard，见 `SCB-001`。
+- read 以及来源相关 write alignment：reservation transaction 缺少可靠来源，目标检查
+  位置和暂缓原因见 `SCB-001`。
 
-## 9. Write alignment 的职责边界
+## 9. Alignment 的职责边界
 
 稳定 spec 不能按 reservation write port 推断 write 来源：
 
@@ -279,10 +274,11 @@ Unexpected 和 missing 分支报告后立即返回；两边都存在时，其余
 - M2V v-write 允许非对齐；
 - VTRANS write 允许非对齐。
 
-Reservation transaction 不携带足够的原始指令类型，因此 checker 不应做 port-based
-write alignment；该检查应在能关联 creq 来源的 scoreboard 完成。当前 types helper、
-checker、scheduler 仍把 write port 1 视为对齐、port 0 视为可非对齐，是已知问题
-`RSV-001`。完整地址兑现检查不能随之删除。
+Reservation transaction 不携带足够的原始指令类型，因此 checker 和 scheduler 不执行
+alignment policy。旧的 port-based helper 以及 checker/scheduler 中的 alignment 判断
+已经删除；read/write reservation 和实际 MEM request 仍必须完整地址相等。后续 read
+和来源相关 write alignment 的候选实现与风险见
+[SCB-001 开发计划](../../../development/scb-001-mem-alignment-plan.md)。
 
 ## 10. Coverage
 
@@ -313,9 +309,9 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 ## 12. 相关测试
 
 `examples/vlm_reservation_compile/` 提供联合 elaboration、alignment 和 external busy
-定向入口，`ut_shm/tests/shm_unit_test.svh` 则在完整环境中使用该 agent。当前两个 example
-case 仍编码旧的 write-port alignment 规则或失效字段名，不能作为新 spec 的通过证据，
-见 `RSV-003`。Coverage 为空也意味着集成 smoke 不能替代功能覆盖闭环。
+定向入口，`ut_shm/tests/shm_unit_test.svh` 则在完整环境中使用该 agent。Alignment case
+验证非对齐 read/write reservation 的地址保留和完整地址兑现；external-busy case 的历史
+字段问题仍见 `RSV-003`。Coverage 为空也意味着集成 smoke 不能替代功能覆盖闭环。
 
 ## 13. 调试观察点
 
@@ -332,12 +328,13 @@ case 仍编码旧的 write-port alignment 规则或失效字段名，不能作�
 - Reset 期间不做 X/Z 检查；运行中 reset 必须另外清空 scheduler 和在途状态。
 - `external_busy` 和 `shm_busy` 不能同时拥有同一 slot，`final_busy` 只能是两者 OR。
 - Reservation 与实际 MEM 地址必须完全相等，不能通过清除低位后比较来接受错误地址。
-- Write alignment 由原始指令来源决定，不得再按物理 write port 推断。
+- Reservation agent 不执行 alignment policy，也不得按物理 write port 推断来源。
 - 当前只支持 active；任何 passive knob 都不能产生看似可用的半功能 agent。
 
 ## 15. 当前实现状态
 
-- `RSV-001`：仍按 write port 检查 alignment。
+- `RSV-001`：代码已移除全部 reservation alignment policy，远端定向例与联合编译通过，
+  等待变更提交和完整环境回归后关闭。
 - `RSV-002`：coverage 是空实现。
 - `RSV-003`：alignment 和 external-busy 示例与当前实现不一致。
 - `RSV-004`：全局 `input_error` 会屏蔽无关 slot 的检查。
