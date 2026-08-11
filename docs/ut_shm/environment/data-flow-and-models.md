@@ -17,6 +17,11 @@
 - 地址辅助字段 `offs_elem`、`elem_cnt_max` 和 helper function 用于约束及 reference
   计算，不是独立 DUT 端口。
 
+地址 helper 使用两层模型：LOC/WRP/BLK 把 MADDR 转换为
+`shm_logical_addr_t{bank_id, warp_id, laddr}`，公共物理映射再转换为
+`shm_physical_addr_t{bank_id, gid, baddr}`。M2V 的 `creq_vaddr` 宽度为 `BADDR_W`，由
+sequence 根据逻辑写回起点编码为 gid 内 BADDR。
+
 阶段 2 新增的 `creq_tmsk` 使用 `THD_N` bit packed vector 表示。Driver 把它驱动到
 interface，monitor 采样并检查 X/Z 和全零值，transaction copy 保留该字段；reference
 只为严格等于 1 的 thread 建立派生地址和数据期望。
@@ -31,11 +36,14 @@ interface，monitor 采样并检查 X/Z 和全零值，transaction copy 保留�
 |`issue_time`|reference item 创建时间，供 outstanding 超时诊断使用|
 |`baddr_2d_array`|每个 thread/element 映射后的 BADDR；第一维在当前实现中按 thread index 使用|
 |`bid_2d_array`|每个 thread/element 映射后的 BANK ID；第一维在当前实现中按 thread index 使用|
+|`gid_2d_array`|每个 thread/element 映射后的低/高物理 BANK ID|
+|`logical_addr_2d_array`|可选诊断字段，保存 bank、绝对 warp 和 WARP 内 laddr|
 |`wstrb_2d_array`|每个 element 的有效 byte；第一维在当前实现中按 thread index 使用|
-|`wmap`|按 BANK 和 byte address 索引的期望写值|
+|`wmap`|按 bank、gid 和 byte address 索引的期望写值|
 
-`wmap` 的逻辑类型是 `byte wmap[BANK_N][baddr_t]`：第一维选 BANK，关联数组 key 是
-完整 byte BADDR，value 是一个 byte。它统一表示普通 V2M 写入和 M2V 写回，因此
+`wmap` 的逻辑类型是 `byte wmap[BANK_N][GID_N][baddr_t]`：前两维选择物理
+`<bank_id, gid>`，关联数组 key 是完整 byte BADDR，value 是一个 byte。它统一表示
+普通 V2M 写入和 M2V 写回，因此
 scoreboard 不需要假设 DUT 会把一笔 creq 拆成多少个 32-Byte MEM beat。
 
 ### 1.3 `vlm_memory_sequence_item`
@@ -47,12 +55,15 @@ scoreboard 不需要假设 DUT 会把一笔 creq 拆成多少个 32-Byte MEM bea
 |`vlm_read`|1 表示 read，0 表示 write|
 |`vlm_bken[BANK_N]`|本次快照中有效的 BANK|
 |`vlm_addr[BANK_N]`|各 BANK 的完整 BADDR|
+|`vlm_gid[BANK_N]`|从唯一到期 reservation record 恢复的 gid|
+|`vlm_gid_valid[BANK_N]`|该 MEM event 是否具有唯一可解释的 gid|
+|`reservation_matched[BANK_N]`|due cycle 和完整地址是否均匹配|
 |`vlm_data[BANK_N]`|各 BANK 的 32-Byte data|
 |`vlm_strb[BANK_N]`|各 BANK 的 32-bit byte strobe|
 
-Memory monitor 为实际 MEM 请求创建该对象。Memory slave driver 也使用同一类型向
-scoreboard 请求读数据；这条 blocking transport 路径允许 scoreboard 原地填写
-`vlm_data` 后返回。
+统一 VLM monitor 为实际 MEM 请求创建原始对象，agent/resolver 在 scheduler 的
+pre-update 状态中补全 gid 和 match status 后才发布。Memory slave driver 也使用同一
+类型向 scoreboard 请求读数据；只有唯一匹配的 request 才允许进入可信 memory model。
 
 ### 1.4 Reservation 周期快照
 
@@ -60,13 +71,13 @@ Reservation 路径不复用 `vlm_memory_sequence_item`，而是使用
 `vlm_reservation_cycle_transaction_t` 表示一个周期的原子快照。该 struct 包含：
 
 - 全局 `cycle`；
-- read/write busy 二态快照；
+- read/write `[delay][gid][sub_bank]` busy 二态快照；
 - 每 BANK 的 read reservation 和两个 write reservation nullable handle；
 - 每 BANK 的实际 MEM read/write nullable handle；
 - monitor 是否发现四态输入错误的 `input_error`。
 
-`vlm_rsv_req` 保存完整地址和 issue delay，`vlm_mem_req` 只保存实际 MEM 地址。
-Scheduler 为已经接受的预约另建 `vlm_shm_record_t`，checker 结果使用
+`vlm_rsv_req` 保存完整地址、gid 和 issue delay，原始 `vlm_mem_req` 只保存实际 MEM
+地址。Scheduler 为已经接受的预约另建带 gid 的 `vlm_shm_record_t`，checker 结果使用
 `vlm_reservation_check_result_t` 汇总。它们只在 reservation agent 内部通过同步函数
 调用传递，不进入 environment 级 TLM 网络。
 
@@ -77,9 +88,9 @@ Scheduler 为已经接受的预约另建 `vlm_shm_record_t`，checker 结果使�
 |激励 `shmins_sequence_item`|shmins sequence|sequence、driver 编码/分配 ID|shmins driver|
 |监测 `shmins_sequence_item`|shmins monitor|发布前由 monitor 填充；发布后视为只读|shm reference|
 |`shm_wtrans_item`|shm reference|发布前由 reference 填充；发布后视为只读|shm scoreboard|
-|监测 `vlm_memory_sequence_item`|VLM memory monitor|发布前由 monitor 填充；发布后视为只读|shm scoreboard 或其他订阅者|
+|监测 `vlm_memory_sequence_item`|统一 VLM monitor + resolver|monitor 填原始 payload，resolver 填 gid/match；发布后只读|shm scoreboard 或其他订阅者|
 |读服务 `vlm_memory_sequence_item`|VLM memory driver|driver 填 request；scoreboard 填 `vlm_data`|原 driver|
-|reservation cycle transaction|reservation monitor|monitor 创建 request handle；下游只读|checker、coverage、scheduler|
+|reservation cycle transaction|统一 VLM monitor|monitor 创建 request handle；下游只读|checker、resolver、coverage、scheduler|
 |scheduler record|reservation scheduler|scheduler|checker、coverage、scheduler|
 
 UVM analysis port 传递的是 object handle，不自动建立“接收者可任意修改”的所有权。
@@ -97,7 +108,7 @@ sequenceDiagram
   participant DUT as RpuShmTop
   participant M as shmins monitor
   participant R as shm_reference
-  participant VM as VLM memory monitor
+  participant VM as unified VLM monitor/resolver
   participant S as shm_scoreboard
 
   T->>D: shmins_sequence_item
@@ -110,9 +121,9 @@ sequenceDiagram
   S->>S: update rtl_banks and compare byte writes
 ```
 
-Reference 从监测到的 creq 计算期望 `<BANK, BADDR, byte value>`，立即更新
+Reference 从监测到的 creq 计算期望 `<bank_id, gid, BADDR, byte value>`，立即更新
 `ref_banks`，并发布一笔 `shm_wtrans_item`。DUT 可以把同一 creq 拆成多周期、多 BANK
-的 MEM write；memory monitor 按实际接口周期发布 transaction，scoreboard 再按
+的 MEM write；统一 monitor/resolver 按实际接口周期发布带 gid transaction，scoreboard 再按
 strobe 展开为 byte write，与期望 byte map 对照。
 
 这个数据流只要求最终 byte 写入可匹配，不用 creq ID 强行绑定某一笔 MEM beat。
@@ -127,9 +138,9 @@ DUT 的 m-read 提供数据。
 sequenceDiagram
   participant DUT as RpuShmTop
   participant R as shm_reference
-  participant RD as VLM memory driver
+  participant RD as unified VLM memory driver
   participant S as shm_scoreboard
-  participant WM as VLM memory monitor
+  participant WM as unified VLM monitor/resolver
 
   R->>R: read ref_banks at expected m-read address
   R->>R: write expected data to v-write address
@@ -144,10 +155,11 @@ sequenceDiagram
   S->>S: update rtl_banks and compare expected v-write
 ```
 
-Reference 在收到 creq 时，从自己的 `ref_banks` 读取期望 m-read 数据，再按
-`creq_vaddr` 生成期望 v-write，并把结果仍表示为 `shm_wtrans_item.wmap`。实际读路径
-由 memory slave driver 观察 `mem_rvld/mem_raddr`，通过 `b_transport` 请求 scoreboard
-读取 `rtl_banks`，然后在固定延迟后驱动 `mem_rdata`。DUT 随后产生的 v-write 与其他
+Reference 在收到 creq 时，从自己的 `ref_banks[bank][gid]` 读取期望 m-read 数据，再按
+已经编码为 gid 内 BADDR 的 `creq_vaddr` 生成期望 v-write，并把结果仍表示为
+`shm_wtrans_item.wmap`。实际读路径由统一 VLM agent 观察 `mem_rvld/mem_raddr`，先从唯一
+到期 record 恢复 gid，再通过 `b_transport` 请求 scoreboard 读取
+`rtl_banks[bank][gid]`，然后在固定延迟后驱动 `mem_rdata`。DUT 随后产生的 v-write 与其他
 MEM write 一样由 monitor 送入 scoreboard。
 
 当前 `b_transport()` 在接到 read transaction 时立即读取 `rtl_banks`。它尚未实现
@@ -156,13 +168,13 @@ MEM write 一样由 monitor 送入 scoreboard。
 
 ## 5. 两份 memory 状态
 
-Reference 与 scoreboard 各自持有一组 `svt_mem`，每个物理 BANK 对应一个 byte-wide
+Reference 与 scoreboard 各自持有一组 `svt_mem`，每个 `<bank_id,gid>` 对应一个 byte-wide
 model。二者使用相同的地址范围和初始化策略，但推进时机不同。
 
 |状态|所有者|按什么事件更新|服务对象|
 |---|---|---|---|
-|`ref_banks[BANK_N]`|`shm_reference`|监测到 creq 后，按 reference 预测顺序读写|生成 V2M/M2V 的期望 byte map|
-|`rtl_banks[BANK_N]`|`shm_scoreboard`|memory monitor 发布实际 MEM write 后更新|向 memory driver 提供 DUT 实际可见的 read data|
+|`ref_banks[BANK_N][GID_N]`|`shm_reference`|监测到 creq 后，按 reference 预测顺序读写|生成 V2M/M2V 的期望 byte map|
+|`rtl_banks[BANK_N][GID_N]`|`shm_scoreboard`|统一 monitor 发布匹配的实际 MEM write 后更新|向 memory driver 提供 DUT 实际可见的 read data|
 
 两份状态不能合并。Outstanding 或 DUT 调度改变请求先后时，reference 已经预测的状态
 与实际 MEM 已完成状态可能暂时不同；共享一份 memory 会把预测结果提前暴露给 DUT，
@@ -174,24 +186,26 @@ reference 和 scoreboard，或抽取成一份共享初始化策略。
 
 ## 6. Reservation 数据流
 
-Reservation agent 同时只读观察 reservation 请求与 MEM request 地址，并主动驱动
-busy。它不访问 `ref_banks`、`rtl_banks`、`mem_rdata`、`mem_wdata` 或 scoreboard 的
-期望集合。
+统一 VLM agent 原子观察 reservation 请求和 MEM request，并主动驱动 busy、组织 MEM
+read response。Reservation checker 不访问 reference 期望；只有已经由唯一到期 record
+补全 gid 的 memory transaction 才进入 `rtl_banks` 和 scoreboard 数据路径。
 
 ```text
-reservation interface + MEM valid/address
+unified VLM interface
                 │
                 ▼
-vlm_reservation_monitor.collect_cycle()
+vlm_monitor.collect_cycle()
                 │ cycle transaction
                 ▼
-checker → coverage → scheduler → drive next busy
+checker → mem_resolver → publish MEM transaction
+        → coverage → scheduler → drive next busy
 ```
 
-Monitor 等待 `rst_n===1` 后，在同一采样边界取得两条 interface 的状态，并把 X/Z
-检查限制在该边界。Agent 保证 checker 和 coverage 先看到产生当前 observed busy 的
-scheduler 状态，再让 scheduler 推进窗口。该顺序不依赖 analysis FIFO 或不同 UVM
-线程的回调先后。
+Monitor 等待 `rst_n===1` 后，在同一采样边界取得全部 VLM/MEM 状态，并把 X/Z 检查
+限制在该边界。Agent 保证 checker、resolver 和 coverage 先看到产生当前 observed busy
+的 scheduler 状态，再让 scheduler 推进窗口。Resolver 按
+`<direction, bank_id, due_cycle>` 找到唯一 record，比较完整地址，并把 record gid 写入
+memory transaction。该顺序不依赖 analysis FIFO 或不同 UVM 线程的回调先后。
 
 Reservation 到实际 MEM 的匹配键和 busy 规则由
 [MEM/VLM 接口规范](../spec/mem-vlm-interface.md)定义；scheduler/checker 的内部数据结构
@@ -210,6 +224,9 @@ Reservation 到实际 MEM 的匹配键和 busy 规则由
 - reservation agent 不执行 alignment policy，并继续检查 reservation 与 MEM 完整地址
   相等；下游 SRAM 支持非对齐 32-Byte beat，scoreboard 也不需要来源相关 alignment；
 - `shm_wtrans_item` 的 SPACE_BLK 计算尚未正确处理非零 `warp_group`。
+- 当前源码仍使用分离的 memory/reservation interface 和 agent，且 memory model 没有 gid
+  维度；双 gid 目标架构的实施顺序见
+  [开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。
 
 这些条目是实现状态，不会覆盖 DUT spec。唯一问题 ID、优先级和验收方法见
 [验证实现状态](../verification-status.md)，组件算法见[组件文档](components/index.md)。

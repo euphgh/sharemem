@@ -40,6 +40,11 @@ Testpoint 只引用其中能为目标行为提供证据的检查，不复制实�
 
 ## 3. 当前基线
 
+双 gid BANK 接口已经成为当前 spec 基线，但验证环境仍处于迁移前实现。新增 testpoint
+必须使用 `<bank_id,gid,BADDR>` 物理 key，并遵守
+[双 gid 接口重构开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)的
+实现顺序。旧 regression 只作为迁移前功能基线，不能证明双 gid 功能已经覆盖。
+
 - 当前 testcase 最终都运行 `shm_unit_test`，通过 plusargs 选择 V2M、M2V、VTRANS、
   instruction、space、DTYPE 和 ATYPE。
 - `ut_shm/regression/shm.lst` 当前选择 85 个 case：42 个普通 V2M、42 个普通 M2V

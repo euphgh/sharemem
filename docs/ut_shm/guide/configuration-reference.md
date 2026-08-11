@@ -86,7 +86,7 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh compile +define+MY_DEBUG
 |`CREQ_ITYPE`|`LDST_S`、`LDST_V`、`LDSTE_S`、`LDSTE_V`|`shmins_mst_unit_sequence`|把 normal 地址拓扑 domain 缩小到该值|
 |`CREQ_SPACE`|`SPACE_LOC`、`SPACE_WRP`、`SPACE_BLK`|`shmins_mst_unit_sequence`|把 normal address-space domain 缩小到该值|
 |`EXTERNAL_BUSY_PERCENT`|`0..100`|reservation agent|覆盖 config 中的 external busy 概率；越界会 fatal|
-|`file_debug`|无值开关|reference、memory monitor|分别创建 `vlm.ref`、`vlm_memory.rtl` 调试文件|
+|`file_debug`|无值开关|reference、VLM monitor|迁移前创建 `vlm.ref`、`vlm_memory.rtl`；统一 VLM monitor 后文件名和内容必须同时记录 gid/match status|
 |`UVM_VERBOSITY`|UVM verbosity 名称|UVM|控制 UVM report 输出级别|
 |`UVM_TOPOLOGY`|无值开关|UVM|打印 UVM topology|
 

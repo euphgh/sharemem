@@ -11,12 +11,13 @@ shmins_monitor
     │ shmins_sequence_item
     ▼
 shm_reference
-    ├── ref_banks[BANK_N]       顺序架构 memory
+    ├── ref_banks[BANK_N][2]    顺序架构 memory
     └── shm_wtrans_item.wmap ──► shm_scoreboard
 ```
 
 Reference 通过 `shmins_analysis_export` 同步接收每笔 creq，通过
-`wdata_ass_arr_port` 发布一笔 `shm_wtrans_item`。它持有每个 bank 一份 byte-addressable
+`wdata_ass_arr_port` 发布一笔 `shm_wtrans_item`。目标实现为每个 `<bank_id,gid>` 持有
+一份 byte-addressable
 `svt_mem`，初值与 scoreboard 实际 memory model 相同，但两者是相互独立的对象。
 
 ## 2. 主要源文件
@@ -30,8 +31,8 @@ Reference 通过 `shmins_analysis_export` 同步接收每笔 creq，通过
 
 ## 3. 初始化和架构顺序
 
-`build_phase` 为每个 bank 创建一个 8-bit `svt_mem`，地址范围由 `BADDR_W` 决定；
-`configure_phase` 使用 `svt_mem::INCR` 和 `bank_id<<4` 初始化。Scoreboard 的
+`build_phase` 为每个 `<bank_id,gid>` 创建一个 8-bit `svt_mem`，地址范围由 `BADDR_W`
+决定；`configure_phase` 使用同时区分 bank 和 gid 的确定性策略初始化。Scoreboard 的
 `rtl_banks` 使用同一初始化规则，便于没有 write 历史时比较 read 数据。
 
 Reference 按 `shmins_monitor` 发布 creq 的顺序立即更新 `ref_banks`。DUT 可以乱序调度
@@ -44,9 +45,10 @@ Reference 按 `shmins_monitor` 发布 creq 的顺序立即更新 `ref_banks`。D
 再由 transaction helper 计算：
 
 1. 每个 active thread/element 的 MADDR；
-2. MADDR 映射得到的 bank id 和 BADDR；
-3. element mask 展开的逐 byte strobe；
-4. 本笔指令预期写出的 `wmap[bank][baddr]=byte`。
+2. MADDR 映射得到的逻辑 `<bank_id, absolute_warp_id, laddr>`；
+3. 公共物理映射得到的 `<bank_id, gid, BADDR>`；
+4. element mask 展开的逐 byte strobe；
+5. 本笔指令预期写出的 `wmap[bank][gid][baddr]=byte`。
 
 这些计算必须与地址 spec 的 LOC/WRP/BLK、interleave 和地址空洞规则一致。当前
 SPACE_BLK 对非零 `warp_group` 的展开不完整，见 `REF-001`。
@@ -68,9 +70,13 @@ element 视为 16×16 方阵。目标 `[thread][element]` 的数据来自转置�
 
 M2V 分两步执行：
 
-1. 按 creq MADDR 映射得到的 bank/BADDR 从 `ref_banks` 读取 element 数据；
-2. 以 `creq_vaddr + WARP_STEP*creq_wpid` 为写回基址，把各 thread 的数据写入对应
-   VLM bank，并把逐 byte 结果加入本笔 `wmap`。
+1. 按 creq MADDR 映射得到的 `<bank,gid,BADDR>` 从 `ref_banks` 读取 element 数据；
+2. 使用 `write_gid=creq_wpid/4` 和已经包含 gid 内 WARP 基址的 `creq_vaddr`，把各
+   thread 的数据写入对应物理 BANK，并把逐 byte 结果加入本笔 `wmap`。
+
+Reference 不得再次增加 `WARP_STEP*creq_wpid`。合法 M2V transaction 的全部有效
+m-read/v-write byte 集合由 sequence 保证不相交；reference 仍应在 transaction validation
+或诊断路径中复查该条件。
 
 因此同一 `shm_wtrans_item.wmap` 对 V2M/VTRANS 表示 m-write，对 M2V 表示 v-write。
 Scoreboard 使用统一 byte map 检查三类写入；下游 SRAM 不要求按来源区分 MEM beat
@@ -87,7 +93,7 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 ## 8. 调试观察点
 
 - 原始 `shmins_sequence_item` 与 `shm_wtrans_item` 复制后的字段；
-- thread/element 的 MADDR、bank、BADDR 和逐 byte strobe；
+- thread/element 的 MADDR、逻辑 bank/warp/laddr、物理 bank/gid/BADDR 和逐 byte strobe；
 - VTRANS 的 source `[element][thread]` 与 target `[thread][element]`；
 - M2V 从 `ref_banks` 读取的值和 VLM 写回地址；
 - `wmap` 内 overlap error 以及每笔 transaction 的 `issue_time`。
@@ -104,6 +110,9 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 - 对地址重叠的 creq，最终值必须来自顺序上最后一次有效写；scoreboard 只能放宽中间
   顺序，不能放宽最终状态。
 - 地址 helper 必须直接落实 spec 公式，不能依赖现有 testcase 的受限地址分布。
+- 三种 space 只生成逻辑地址；gid/BADDR 必须通过同一个公共物理映射生成。
+- Reference memory、wmap 和逐元素派生地址必须全部保留 gid，禁止把两个 gid 的相同
+  BADDR 合并。
 - Transaction copy 必须保留所有影响地址、mask、数据和 VTRANS 识别的字段。
 - Runtime reset 必须取消在途期望并把 reference memory 恢复到 reset 后定义状态。
 
@@ -114,5 +123,6 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 - `SHMINS-002`：输入 transaction copy 会丢失关键字段。
 - `SHMINS-003`：生成约束可能给 reference 输入非法地址。
 - `ENV-001`：运行中 reset 未重建 `ref_banks` 或取消旧期望。
+- 当前 reference memory、wmap 和 M2V 写回仍是单 gid 旧模型，待按双 gid 开发计划迁移。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

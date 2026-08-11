@@ -1,7 +1,7 @@
-# vlm_reservation_agent
+# 统一 VLM agent 的 reservation 路径
 
-本文说明 VLM reservation agent 如何按周期联合采样 reservation 和 MEM 请求，检查 busy
-与到期匹配，并生成下一周期 busy。协议规则见
+本文说明双 gid 目标架构中统一 VLM agent 如何按周期联合采样 reservation 和 MEM 请求，
+检查 busy 与到期匹配，为 MEM transaction 恢复 gid，并生成下一周期 busy。协议规则见
 [MEM/VLM 接口规范](../../spec/mem-vlm-interface.md)；本文区分稳定检查职责和当前尚未
 修复的实现差异。
 
@@ -9,14 +9,17 @@
 
 ```text
 vlm_reservation_agent
-├── vlm_reservation_monitor
+├── vlm_monitor
+├── vlm_memory_driver
 ├── vlm_reservation_checker
+├── vlm_mem_resolver
 ├── vlm_reservation_coverage
 └── vlm_reservation_scheduler
 ```
 
-Agent 必须同时取得 `vlm_reservation_interface`、只读的 `vlm_memory_interface` 和共享
-`clk_if`。当前固定创建完整层次并主动驱动 busy；passive 模式明确不支持。
+目标 agent 取得统一 `vlm_interface` 和共享 `clk_if`，固定创建完整层次并主动驱动 busy
+与 read data；passive 模式明确不支持。现有源码仍使用两个 interface 和两个 agent，
+属于开发计划中的待迁移实现。
 
 ## 2. 主要源文件
 
@@ -39,6 +42,10 @@ monitor.collect_cycle()
         ↓
 checker.check_cycle()       读取 scheduler 的 pre-update 状态
         ↓
+mem_resolver.resolve()      返回 gid 和 match status
+        ↓
+publish/serve MEM           发布 write 或组织 read response
+        ↓
 coverage.sample_cycle()     读取同一个 pre-update 状态
         ↓
 scheduler.process_cycle()   窗口推进、接纳请求、生成 external busy
@@ -46,7 +53,7 @@ scheduler.process_cycle()   窗口推进、接纳请求、生成 external busy
 agent.drive_busy()          驱动下一接口周期
 ```
 
-Checker 和 coverage 必须在 scheduler 更新前运行，否则采样到的 busy、record 和
+Checker、resolver 和 coverage 必须在 scheduler 更新前运行，否则采样到的 busy、record 和
 transaction cycle 不再属于同一状态。
 
 环境连接和周期调度异常使用以下 report ID：
@@ -66,15 +73,15 @@ transaction cycle 不再属于同一状态。
 Monitor 把同一采样沿的接口值归一化到
 `vlm_reservation_cycle_transaction_t`，其中包括：
 
-- read/write busy window；
-- 每个 bank 的一条 read reservation；
-- 每个 bank、每个 write port 的 write reservation；
+- read/write `[delay][gid][sub_bank]` busy window；
+- 每个 bank 的一条带 gid read reservation；
+- 每个 bank、每个 write port 的带 gid write reservation；
 - 每个 bank 的实际 MEM read/write valid 和完整地址；
 - 共享 `clk_if.cycle_count` 与 `input_error`。
 
-有效 reservation 由地址和相对 delay 组成；实际 MEM request 只表示本周期已经出现在
-MEM 端口的请求。Scheduler record 保存 direction、source port、issue cycle/delay 和
-完整地址，用于到期周期的一对一匹配。
+有效 reservation 由地址、gid 和相对 delay 组成；实际 MEM request 只表示本周期已经
+出现在 MEM 端口的请求。Scheduler record 保存 direction、gid、source port、issue
+cycle/delay 和完整地址，用于到期周期的一对一匹配。
 
 ## 5. Monitor 的四态边界
 
@@ -91,11 +98,13 @@ Reset 释放后，monitor 对 busy、reservation valid/address/delay 和 MEM val
 
 |采样内容|触发条件|Error ID|
 |---|---|---|
-|Read/write busy bit|任意 delay、sub-bank 的值含 X/Z|`VLM_RESERVATION_BUSY_XZ`|
+|Read/write busy bit|任意 delay、gid、sub-bank 的值含 X/Z|`VLM_RESERVATION_BUSY_XZ`|
 |Read reservation request|`rreq` 含 X/Z|`VLM_RESERVATION_RREQ_XZ`|
 |Read reservation payload|active `raddr` 或 `rdly` 含 X/Z|`VLM_RESERVATION_RADDR_XZ`、`VLM_RESERVATION_RDLY_XZ`|
+|Read reservation gid|active `rgid` 含 X/Z|`VLM_RESERVATION_RGID_XZ`|
 |Write reservation request|任一 port 的 `wreq` 含 X/Z|`VLM_RESERVATION_WREQ_XZ`|
 |Write reservation payload|active `waddr` 或 `wdly` 含 X/Z|`VLM_RESERVATION_WADDR_XZ`、`VLM_RESERVATION_WDLY_XZ`|
+|Write reservation gid|active `wgid` 含 X/Z|`VLM_RESERVATION_WGID_XZ`|
 |MEM request valid|`mem_rvld` 或 `mem_wvld` 含 X/Z|`VLM_RESERVATION_MEM_RVLD_XZ`、`VLM_RESERVATION_MEM_WVLD_XZ`|
 |MEM request address|active `mem_raddr` 或 `mem_waddr` 含 X/Z|`VLM_RESERVATION_MEM_RADDR_XZ`、`VLM_RESERVATION_MEM_WADDR_XZ`|
 
@@ -105,13 +114,15 @@ Monitor 只负责采样与归一化，不判断 reservation 是否能接纳，�
 
 Scheduler 分离保存三组状态：
 
-- `external_busy[direction][delay][sub_bank]`：环境注入的外部占用；
+- `external_busy[direction][delay][gid][sub_bank]`：环境注入的外部占用；
 - `shm_records[direction][delay][bank]`：已经接纳、尚未到期的 DUT reservation；
-- `shm_busy`：按 record 地址的 `address[6:5]` 对所有 bank 做 OR reduction；
+- `shm_busy`：按 record 的 gid 和 `address[6:5]` 对所有 bank 做 OR reduction；
 - `final_busy = external_busy | shm_busy`。
 
-不同 bank 的 record 可以映射到同一个 sub-bank busy bit；同一个 direction/delay/bank
-只能有一条到期记录，因为实际 MEM 端口每个 bank、每个方向只有一个 request slot。
+不同 bank 的 record 可以映射到同一个 gid/sub-bank busy bit；同一个
+direction/delay/bank 只能有一条到期记录，因为实际 MEM 端口每个 bank、每个方向只有
+一个 request slot。`shm_records` 故意不增加 gid 维度：它表达 MEM 端口所有权，而不是
+物理 BANK busy 所有权。
 Write 的两个 reservation port 若在同一 bank 同一周期选择相同 delay，也会竞争同一个
 到期 slot。
 
@@ -179,8 +190,8 @@ agent 不再根据 direction 或 write port 对 record 地址执行 alignment po
 
 ### 8.4 Busy 来源一致性
 
-对每个 `<direction, relative_delay, sub_bank>`，checker 先遍历全部 BANK record，按
-`record.address[6:5]` 计算 `has_record`，再执行：
+对每个 `<direction, relative_delay, gid, sub_bank>`，checker 先遍历全部 bank record，按
+`record.gid` 和 `record.address[6:5]` 计算 `has_record`，再执行：
 
 |检查|失败条件|错误 ID|
 |---|---|---|
@@ -189,8 +200,8 @@ agent 不再根据 direction 或 write port 对 record 地址执行 alignment po
 |最终 busy|`final_busy` 不等于 external 与 SHM busy 的 OR|`VLM_RESERVATION_FINAL_BUSY`|
 |接口观察值|`txn.input_error==0` 且 `observed_busy != final_busy`|`VLM_RESERVATION_OBSERVED_BUSY`|
 
-`has_record` 是跨 BANK 的 OR reduction，因此不同 BANK 可以合法共享相同 direction、
-delay 和 sub-bank busy bit。Checker 检查的是这个共享 bit 是否与所有 record 的归约
+`has_record` 是跨 bank_id 的 OR reduction，因此不同 bank_id 可以合法共享相同
+direction、delay、gid 和 sub-bank busy bit。Checker 检查的是这个共享 bit 是否与所有 record 的归约
 结果一致，不会因为共享本身报错。
 
 ### 8.5 Reservation 请求合法性
@@ -201,13 +212,14 @@ Checker 只处理 monitor 已经创建的完整已知 request handle：
 |---|---|---|
 |零 delay|`delay==0`；立即返回，不进入其他 reservation 检查|`VLM_RESERVATION_DLY_ZERO`|
 |Delay 范围|`delay>=VTAB_D`；立即返回，避免数组越界|`VLM_RESERVATION_DLY_RANGE`|
-|目标 busy|可靠的 observed busy 或 scheduler-owned busy 任一个为 1|`VLM_RESERVATION_TARGET_BUSY`|
+|目标 busy|目标 `[delay][gid][sub_bank]` 的可靠 observed busy 或 scheduler-owned busy 任一个为 1|`VLM_RESERVATION_TARGET_BUSY`|
 |Pending record 冲突|同一 direction/delay/bank 已有 record|`VLM_RESERVATION_PENDING_BANK_DUE_CONFLICT`|
 |同周期 write-port 冲突|同一 BANK 的较早 write port 使用相同 delay|`VLM_RESERVATION_CURRENT_BANK_DUE_CONFLICT`|
 
 目标 busy 使用 OR 条件：接口观察值和 scheduler authoritative ownership 任一视图已经
 占用，当前 reservation 都不合法。只在两者同时为 1 时拒绝会漏掉单侧占用或状态视图
-失配。Pending conflict 检查历史 record，同周期 write-port conflict 检查当前
+失配。其他 gid 的 external busy 不参与目标 busy 判断；其他 gid 若已有同 bank、方向和
+due 的 DUT record，则由 pending conflict 拒绝。Pending conflict 检查历史 record，同周期 write-port conflict 检查当前
 transaction 的两个物理 write port；read 和 write 方向使用不同数组，互不构成该类
 BANK 冲突。
 
@@ -216,7 +228,7 @@ Checker 只报告错误并返回该 request 是否有效，不会接纳或删除
 
 ### 8.6 到期 MEM 请求匹配
 
-Checker 对每个 `<direction, bank>` 配对：
+Checker/resolver 对每个 `<direction, bank>` 配对：
 
 ```text
 txn.mem_[r/w]req_array[bank]
@@ -242,6 +254,15 @@ Unexpected 和 missing 分支报告后立即返回；两边都存在时，其余
 固定数组保证每个 direction/bank 每周期最多有一个 MEM request 和一个到期 record，
 因此上述配对同时完成“一笔 request 对一笔 record”和“一笔 record 对一笔 request”的
 结构性检查。
+
+MEM 接口没有 gid。Resolver 先按 `<direction, bank, current cycle>` 取得上述唯一到期
+record，再把 `record.gid` 写入 memory transaction，并保存 `gid_valid` 与
+`reservation_matched`：
+
+- 完全匹配时允许 transaction 更新 scoreboard/memory；
+- 有唯一 record 但地址错误时可保留期望 gid 用于诊断，但不得更新可信 memory；
+- 没有唯一 record 时 `gid_valid=0`，不得猜测 gid；
+- read driver 必须复用同一解析结果，不得再次查找或消费 record。
 
 ### 8.7 `input_error` 的影响
 
@@ -310,18 +331,23 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 ## 13. 调试观察点
 
 - `current_txn.cycle`、`clk_vif.cycle_count` 和 scheduler `last_processed_cycle`；
-- 目标 `[direction][delay][sub_bank]` 的 observed/external/SHM/final busy；
-- `shm_records[direction][delay][bank]` 的 issue cycle、delay、address 和 due cycle；
-- 同一 sub-bank bit 下由哪些 bank record 做 OR；
-- 到期 record 与 MEM request 的完整地址；
+- 目标 `[direction][delay][gid][sub_bank]` 的 observed/external/SHM/final busy；
+- `shm_records[direction][delay][bank]` 的 issue cycle、delay、gid、address 和 due cycle；
+- 同一 gid/sub-bank bit 下由哪些 bank record 做 OR；
+- 到期 record 与 MEM request 的完整地址，以及 resolver 返回的 gid/match status；
 - build log 中最终采用的 `EXTERNAL_BUSY_PERCENT`。
 
 ## 14. 开发 contract
 
-- Agent 始终按 monitor → checker → coverage → scheduler → drive 的顺序处理一拍。
+- Agent 始终按 monitor → checker/resolver → MEM publish/service → coverage → scheduler →
+  drive 的顺序处理一拍。
 - Reset 期间不做 X/Z 检查；运行中 reset 必须另外清空 scheduler 和在途状态。
 - `external_busy` 和 `shm_busy` 不能同时拥有同一 slot，`final_busy` 只能是两者 OR。
 - Reservation 与实际 MEM 地址必须完全相等，不能通过清除低位后比较来接受错误地址。
+- Busy ownership 使用 `[direction][delay][gid][sub_bank]`，MEM port ownership 继续使用
+  `[direction][delay][bank]`；二者不能合并成一张表。
+- MEM gid 只能来自唯一到期 record；monitor 不直接访问 scheduler 私有数组，driver 不得
+  独立重复解析。
 - Reservation agent 不执行 alignment policy，也不得按物理 write port 推断来源。
 - 当前只支持 active；任何 passive knob 都不能产生看似可用的半功能 agent。
 
@@ -332,5 +358,7 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 - `RSV-004`：全局 `input_error` 会屏蔽无关 slot 的检查。
 - `RSV-005`：复位期间没有检查 DUT request/valid 必须为 0。
 - `ENV-001`：运行中 reset 未清理 scheduler record 和 busy 状态。
+- 当前源码尚未增加 gid busy、record gid、resolver 和统一 interface/agent；实施顺序见
+  [双 gid 接口重构开发计划](../../../development/shm-dual-bank-interface-refactor-plan.md)。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

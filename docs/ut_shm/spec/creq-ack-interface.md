@@ -18,7 +18,7 @@
 |`creq_tmsk[thread]`|输入|thread mask；为 1 的 thread 执行本次访存|
 |`creq_len[thread]`|输入|每个线程的有效数据 byte 数|
 |`creq_typ`|输入|方向、数据类型、地址类型和控制位的 20-bit packed 字段|
-|`creq_vaddr`|输入|M2V 写回的线程本地基址|
+|`creq_vaddr`|输入|M2V 写回的 gid 内 BADDR，宽度为 `BADDR_W`，已包含 gid 内 WARP 基址|
 |`creq_vmsk[thread]`|输入|每个线程的 element mask|
 |`creq_base`|输入|48-bit byte address 基址，普通 MADDR 使用低 `MADDR_W` bit|
 |`creq_offs[thread]`|输入|每个线程的 packed offset 向量|
@@ -98,7 +98,23 @@ SPACE_WRP/SPACE_BLK 在 8 KiB、16 KiB interleave size 下的地址空洞。不�
 
 `creq_wpid` 的合法范围是 `0 .. WARP_N-1`。`creq_wpnum` 当前只能取 1、2、4；在
 SPACE_BLK 中，最终 `warp_index` 必须与 `creq_wpid` 位于同一个 `creq_wpnum` 对齐
-分组中。
+分组中。SPACE_BLK 的 MADDR 仍编码绝对 warp 0～7；物理 gid 和 BADDR 在逻辑地址
+映射完成后统一生成。
+
+M2V 中 `creq_vaddr` 的编码为：
+
+```text
+creq_vaddr = (creq_wpid % 4) * WARP_STEP + writeback_laddr
+```
+
+它不是单 WARP 内从零开始的 local address。DUT 必须使用 `creq_wpid/4` 作为 write
+reservation gid，并直接使用 `creq_vaddr` 作为写回 BADDR，不得再次增加
+`creq_wpid*WARP_STEP`。所有有效写回 byte 必须留在 `creq_wpid` 所选 WARP 的 12 KiB
+区域内。
+
+合法 M2V 请求还必须保证全部有效 m-read byte 与全部有效 v-write byte 在物理
+`<bank_id, gid, BADDR>` 上没有 byte overlap。只处于同一个 32-Byte beat 而 byte 地址
+不同不构成冲突。DUT 对违反该输入条件的行为未定义。
 
 `creq_prio` 会影响 DUT 生成 MEM 请求的先后顺序，但不改变任何请求的地址、数据或
 最终结果。验证模型不应根据 priority 改变期望值。
@@ -110,7 +126,7 @@ SPACE_BLK 中，最终 `warp_index` 必须与 `creq_wpid` 位于同一个 `creq_
 
 `creq_rw==SHM_V2M` 时，DUT 按地址模型把 `creq_vdat` 中由 length 和 mask 选中的
 byte 写入 MEM。`creq_rw==SHM_M2V` 时，DUT 从映射后的 MEM 地址读取数据，再写回
-`creq_vaddr` 指定的线程本地区域。
+`creq_vaddr` 指定的 gid 内 BADDR。写回 gid 由 `creq_wpid/4` 得到。
 
 普通请求使用 `creq_info==4'h0`。V2M 和 M2V 共享 MADDR 生成与 BANK 映射规则，
 区别在数据流向以及完成时使用的 ack 通道。
@@ -177,6 +193,7 @@ transposed_data[dst_thread][dst_element]
 |`CREQ-005`|`creq_rls` 每个有效周期只归还一个 credit，并且不得使可用 credit 超过 `OTF_N`。|
 |`CREQ-006`|VTRANS 必须满足第 6 节的方向、space、dtype、itype、thread mask、length 和 element mask 限制。|
 |`CREQ-007`|每笔有效 creq 的 `creq_tmsk` 禁止全 0。|
+|`CREQ-008`|M2V `creq_vaddr` 必须编码所选 gid 内的完整写回 BADDR，全部有效写回 byte 留在所选 WARP，且有效 m-read/v-write byte 集合不得重叠。|
 |`ACK-001`|ack 关闭的请求不得产生完成 ack；ack 打开的请求必须产生且只产生一次正确方向、正确 ID 的 ack。|
 |`ACK-002`|`vack_done`、`mack_done` 和 done 有效时的 ID 禁止包含 X/Z。|
 |`ACK-003`|复位前尚未完成的请求被取消，复位后不得补发对应 release 或 ack。|

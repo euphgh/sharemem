@@ -9,11 +9,11 @@
 |对象|来源或去向|用途|
 |---|---|---|
 |`ref_wrvlm_analysis_export`|`shm_reference.wdata_ass_arr_port`|接收每笔 creq 的期望 byte map|
-|`rtl_wrvlm_analysis_export`|memory monitor write port|接收 DUT 实际 MEM write|
+|`rtl_wrvlm_analysis_export`|统一 VLM monitor write port|接收已补全 gid/match status 的 DUT 实际 MEM write|
 |`mem_imp`|memory slave driver|为 MEM read response 提供 blocking transport|
 |`ref_wrvlm_analysis_fifo`|reference export 后端|解耦期望收集|
 |`rtl_wrvlm_analysis_fifo`|actual export 后端|解耦实际写比较|
-|`rtl_banks`|scoreboard 所有|保存 DUT 已兑现 write 的实际 memory model|
+|`rtl_banks[BANK_N][GID_N]`|scoreboard 所有|保存 DUT 已兑现 write 的实际 memory model|
 
 核心匹配状态为：
 
@@ -48,8 +48,9 @@ write 到达和 timeout 扫描视为同一状态机的三个入口。
 
 ## 4. 实际 write 比对
 
-`compare_dut_with_ref()` 先按 bank 和 byte strobe 更新 `rtl_banks`，再把实际 MEM write
-转成 byte map。每个实际写 byte 必须满足：
+`compare_dut_with_ref()` 只接纳已经匹配唯一到期 reservation 的 MEM transaction。它先按
+`<bank_id,gid>` 和 byte strobe 更新 `rtl_banks`，再把实际 MEM write 转成 byte map。
+每个实际写 byte 必须满足：
 
 - 地址存在于 `wmap_final` 或 `wmap_expired`；
 - 数据等于该地址的最新最终值，或等于仍未消费的合法旧值。
@@ -76,8 +77,9 @@ record 已被后续状态解释完毕。扫描任务每 10 个 `CLK_PERIOD` 检�
 
 ## 6. MEM read service
 
-`b_transport()` 对 transaction 中每个 active bank，从 `rtl_banks` 的起始地址连续读取
-一个 MEM beat，并把结果写回 transaction。Memory driver 随后按 `RPORT_DLY` 驱动
+`b_transport()` 对 transaction 中每个 active bank，要求 `gid_valid` 和
+`reservation_matched`，再从 `rtl_banks[bank][gid]` 的起始地址连续读取一个 MEM beat，
+并把结果写回 transaction。Memory driver 随后按 `RPORT_DLY` 驱动
 接口。
 
 当前读取发生在 T0 调用 transport 时，只包含当时已经进入 `rtl_banks` 的 write，尚未
@@ -100,7 +102,7 @@ record 已被后续状态解释完毕。扫描任务每 10 个 `CLK_PERIOD` 检�
 creq 类型检查 MEM beat base alignment，也不需要为此把一笔实际 write 唯一归属于某个
 `shm_wtrans_item`。
 
-Write checker 继续把实际 strobe 展开成逐 byte `<BANK, BADDR, data>`，并要求每个有效
+Write checker 继续把实际 strobe 展开成逐 byte `<bank_id, gid, BADDR, data>`，并要求每个有效
 byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的验收条件是最终写数据
 和 byte 地址正确，而不是 DUT 选择某个特定的 32-Byte beat base。Reservation checker
 独立负责 busy/时序以及 reservation 与 MEM 完整地址相等。
@@ -110,6 +112,7 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 - 新 reference 到达前后的 `wmap_final/wmap_expired`；
 - 每个 `ref_record` 的 `issue_time`、matched、expired 和 unmatched table；
 - 实际 MEM write 转换后的 byte map 与 bank strobe；
+- MEM transaction 的 gid、gid_valid、reservation match status 及对应到期 record；
 - 命中 final 还是 expired，以及相应条目是否只被消费一次；
 - `rtl_banks` 的更新发生在 read snapshot 截止周期之前还是之后；
 - `check_phase` 剩余的最终地址和值。
@@ -135,6 +138,9 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
   原有关键字。
 - Timeout 是可配置诊断策略，不得被解释成 DUT 最大延迟协议。
 - Read model、reference model 和 actual model 必须保持独立所有权。
+- 只有唯一 reservation 匹配成功的 MEM request 才能更新 `rtl_banks`；无 gid 或地址/到期
+  不匹配的事件只报告协议错误，不能污染可信数据状态。
+- 所有 address set、wmap 和 outstanding key 必须包含 gid。
 - Runtime reset 必须原子地清理 FIFO、outstanding map、record queue 和 pending read。
 
 ## 12. 当前实现状态
@@ -142,5 +148,6 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 - `SCB-002`：timeout 固定为 128 cycles。
 - `VMEM-001`：read service 未实现 `FFD_CYC` snapshot。
 - `ENV-001`：运行中 reset 未清理 outstanding 和实际 memory 状态。
+- 当前 scoreboard memory 和 wmap 仍缺少 gid 维度，待按双 gid 开发计划迁移。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

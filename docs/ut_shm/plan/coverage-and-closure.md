@@ -30,8 +30,8 @@ Functional coverage 必须从 spec-first testpoint 派生。每个 testpoint 至
 |Coverage 领域|建议采样对象|原因|
 |---|---|---|
 |creq 字段和合法性|shmins monitor 采样后的 transaction|代表 DUT 实际接受的输入，不依赖 sequence 生成意图|
-|地址和数据语义|reference 计算出的 thread/element/byte 派生信息|能观察 MADDR、BANK、BADDR、空洞边界和 byte mask|
-|MEM 请求|memory monitor transaction|代表实际 MEM read/write 行为|
+|地址和数据语义|reference 计算出的 thread/element/byte 派生信息|能观察 MADDR、逻辑 bank/warp/laddr、物理 gid/BADDR、空洞边界和 byte mask|
+|MEM 请求|统一 VLM monitor/resolver 产生的 memory transaction|代表实际 MEM read/write 行为，并包含 gid/match status|
 |Reservation|reservation cycle transaction、checker result、scheduler pre-update view|能区分方向、delay、busy 来源、共享 slot 和匹配结果|
 |乱序与最终状态|scoreboard reference/actual 匹配事件|能区分 final、expired、overlap、timeout 和最终收敛|
 |Reset|统一 reset event 与各组件 pending-state 快照|能证明在不同在途阶段进入 reset|
@@ -46,12 +46,12 @@ Phase 5 规划的基础维度包括：
 - creq direction、info、ack enable、tmsk population、DTYPE、ATYPE width/sign/granularity、
   ITYPE、SPACE、interleave size、wpid、wpnum 和 priority；
 - thread/element/byte mask，length 最小值、最大值、尾部 byte 和 32-Byte beat 跨界；
-- MADDR 合法边界、WRP/BLK 12 KiB 与 16 KiB 编码、地址空洞相邻值、BANK、BADDR 和
-  WARP group；
-- MEM direction、BANK、address low bits、strobe 形状、read pipeline 深度和
+- MADDR 合法边界、WRP/BLK 12 KiB 与 16 KiB 编码、地址空洞相邻值、logical bank、
+  absolute warp、gid、BADDR 和 WARP group；
+- MEM direction、bank、gid、match status、address low bits、strobe 形状、read pipeline 深度和
   read/write 相对周期；
-- reservation direction、delay、sub bank、external/SHM busy、共享 slot、到期冲突和
-  match 结果；
+- reservation direction、delay、gid、sub bank、external/SHM busy、共享 slot、跨 gid
+  MEM-port 到期冲突和 match 结果；
 - creq overlap、DUT 中间兑现为 final/expired、最终顺序收敛和 reset 时 pending 类型。
 
 详细 bin 和 cross 以 [Testpoints](testpoints.md)为准。实现时可以合并共享 coverpoint，
@@ -65,8 +65,11 @@ Phase 5 规划的基础维度包括：
 - ATYPE_W × signedness × granularity × DTYPE；
 - SPACE × interleave size × MADDR boundary class；
 - SPACE_BLK 的 wpnum × warp_group × interleave size；
+- address space × absolute warp boundary × gid × laddr boundary；
 - MEM/VLM direction × address-low-bits × boundary crossing；
-- reservation direction × delay × busy source × match result；
+- MEM direction × gid × reservation match result；
+- reservation direction × delay × gid × busy source × match result；
+- candidate gid × other-gid owner external/SHM × same/different bank × accepted/rejected；
 - overlap class × DUT 兑现次序 × final convergence；
 - reset stage × pending state type。
 

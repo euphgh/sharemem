@@ -1,5 +1,9 @@
 # vlm_memory_slv_agent
 
+> 双 gid 接口迁移后，本组件不再作为独立 agent/monitor 存在。MEM driver 和 transaction
+> 发布职责并入统一 VLM agent，以便从唯一到期 reservation record 恢复 MEM gid。本文
+> 保留旧实现边界，并定义迁移时必须保留的 memory data contract。
+
 本文说明 VLM memory slave agent 如何观察 MEM 请求、维护实际 memory model，并按固定
 延迟返回读数据。端口采样和 `FFD_CYC` 的协议含义见
 [MEM/VLM 接口规范](../../spec/mem-vlm-interface.md)；本文只描述当前验证组件的数据流。
@@ -104,7 +108,11 @@ Driver 和 monitor 都只等待一次初始 reset。运行中 reset 不会自动
 - MEM read 的采样点是 `rvld/raddr` 在 T0 的接口采样，不是更早的 reservation。
 - Read response 必须在 `RPORT_DLY` 语义下实现 `FFD_CYC` snapshot；截止周期之后的 write
   不能进入这笔返回值。
-- Monitor 只能发布实际接口行为，不能用 reference 修补 transaction。
+- 统一 monitor 只能采样实际接口行为；gid 只能由 reservation resolver 补全，不能根据
+  MEM address 或 reference 猜测。
+- Read driver 必须使用与 checker 相同的唯一到期 record 查询结果访问
+  `rtl_banks[bank][gid]`，不得独立消费 scheduler record。
+- 没有唯一 reservation match 的 MEM request 不得更新可信 memory model 或请求 read data。
 - 运行中 reset 必须取消 pending response，并阻止 reset 前 transaction 在释放后兑现。
 - 现阶段 passive 明确不支持；不能留下 driver 缺失但 scoreboard 仍假定 transport
   存在的半连接组合。
@@ -116,5 +124,7 @@ Driver 和 monitor 都只等待一次初始 reset。运行中 reset 不会自动
 - `VMEM-003`：sequencer 和部分 compare API 没有有效行为。
 - `ENV-001`：运行中 reset 未清理 pending read 和 memory 状态。
 - `ENV-002`：passive 配置仍可能形成不完整连接。
+- 独立 memory interface/monitor/agent 将由统一 VLM interface/agent 取代，实施顺序见
+  [双 gid 接口重构开发计划](../../../development/shm-dual-bank-interface-refactor-plan.md)。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

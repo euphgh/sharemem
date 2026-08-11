@@ -48,6 +48,11 @@ Driver 在驱动前调用 `item_to_rtl()`；monitor 采样后调用 `rtl_to_item
 helper 从 dtype、atype 和 itype 计算 element 数、offset 宽度和 MADDR，详细地址规则
 应引用[地址模型](../../spec/address-model.md)，不能以当前 constraint 反向定义 spec。
 
+双 gid 地址迁移后，transaction helper 必须分成两层：各 itype/space 算法只生成
+`shm_logical_addr_t{bank_id, absolute_warp_id, laddr}`，公共 helper 再生成
+`shm_physical_addr_t{bank_id, gid, baddr}`。Collision、uniqueness 和 M2V hazard 均使用
+完整物理 byte key，不能只比较 bank 和 BADDR。
+
 ## 4. Sequence 配置
 
 `shmins_mst_unit_sequence` 支持以下大写 plusarg：
@@ -137,6 +142,10 @@ Transaction 的 `compare_item()` 仍是 placeholder，调用会 fatal；字段�
 - 修改 `creq_tmsk` 时必须保持 interface、transaction、copy、factory field、constraints、
   driver、monitor 和 reference 同步；inactive thread 不得产生 reference 期望。
 - 生成约束必须以地址 spec 为输入，并为 12 KiB 空洞提供定向测试。
+- `creq_vaddr` 使用 `BADDR_W`，sequence 必须加入 `(creq_wpid%4)*WARP_STEP`，并保证
+  有效写回 byte 留在当前 WARP；DUT 不再补加 WARP 基址。
+- M2V 生成完成后必须复查所有有效 m-read/v-write 物理 byte 集合不相交，冲突粒度为 byte。
+- LOC/WRP/BLK 不得分别实现 gid/BADDR 拆分；物理 BANK 组织只能由公共第二层 helper 定义。
 - Public sequence knob 必须实际约束 item；不能只解析 plusarg 而忽略字段。
 - Runtime reset 必须释放 credit wait、取消 ack timeout，并阻止 reset 前 item 继续驱动。
 
@@ -153,5 +162,7 @@ Transaction 的 `compare_item()` 仍是 placeholder，调用会 fatal；字段�
 - `SHMINS-009`：credit/release 和 ack 完备性检查不足。
 - `SHMINS-010`：复位期间 release/ack 静默没有检查。
 - `ENV-001`：运行中 reset 未取消 driver/monitor pending 状态。
+- 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 尚未按新 spec 实现，见开发计划和
+  verification status 中的双 gid 迁移项。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

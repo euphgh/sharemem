@@ -8,7 +8,7 @@
 
 ## 1. 总体结构
 
-`shm_tb_top` 同时实例化 DUT、三条业务 interface 和一个共享计周期 interface。
+目标架构中，`shm_tb_top` 同时实例化 DUT、两条业务 interface 和一个共享计周期 interface。
 UVM 环境通过 virtual interface 访问这些信号，不使用层次路径直接读写 DUT 端口。
 
 ```mermaid
@@ -19,35 +19,32 @@ flowchart LR
     SEQ["shmins sequence"] --> SA["shmins_mst_agent"]
     SA --> REF["shm_reference"]
     REF --> SCB["shm_scoreboard"]
-    MA["vlm_memory_slv_agent"] --> SCB
-    RA["vlm_reservation_agent"]
+    VA["统一 VLM agent"] --> SCB
   end
 
   subgraph TOP["shm_tb_top"]
     SI["shmins_interface"]
-    MI["vlm_memory_interface"]
-    RI["vlm_reservation_interface"]
+    VI["vlm_interface"]
     CI["clk_if"]
     DUT["RpuShmTop"]
     SI <--> DUT
-    MI <--> DUT
-    RI <--> DUT
+    VI <--> DUT
   end
 
   SA <--> SI
-  MA <--> MI
-  RA <--> RI
-  RA -. "read-only MEM request view" .-> MI
-  CI -. "shared cycle count" .-> RA
+  VA <--> VI
+  CI -. "shared cycle count" .-> VA
 ```
 
-环境按职责分成三条相互配合的数据路径：
+环境按职责分成两条 interface 路径和三类 transaction 数据流：
 
 - shmins 路径产生 creq、观察 ack，并把已接受的 creq 送入 reference；
-- MEM 路径观察实际读写请求、维护 DUT 侧 memory 状态，并返回读数据；
-- reservation 路径驱动 busy，同时检查预约请求与实际 MEM 请求的周期对应关系。
+- 统一 VLM 路径原子观察 reservation 和 MEM，驱动 busy、返回读数据，并通过唯一到期
+  reservation 为 MEM transaction 补全 gid；
+- reservation cycle transaction 和 memory transaction 保持独立，分别服务协议检查和
+  byte 数据检查。
 
-Reference 和 scoreboard 位于 ut_shm 专用环境中。三个 agent 位于 `ver_common/uvc/`
+Reference 和 scoreboard 位于 ut_shm 专用环境中。两个 agent 位于 `ver_common/uvc/`
 下，可以由其他验证环境复用。
 
 ## 2. tb top 与 interface
@@ -63,12 +60,12 @@ Reference 和 scoreboard 位于 ut_shm 专用环境中。三个 agent 位于 `ve
 |tb top 实例|Interface|连接范围|验证侧用途|
 |---|---|---|---|
 |`shmins_intf`|`shmins_interface`|`creq_*`、`vack_*`、`mack_*`|master driver 驱动 creq，monitor 观察 creq、release 和 ack|
-|`vlm_memory_intf`|`vlm_memory_interface`|`mem_r*`、`mem_w*`|monitor 观察实际 MEM 请求，slave driver 驱动 `mem_rdata`|
-|`vlm_reservation_intf`|`vlm_reservation_interface`|`vlm_r*`、`vlm_w*`|reservation agent 观察预约并驱动 read/write busy|
+|`vlm_intf`|`vlm_interface`|`mem_r*`、`mem_w*`、`vlm_r*`、`vlm_w*`|统一 monitor 原子采样，scheduler 驱动 busy，slave driver 驱动 `mem_rdata`|
 |`clock_intf`|`clk_if`|共享 `clk`|为周期敏感组件提供单调递增的 `cycle_count`|
 
 `clk_if.cycle_count` 不受 `rst_n` 清零，用于把 reservation、busy 和实际 MEM 请求
-标到同一个全局周期。业务复位仍由三条业务 interface 上的 `rst_n` 表示。
+标到同一个全局周期。业务复位由 shmins 和统一 VLM 两条 business interface 上的
+`rst_n` 表示。
 
 当前工作树已把阶段 2 规范要求的 `creq_tmsk` 从 `shm_tb_top`、interface、driver、
 monitor 贯通到 reference。Reference 不为 inactive thread 建立地址或数据期望；该路径
@@ -86,23 +83,21 @@ uvm_test_top
     │   ├── sequencer
     │   ├── driver
     │   └── monitor
-    ├── vlm_memory_slv_agt : vlm_memory_slv_agent
-    │   ├── sequencer
-    │   ├── driver
-    │   └── monitor
-    ├── vlm_reservation_agt : vlm_reservation_agent
+    ├── vlm_agt : vlm_agent
     │   ├── monitor
+    │   ├── memory_driver
     │   ├── reservation_checker
     │   ├── coverage
+    │   ├── mem_resolver
     │   └── scheduler
     ├── shm_ref : shm_reference
     └── shm_scb : shm_scoreboard
 ```
 
-`shm_environment` 总是创建三个 agent。`shmins_mst_agent` 和
-`vlm_memory_slv_agent` 根据各自 config 决定是否创建 active driver/sequencer 和
-monitor；当前 `vlm_reservation_agent` 固定为 active-only，并始终创建 monitor、
-checker、coverage 和 scheduler。
+`shm_environment` 总是创建 shmins agent 和统一 VLM agent。VLM agent 固定为 active-only，
+统一拥有 monitor、memory driver、reservation checker、coverage、MEM resolver 和
+scheduler。MEM resolver 是到期 reservation record 的唯一查询入口，monitor 和 driver
+不得各自消费或复制 scheduler 状态。
 
 `shm_ref` 与 `shm_scb` 只在 `shm_environment_config.shm_is_active == UVM_ACTIVE`
 时创建。该开关控制 ut_shm 专用 reference/scoreboard 路径，不等同于各 agent 的
@@ -111,48 +106,44 @@ active/passive 设置。
 ## 4. Config DB 传递
 
 顶层 include 的 [`shm_ut_connect.svh`](../../../ut_shm/tb/shm_ut_connect.svh) 先把
-四个 virtual interface 以通配路径写入 Config DB。Test 创建并初始化
+三个 virtual interface 以通配路径写入 Config DB。Test 创建并初始化
 `shm_environment_config`，再把它交给 `shm_environment`。Environment 负责校验依赖、
 细分 agent config，并把所需 interface 传给子组件。
 
 |设置者|实例匹配|字段名|类型|主要消费者|
 |---|---|---|---|---|
 |`shm_tb_top`|`*`|`shmins_vif`|`virtual shmins_interface`|`shm_environment`、shmins agent|
-|`shm_tb_top`|`*`|`memory_vif`|`virtual vlm_memory_interface`|`shm_environment`、memory agent|
-|`shm_tb_top`|`*`|`reservation_vif`|`virtual vlm_reservation_interface`|`shm_environment`|
+|`shm_tb_top`|`*`|`vlm_vif`|`virtual vlm_interface`|`shm_environment`、统一 VLM agent|
 |`shm_tb_top`|`*`|`clk_vif`|`virtual clk_if`|reservation 周期敏感组件|
 |`shm_base_test`|`shm_env`|`shm_environment_config`|`shm_environment_config`|`shm_environment`|
 |`shm_environment`|`shmins_mst_agt`|`cfg`|`shmins_mst_agent_config`|shmins agent|
-|`shm_environment`|`vlm_memory_slv_agt`|`cfg`|`vlm_memory_slv_agent_config`|memory agent|
-|`shm_environment`|`vlm_reservation_agt`|`cfg`|`vlm_reservation_agent_config`|reservation agent|
+|`shm_environment`|`vlm_agt`|`cfg`|`vlm_agent_config`|统一 VLM agent|
 |`shm_environment`|`shm_ref`、`shm_scb`|`shm_environment_config`|`shm_environment_config`|reference、scoreboard|
 
-Reservation agent 的 `reservation_vif` 和 `memory_vif` 存在
-`vlm_reservation_agent_config` 中；monitor 由 agent 直接调用 `set_config()` 获得这两个
-handle。Checker、monitor 和 scheduler 通过 Config DB 取得同一个 `clk_vif`。
+统一 VLM interface 和共享 `clk_vif` 存在 `vlm_agent_config` 中。Monitor、checker、
+resolver、scheduler 和 memory driver 必须使用同一个 cycle source 与 interface handle。
 
 Config DB 字段名是环境连接契约。修改名称或实例路径时，必须同步检查设置者、获取者
 和 wildcard 的覆盖范围。
 
 ## 5. TLM 与直接调用连接
 
-`shm_environment.connect_phase()` 建立跨组件连接。当前只有写数据比对和 MEM 读服务
-进入 scoreboard；reservation agent 保持独立。
+`shm_environment.connect_phase()` 建立跨组件连接。写数据比对和 MEM 读服务进入
+scoreboard；reservation checker/resolver 保持在统一 VLM agent 内同步调用。
 
 |源|连接类型|目标|传递内容|
 |---|---|---|---|
 |`shmins_mst_agt.monitor.shmins_analysis_port`|analysis port → analysis imp|`shm_ref.shmins_analysis_export`|采样后的 `shmins_sequence_item`|
 |`shm_ref.wdata_ass_arr_port`|analysis port → analysis FIFO|`shm_scb.ref_wrvlm_analysis_export`|`shm_wtrans_item` 期望 byte map|
-|`vlm_memory_slv_agt.monitor.write_analysis_port`|analysis port → analysis FIFO|`shm_scb.rtl_wrvlm_analysis_export`|实际 MEM write transaction|
-|`vlm_memory_slv_agt.driver.mem_port`|blocking transport port → imp|`shm_scb.mem_imp`|MEM read request，并在同一 transaction 中返回数据|
+|`vlm_agt.monitor.write_analysis_port`|analysis port → analysis FIFO|`shm_scb.rtl_wrvlm_analysis_export`|经唯一到期 record 补全 gid 的实际 MEM write transaction|
+|`vlm_agt.memory_driver.mem_port`|blocking transport port → imp|`shm_scb.mem_imp`|带 gid 的 MEM read request，并在同一 transaction 中返回数据|
 
-`vlm_memory_monitor.read_analysis_port` 当前没有连接到其他组件。MEM read 返回数据由
-slave driver 经 blocking transport 从 scoreboard 获取，不经过该 analysis port。
+统一 monitor 先产生原始 cycle snapshot；agent 在 scheduler pre-update 状态下完成 MEM
+匹配并返回 gid/match status，然后才发布 memory transaction。没有唯一匹配 record 的
+MEM 事件只用于协议诊断，不得更新 scoreboard 的可信 memory model。
 
-Reservation agent 不通过 TLM 与 reference 或 scoreboard 连接。它在每个采样周期内
-同步取得 reservation/MEM 地址快照，然后按 checker、coverage、scheduler 的顺序
-直接调用，最后驱动下一周期 busy。具体内部状态和检查算法见
-[VLM reservation agent](components/vlm-reservation-agent.md)。
+MEM read driver 使用同一 resolver 取得 gid，再向 scoreboard 查询
+`<bank_id, gid, BADDR>` 数据。Monitor 和 driver 不允许独立重复解析 reservation。
 
 ## 6. UVM phase 分工
 
@@ -162,7 +153,7 @@ Reservation agent 不通过 TLM 与 reference 或 scoreboard 连接。它在每�
 |`build_phase`|test 创建 environment/config；environment 获取 interface 和配置、创建 agent/reference/scoreboard；agent 创建启用的子组件|
 |`connect_phase`|agent 连接 driver/sequencer 并分配 virtual interface；environment 建立跨组件 TLM 连接|
 |`configure_phase`|`shm_reference.ref_banks` 和 `shm_scoreboard.rtl_banks` 使用相同策略初始化|
-|`main_phase`|test 启动 shmins sequence；driver/monitor 在 reset 释放后工作；scoreboard 并行收集与比对；reservation agent 逐周期响应|
+|`main_phase`|test 启动 shmins sequence；统一 VLM agent 按 sample → check/resolve → publish → schedule → drive 顺序逐周期响应；scoreboard 并行收集与比对|
 |`check_phase`|scoreboard 检查 FIFO 和期望写集合是否仍有未消费内容|
 |`report_phase`|base test 根据 UVM error/fatal 数量打印 case pass/fail|
 |`final_phase`|需要文件输出的 monitor 关闭 debug 文件|
@@ -183,7 +174,7 @@ Reservation agent 不通过 TLM 与 reference 或 scoreboard 连接。它在每�
 Synopsys VIP packages
     → collection
     → shm_util_package
-    → interfaces
+    → unified interfaces
     → shm_seq_item_package
     → shm_seq_package
     → shm_env_package
@@ -197,9 +188,13 @@ Synopsys VIP packages
 |`shm_util_package`|共享参数、`bit_rt_range`、字符串工具|
 |`shm_seq_item_package`|shmins/MEM transaction、enum field、`vlm2aa`|
 |`shm_seq_package`|shmins master 和 unit sequence|
-|`shm_env_package`|三个 agent、environment config、reference、scoreboard、environment|
+|`shm_env_package`|shmins/统一 VLM agent、environment config、reference、scoreboard、environment|
 |`shm_test_package`|`shm_base_test`、`shm_unit_test`|
 
 Interface 文件在依赖它们的 class package 之前单独编译。Synopsys VIP 的
 `svt_uvm_pkg`、`svt_mem_uvm_pkg` 也必须先于 `shm_env_package` 可见。`.svh` class
 文件由对应 package include，不作为独立 compilation unit 重复加入 filelist。
+
+本文描述的是双 gid 接口迁移后的目标架构。现有源码仍保留独立
+`vlm_memory_slv_agent`、`vlm_reservation_agent` 和两个 interface；迁移步骤与禁止跨越的
+中间状态见[双 gid 接口重构开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。

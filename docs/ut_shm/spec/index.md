@@ -8,10 +8,10 @@ UVM 组件的内部实现；需要了解 monitor、driver 或 checker 时，从
 
 |文档|内容|状态|
 |---|---|---|
-|[dut-overview.md](dut-overview.md)|DUT 职责、边界、参数和接口分组|已迁移|
-|[address-model.md](address-model.md)|VADDR、MADDR、BADDR、BANK、sub bank 和地址映射|已迁移|
-|[creq-ack-interface.md](creq-ack-interface.md)|creq、credit/release、vack 和 mack 行为|已迁移|
-|[mem-vlm-interface.md](mem-vlm-interface.md)|MEM 访问、VLM reservation、busy 和端到端匹配规则|已迁移|
+|[dut-overview.md](dut-overview.md)|DUT 职责、双 gid BANK 拓扑、参数和接口分组|双 gid contract 已发布|
+|[address-model.md](address-model.md)|MADDR、逻辑 bank/warp/laddr、物理 gid/BADDR 和两层映射|双 gid contract 已发布|
+|[creq-ack-interface.md](creq-ack-interface.md)|creq、M2V vaddr/hazard、credit/release、vack 和 mack|双 gid contract 已发布|
+|[mem-vlm-interface.md](mem-vlm-interface.md)|MEM、带 gid reservation/busy、端口冲突和 gid恢复|双 gid contract 已发布|
 
 ## 阅读顺序
 

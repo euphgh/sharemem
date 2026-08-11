@@ -223,7 +223,27 @@ case_name : RUN=1 SEED=num
 所有条目当前都是 `RUN=1`，没有固定 `SEED`。这些文件描述目标运行集合，不记录近期
 服务器运行结果，也不能作为 case 已通过或功能已覆盖的证据。
 
-## 8. 维护规则
+## 8. 双 gid 迁移新增 case 组
+
+现有 85 个 case 不能证明新的物理 BANK 组织。完成双 gid 实现后，至少增加以下定向组：
+
+|Case 组|主要 testpoint|
+|---|---|
+|逻辑/物理地址 helper，warp 0/3/4/7|`TP-ADDR-009`|
+|LOC/WRP/BLK 的 wpid 3/4 数据边界|`TP-ADDR-004`～`006`|
+|SPACE_BLK absolute warp 0～7、wpnum 1/2/4|`TP-ADDR-006`|
+|M2V `creq_vaddr` 不重复加 WARP 基址|`TP-DATA-002`|
+|M2V byte overlap 允许/拒绝边界|`TP-DATA-002`|
+|target/other gid external busy|`TP-RSV-002`、`TP-RSV-007`|
+|跨 gid 的同 bank/due DUT conflict|`TP-RSV-003`、`TP-RSV-007`|
+|MEM 从唯一到期 record 恢复 gid|`TP-MEM-005`、`TP-RSV-008`|
+|相同 bank/BADDR、不同 gid 的数据隔离|`TP-MEM-005`|
+
+这些 case 在统一 interface/agent、reference 和 scoreboard 完成前不得加入主 regression，
+以免把未实现导致的固定失败混入旧基线。具体开发依赖见
+[双 gid 接口重构开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。
+
+## 9. 维护规则
 
 - 新 case 必须先关联至少一个 testpoint，不能只扩充名称矩阵。
 - TC 继承或公共 plusarg 改动后，应检查所有叶子 case 的 effective configuration。

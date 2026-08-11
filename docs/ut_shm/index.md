@@ -8,8 +8,8 @@
 
 |分区|内容|状态|
 |---|---|---|
-|[DUT 规范](spec/index.md)|RpuShmTop 的边界、地址模型、creq/ack、MEM 和 VLM reservation 接口|四篇正文已发布|
-|[验证环境](environment/index.md)|tb top、UVM hierarchy、数据流和各组件实现|架构、数据模型和六篇组件正文已发布|
+|[DUT 规范](spec/index.md)|RpuShmTop 的双 gid BANK、地址模型、creq/ack、MEM 和 VLM reservation 接口|双 gid contract 已发布|
+|[验证环境](environment/index.md)|tb top、统一 VLM 目标架构、数据流和各组件实现|目标文档已更新，代码迁移待开发|
 |[验证计划](plan/index.md)|testpoint、testcase、regression 和覆盖闭环|Phase 5 三篇正文已发布|
 |[使用指南](guide/index.md)|三环境边界、代码流转、Slang/VCS 检查、配置和调试|Phase 6 正文已发布|
 |[当前状态](verification-status.md)|实现差异、优先级、处理状态和验收方法|阶段 7 已完成源码复核和维护规则定稿|

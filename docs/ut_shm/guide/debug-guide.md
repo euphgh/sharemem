@@ -115,6 +115,10 @@ scripts/local/sync_remote_repo.sh --dry-run
 
 先确认 `RPU_DIR` 是否仍指向仓库内的空壳 `design/`。当前 stub 只提供端口并不驱动
 DUT 输出，因此 reservation 和 MEM monitor 在 reset 释放后报 X/Z 是已知结果。
+
+双 gid 接口调试时，MEM 波形本身没有 gid。必须同时查看相同 direction/bank/due 的唯一
+reservation record；禁止根据 MEM BADDR 猜测低/高 BANK。目标日志至少打印
+`<bank_id,gid,BADDR>`、issue/due cycle 和 match status。
 `make compile` 通过仍然是有效的 VCS 编译证据，但这个 smoke 失败不能用来评估
 真实 DUT 行为。
 
