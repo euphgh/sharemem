@@ -94,13 +94,12 @@ ut_shm 从 `shm_util_package` 取值，并在 `shm_tb_top` 实例化 DUT 时显�
 到 BANK，先发出写 reservation，再在预约到期时通过 `mem_wvld`、`mem_waddr`、
 `mem_wstrb` 和 `mem_wdata` 写入外部存储。若请求使能 ack，完成事件走 `mack`。
 
-普通 V2M 只有从 MADDR 产生的 m-write，最终 VLM/MEM write beat 地址必须 32 Byte
-对齐。原始 element MADDR 本身不要求对齐；DUT 用对齐的 beat 地址和 byte strobe
-表达其中的有效 byte。
+普通 V2M 只有从 MADDR 产生的 m-write。下游 SRAM 支持任意 byte address 开始的
+32-Byte write beat，因此最终 VLM/MEM write 地址不要求 32 Byte 对齐；DUT 必须用
+完整 beat 地址、byte strobe 和 write data 正确表达所有有效 byte。
 
 VTRANS 是受限的特殊 V2M：16 个线程各提供 16 个元素，DUT 先把这个 16×16 数据
-矩阵转置，再沿用普通 V2M 的地址计算和写路径。其他地址、offset或其他控制字段都不改变。
-VTRANS 是 m-write 的特例，其最终 write beat 地址允许非对齐。
+矩阵转置，再沿用普通 V2M 的地址计算和写路径。其他地址、offset 或其他控制字段都不改变。
 
 ### 5.2 M2V 读路径
 
@@ -108,8 +107,8 @@ VTRANS 是 m-write 的特例，其最终 write beat 地址允许非对齐。
 `mem_rdata`，再把数据写回 `creq_vaddr` 对应的线程本地区域。若请求使能 ack，完成
 事件走 `vack`。
 
-M2V 包含两类访问：从 MADDR 产生的 m-read 必须使用对齐的 read beat 地址；从
-`creq_vaddr` 产生的 v-write 允许使用非对齐 write beat 地址。接口中不存在 v-read。
+M2V 包含两类访问：从 MADDR 产生的 m-read，以及从 `creq_vaddr` 产生的 v-write。
+两类 32-Byte beat 都允许使用非对齐地址；接口中不存在 v-read。
 
 ### 5.3 Reservation 路径
 

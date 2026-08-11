@@ -336,28 +336,25 @@ creq_wpid / P == warp_index / P
 `0 .. 16 KiB*BANK_N*WARP_N`，但每个 WARP 中满足
 `12 KiB <= local_offs < 16 KiB` 的编码均为地址空洞。
 
-## 8. 访问来源与 MEM beat 对齐
+## 8. MEM beat 地址与 byte lane
 
-MADDR 和 element BADDR 都是 byte address，本身不要求 32 Byte 对齐。对齐要求作用于
-最终发布到 VLM reservation 和 MEM 接口的 beat 地址，并由访问来源决定：
+MADDR、element BADDR 和最终发布到 VLM reservation/MEM 接口的地址都是 byte address。
+下游 SRAM 支持从任意 byte address 开始的 32-Byte beat，因此 read/write beat 地址均不
+要求 32 Byte 对齐，也不按访问来源区分 alignment policy。
 
-|访问|地址来源|最终 beat 地址|
-|---|---|---|
-|普通 V2M m-write|MADDR 映射后的 BADDR|必须 32 Byte 对齐|
-|M2V m-read|MADDR 映射后的 BADDR|必须 32 Byte 对齐|
-|M2V v-write|`creq_vaddr` 写回地址|允许非对齐|
-|VTRANS write|MADDR 映射后的 BADDR|允许非对齐|
-
-普通 m-read/m-write 将 element BADDR 归入 32-Byte beat：
+对于任意 read/write beat，lane `k` 对应：
 
 ```text
-beat_addr = BADDR & ~(32 Byte - 1)
-byte_lane = BADDR[4:0]
+byte_address = beat_addr + k
 ```
 
-写访问用 `byte_lane` 生成 strobe；一次访问跨过 32-Byte 边界时，必须拆成两个对齐
-beat。M2V 的 v-write 必须保留 `creq_vaddr` 计算出的完整写回地址低位。接口中不存在
-v-read。最终 VLM/MEM 端口的逐周期对齐契约见
+Write strobe 为 1 的 lane 必须携带该 byte address 的正确数据，为 0 的 lane 不得改变
+存储内容。普通 V2M、M2V v-write 和 VTRANS 可以采用不同的 beat 划分，只要最终有效
+写 byte 的 `<BANK, BADDR, data>` 与 creq 语义一致，且不产生额外有效写。M2V m-read
+必须取得所有有效 element 所需的正确 byte。接口中不存在 v-read。
+
+Reservation 和到期 MEM request 必须保留并逐位匹配完整 beat 地址，包括低 5 bit；不能
+通过截断低位把两个不同的地址视为相同。逐周期接口契约见
 [MEM/VLM 接口](mem-vlm-interface.md)。
 
 ## 9. M2V 写回地址
@@ -387,8 +384,7 @@ address space 或其他控制字段。转置后的每个目标元素继续按普
 MADDR、BANK 和 BADDR。VTRANS 的识别方式和输入限制见
 [creq/ack 接口](creq-ack-interface.md#6-vtrans)。
 
-VTRANS 虽然使用 MADDR 映射结果，但属于普通 m-write 对齐规则的特例，其最终 VLM
-和 MEM write beat 地址允许非对齐。
+VTRANS 使用与普通 V2M 相同的 MADDR 映射和通用非对齐 MEM beat 地址规则。
 
 ## 11. 三种模式对比
 

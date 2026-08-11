@@ -207,8 +207,8 @@ Reservation 到实际 MEM 的匹配键和 busy 规则由
 - MEM read 服务尚未按 `FFD_CYC` 建立截止周期快照；
 - 各组件能避开初始 reset 期间的采样，但运行中 reset 对 reference item、scoreboard
   outstanding、memory read response 和 reservation scheduler state 的清理尚未统一；
-- reservation agent 已移除全部 alignment policy，并继续检查 reservation 与 MEM 完整
-  地址相等；read 和来源相关 write alignment 暂缓到 `SCB-001` 后续实现；
+- reservation agent 不执行 alignment policy，并继续检查 reservation 与 MEM 完整地址
+  相等；下游 SRAM 支持非对齐 32-Byte beat，scoreboard 也不需要来源相关 alignment；
 - `shm_wtrans_item` 的 SPACE_BLK 计算尚未正确处理非零 `warp_group`。
 
 这些条目是实现状态，不会覆盖 DUT spec。唯一问题 ID、优先级和验收方法见

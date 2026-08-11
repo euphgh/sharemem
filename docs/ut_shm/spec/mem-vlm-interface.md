@@ -31,24 +31,12 @@ byte_address = address + k
 byte_data = data[k*8 +: 8]
 ```
 
-对齐要求作用于最终发布到 VLM/MEM 接口的 beat 地址，不要求原始 MADDR 自身对齐。
-所有 read beat 地址必须 32 Byte 对齐：
+Read/write beat 都允许从任意 byte address 开始，不要求 `address[4:0]==0`，也不按访问
+来源或 write reservation port 区分 alignment policy。一个 32-Byte beat 可以自然跨过
+传统的 32-Byte 地址边界。
 
-```text
-address[4:0] == 0
-```
-
-write beat 是否要求对齐由地址来源决定，不由 `vlm_waddr` 的 port 编号决定：
-
-|访问来源|VLM/MEM 端口|对齐要求|
-|---|---|---|
-|普通 V2M m-write|`vlm_waddr`、`mem_waddr`|必须 32 Byte 对齐|
-|M2V v-write|`vlm_waddr`、`mem_waddr`|允许非对齐|
-|VTRANS write|`vlm_waddr`、`mem_waddr`|允许非对齐|
-
-两条 write reservation port 都必须保留完整地址。port 编号本身不是稳定的访问类型
-编码，不能仅根据 port 0/1 判断地址是否应当对齐。reservation 到期后，
-`mem_waddr` 必须逐位等于预告地址；匹配时禁止清除低 5 bit 或只比较 beat 编号。
+所有 reservation 和 MEM request 都必须保留完整地址。Reservation 到期后，MEM 地址
+必须逐位等于预告地址；匹配时禁止清除低 5 bit 或只比较对齐后的 beat 编号。
 
 ## 2. MEM 接口
 
@@ -77,9 +65,9 @@ MEM 没有 ready。`mem_rvld[bank]` 或 `mem_wvld[bank]` 在采样沿为 1，就
 
 有效写请求必须至少包含一个 strobe。不同 BANK 可以在同一周期并行写入。
 
-普通 V2M m-write 的 `mem_waddr` 必须 32 Byte 对齐，byte 位置由 strobe 表示。M2V
-v-write 和 VTRANS write 可以使用非对齐 `mem_waddr`；这些地址仍按 lane `k` 对应
-`mem_waddr+k` 的通用规则解释。
+所有访问来源都使用相同的非对齐地址语义：lane `k` 对应 `mem_waddr+k`。普通 V2M
+只要求所有有效写 byte 的地址、strobe 和 data 正确，不要求选择特定的 32-Byte 对齐
+beat base。
 
 ### 2.3 读事务
 
@@ -165,7 +153,6 @@ vlm_wbusy[d][s] == 1  // sub bank s 在 T+d 已有写占用
 
 ```text
 1 <= vlm_rdly[bank] < VTAB_D
-vlm_raddr[bank][4:0] == 0
 sub_bank = vlm_raddr[bank][6:5]
 vlm_rbusy[vlm_rdly[bank]][sub_bank] == 0
 ```
@@ -188,9 +175,8 @@ sub_bank = vlm_waddr[bank][port][6:5]
 vlm_wbusy[vlm_wdly[bank][port]][sub_bank] == 0
 ```
 
-write reservation 的对齐要求按第 1 章的访问来源表判断，不能仅根据 `port` 判断。
-DUT 必须在到期周期发出一笔同 BANK、同完整地址的 MEM 写请求。reservation 不预告
-`mem_wstrb`、`mem_wdata` 或原始 creq 类型。
+DUT 必须在到期周期发出一笔同 BANK、同完整地址的 MEM 写请求。Reservation 不预告
+`mem_wstrb`、`mem_wdata` 或原始 creq 类型，也不执行 alignment policy。
 
 ### 3.4 delay 和 busy 前移
 
@@ -244,9 +230,9 @@ due_cycle = issue_cycle + issue_delay
 <direction, bank_id, address, due_cycle>
 ```
 
-`address` 必须逐位相等。任何合法的非对齐 write reservation 都必须由同样非对齐的
-`mem_waddr` 原样兑现。`mem_wstrb` 和 `mem_wdata` 不属于 reservation 匹配键，由
-MEM 数据检查单独处理。
+`address` 必须逐位相等。任何 read/write reservation 都必须由携带相同低地址位的 MEM
+request 原样兑现。`mem_wstrb` 和 `mem_wdata` 不属于 reservation 匹配键，由 MEM 数据
+检查单独处理。
 
 匹配关系必须双向完备：
 
@@ -280,17 +266,17 @@ valid/req 为 0 时，相应地址、delay、strobe 和 data 是 don't-care。
 |ID|规则|
 |---|---|
 |`MEM-001`|复位期间 `mem_rvld` 和 `mem_wvld` 必须为 0。|
-|`MEM-002`|`mem_rvld` 有效时，地址必须已知且 32 Byte 对齐。|
-|`MEM-003`|`mem_wvld` 有效时，地址、strobe 和有效 data lane 必须已知，且 strobe 不得全 0；地址按访问来源满足普通 V2M 对齐或 M2V/VTRANS 非对齐许可。|
+|`MEM-002`|`mem_rvld` 有效时，完整地址必须已知；地址允许非对齐。|
+|`MEM-003`|`mem_wvld` 有效时，完整地址、strobe 和有效 data lane 必须已知，且 strobe 不得全 0；地址允许非对齐。|
 |`MEM-004`|读请求后的 `RPORT_DLY` 周期必须提供对应 BANK、对应顺序的 32-Byte 读数据；该数据以读地址原有存储状态为基础，只合入 `T0+FFD_CYC-1` 及之前的写。|
 |`MEM-005`|每笔 MEM 请求必须匹配一笔当前周期到期的 reservation。|
 |`VLM-001`|复位期间 `vlm_rreq` 和 `vlm_wreq` 必须为 0。|
 |`VLM-002`|req 有效时，addr 和 dly 必须已知，且 `1 <= dly < VTAB_D`。|
-|`VLM-003`|read reservation 必须 32 Byte 对齐；write reservation 的对齐要求来自原始访问类型，禁止仅根据 write port 编号判断。|
+|`VLM-003`|read/write reservation 地址均允许非对齐，环境不得根据方向、访问来源或 write port 拒绝低 5 bit 非零的请求。|
 |`VLM-004`|发布 reservation 时，对应方向的 `busy[dly][address[6:5]]` 必须严格为 0。|
 |`VLM-005`|同一 BANK、同一方向不得有两笔不同 reservation 在同一周期到期。|
 |`VLM-006`|每笔 reservation 必须在到期周期产生且只产生一笔同方向、同 BANK、同完整地址的 MEM 请求。|
-|`VLM-007`|非对齐 write reservation 与 `mem_waddr` 必须完整相等，禁止按 32 Byte 对齐后比较。|
+|`VLM-007`|read/write reservation 与到期 MEM 地址必须完整相等，禁止清除低 5 bit 后比较。|
 |`VLM-008`|不同 BANK 可以共享相同方向、delay 和 sub bank 的 busy 时隙，checker 不得因此报错。|
 |`VLM-009`|复位会取消全部 pending reservation，复位后不得兑现旧事务。|
 

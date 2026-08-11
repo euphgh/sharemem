@@ -30,8 +30,8 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh alignment
 
 The regression checks that read reservations and both write ports accept and
 preserve nonaligned addresses. It also checks that a due MEM request must match
-all address bits from the reservation; alignment policy belongs outside the
-reservation agent.
+all address bits from the reservation. No read/write beat alignment policy is
+applied because the downstream SRAM accepts unaligned 32-byte accesses.
 
 Run the external busy plusarg regression with:
 

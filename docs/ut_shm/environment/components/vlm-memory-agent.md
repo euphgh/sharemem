@@ -37,8 +37,8 @@ active 环境，sequencer 虽然存在，但不参与读响应的数据来源。
 - `vlm_data`：一个完整 MEM beat 的数据；
 - `vlm_strb`：逐 byte 写使能，读 transaction 中填为全 1。
 
-它表达的是已经出现在 MEM 端口上的 transaction，不携带原始 creq 指令类型。因此，
-普通 V2M、M2V v-write 和 VTRANS 的来源相关 write alignment 不能只靠这个对象判断。
+它表达的是已经出现在 MEM 端口上的 transaction，不携带原始 creq 指令类型。下游 SRAM
+允许非对齐 beat，因此 memory agent 不需要恢复原始 creq 类型来执行 alignment policy。
 
 ## 4. Read response 路径
 

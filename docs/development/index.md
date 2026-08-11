@@ -9,8 +9,6 @@
   注释、UVM 报告和修改后检查要求。
 - [shmins sequence item 拆分开发计划](shmins-sequence-item-refactor-plan.md)：按地址生成
   形态拆分 transaction、构造合法 offset，并在 hx16 上通过独立 benchmark 验收的阶段方案。
-- [SCB-001 MEM beat 对齐检查开发计划](scb-001-mem-alignment-plan.md)：记录按 BANK 关联
-  shmins 来源的候选算法、严格归属策略、expired provenance 风险和暂缓条件。
 
 规范对新增代码和本次实际修改的代码生效。现有 legacy 代码不要因为无关的
 功能修改而整文件重排；后续 refactor 时再逐步收敛。

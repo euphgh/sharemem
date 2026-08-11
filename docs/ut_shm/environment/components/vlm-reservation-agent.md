@@ -263,22 +263,16 @@ Unexpected 和 missing 分支报告后立即返回；两边都存在时，其余
 - `mem_rdata`、read response 延迟、`mem_wdata` 和 `mem_wstrb`：由 memory agent、
   memory model 和 scoreboard 负责；
 - memory 内容以及 creq 到 MEM 的功能映射：由 reference 和 scoreboard 负责；
-- read 以及来源相关 write alignment：reservation transaction 缺少可靠来源，目标检查
-  位置和暂缓原因见 `SCB-001`。
+- MEM 数据内容和 byte strobe：由 memory model 和 scoreboard 检查。
 
 ## 9. Alignment 的职责边界
 
-稳定 spec 不能按 reservation write port 推断 write 来源：
+下游 SRAM 支持从任意 byte address 开始的 32-Byte read/write，稳定 spec 不要求
+reservation 或 MEM beat base 对齐。Checker 和 scheduler 不执行 alignment policy，
+也不按 direction、原始访问类型或 write port 拒绝低 5 bit 非零的请求。
 
-- 普通 V2M m-write 要求对齐；
-- M2V v-write 允许非对齐；
-- VTRANS write 允许非对齐。
-
-Reservation transaction 不携带足够的原始指令类型，因此 checker 和 scheduler 不执行
-alignment policy。旧的 port-based helper 以及 checker/scheduler 中的 alignment 判断
-已经删除；read/write reservation 和实际 MEM request 仍必须完整地址相等。后续 read
-和来源相关 write alignment 的候选实现与风险见
-[SCB-001 开发计划](../../../development/scb-001-mem-alignment-plan.md)。
+完整地址低位仍属于 reservation/MEM 匹配键。旧的 port-based helper 以及
+checker/scheduler 中的 alignment 判断已经删除，但完整地址兑现检查不能删除。
 
 ## 10. Coverage
 
@@ -333,10 +327,8 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 
 ## 15. 当前实现状态
 
-- `RSV-001`：代码已移除全部 reservation alignment policy，远端定向例与联合编译通过，
-  等待变更提交和完整环境回归后关闭。
 - `RSV-002`：coverage 是空实现。
-- `RSV-003`：alignment 和 external-busy 示例与当前实现不一致。
+- `RSV-003`：external-busy 示例仍访问失效字段名。
 - `RSV-004`：全局 `input_error` 会屏蔽无关 slot 的检查。
 - `RSV-005`：复位期间没有检查 DUT request/valid 必须为 0。
 - `ENV-001`：运行中 reset 未清理 scheduler record 和 busy 状态。

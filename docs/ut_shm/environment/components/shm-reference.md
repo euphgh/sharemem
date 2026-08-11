@@ -73,7 +73,8 @@ M2V 分两步执行：
    VLM bank，并把逐 byte 结果加入本笔 `wmap`。
 
 因此同一 `shm_wtrans_item.wmap` 对 V2M/VTRANS 表示 m-write，对 M2V 表示 v-write。
-Scoreboard 后续必须保留原始指令类型，才能实施来源相关的 alignment 检查。
+Scoreboard 使用统一 byte map 检查三类写入；下游 SRAM 不要求按来源区分 MEM beat
+alignment。
 
 ## 7. 重叠地址
 

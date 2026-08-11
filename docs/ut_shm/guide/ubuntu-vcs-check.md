@@ -128,5 +128,6 @@ CentOS 真实 RTL 的最终结果。
   agent 和空 design 的 parse、elaboration 与 simv link；
 - Linux 6.17 unsupported-kernel warning 是工具环境提示，没有阻止编译或定向仿真。
 
-该证据验证 reservation alignment 职责迁移和完整地址匹配，不验证暂缓中的 scoreboard
-来源相关 alignment，也不替代真实 RTL 完整 regression。
+该证据验证 reservation 接受非对齐地址并执行完整地址匹配。2026-08-11 已进一步确认
+下游 SRAM 对所有 32-Byte read/write 都支持非对齐地址，因此不存在待补的 scoreboard
+来源相关 alignment checker。该组件证据仍不替代真实 RTL 完整 regression。

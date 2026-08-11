@@ -48,7 +48,7 @@ Phase 5 规划的基础维度包括：
 - thread/element/byte mask，length 最小值、最大值、尾部 byte 和 32-Byte beat 跨界；
 - MADDR 合法边界、WRP/BLK 12 KiB 与 16 KiB 编码、地址空洞相邻值、BANK、BADDR 和
   WARP group；
-- MEM direction、BANK、source alignment 类别、strobe 形状、read pipeline 深度和
+- MEM direction、BANK、address low bits、strobe 形状、read pipeline 深度和
   read/write 相对周期；
 - reservation direction、delay、sub bank、external/SHM busy、共享 slot、到期冲突和
   match 结果；
@@ -65,7 +65,7 @@ Phase 5 规划的基础维度包括：
 - ATYPE_W × signedness × granularity × DTYPE；
 - SPACE × interleave size × MADDR boundary class；
 - SPACE_BLK 的 wpnum × warp_group × interleave size；
-- access source × aligned/nonaligned × MEM/VLM direction；
+- MEM/VLM direction × address-low-bits × boundary crossing；
 - reservation direction × delay × busy source × match result；
 - overlap class × DUT 兑现次序 × final convergence；
 - reset stage × pending state type。
@@ -139,4 +139,3 @@ coverage 清单，实施后应把 assertion 名称映射回 testpoint ID。
 
 整个 ut_shm 关闭需要所有功能领域满足上述条件。当前没有 functional coverage，且仍有
 多项 P0 实现缺口，因此 Phase 5 的产物是完整验证目标和缺口基线，不是验证完成声明。
-

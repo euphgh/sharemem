@@ -94,19 +94,16 @@ record 已被后续状态解释完毕。扫描任务每 10 个 `CLK_PERIOD` 检�
 `wmap_expired` 不要求为空，因为被覆盖的旧值允许从未实际出现。`ref_record_q` 的中间
 诊断状态也不能替代 `wmap_final` 的最终一致性检查。
 
-## 8. Alignment 检查归属
+## 8. MEM beat 地址检查边界
 
-当前 reservation write port 不能稳定表示访问来源。来源相关的规则必须在能关联原始
-creq 与实际 write 的 scoreboard 路径检查：
+下游 SRAM 支持从任意 byte address 开始的 32-Byte read/write，scoreboard 不按原始
+creq 类型检查 MEM beat base alignment，也不需要为此把一笔实际 write 唯一归属于某个
+`shm_wtrans_item`。
 
-- 普通 V2M 的 m-write 必须按 MEM beat 对齐；
-- M2V 的 v-write 可以非对齐；
-- VTRANS 的 V2M write 是特例，可以非对齐。
-
-当前算法尚未建立这项关联和检查，见 `SCB-001` 及其
-[开发计划](../../../development/scb-001-mem-alignment-plan.md)。Reservation checker 只
-负责 busy/reservation 时序以及 reservation 地址与 MEM 地址完全相等，不再执行 read
-或 write alignment policy。
+Write checker 继续把实际 strobe 展开成逐 byte `<BANK, BADDR, data>`，并要求每个有效
+byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的验收条件是最终写数据
+和 byte 地址正确，而不是 DUT 选择某个特定的 32-Byte beat base。Reservation checker
+独立负责 busy/时序以及 reservation 与 MEM 完整地址相等。
 
 ## 9. 调试观察点
 
@@ -127,7 +124,7 @@ creq 与实际 write 的 scoreboard 路径检查：
 |`ut_shm/util/sv-collection/`|set、associative array 和 queue 的集合运算工具|
 
 `ut_shm/tests/shm_unit_test.svh` 提供完整数据路径 smoke。当前没有针对交叠 creq 乱序
-兑现、只出现旧值而没有最终值、未知实际地址、timeout 配置或来源相关 alignment 的
+兑现、只出现旧值而没有最终值、未知实际地址或 timeout 配置的
 独立 scoreboard 测试；新增算法时应先用小规模 byte map 定向场景固定这些边界。
 
 ## 11. 开发 contract
@@ -142,7 +139,6 @@ creq 与实际 write 的 scoreboard 路径检查：
 
 ## 12. 当前实现状态
 
-- `SCB-001`：尚未按原始指令来源检查 write alignment。
 - `SCB-002`：timeout 固定为 128 cycles。
 - `VMEM-001`：read service 未实现 `FFD_CYC` snapshot。
 - `ENV-001`：运行中 reset 未清理 outstanding 和实际 memory 状态。

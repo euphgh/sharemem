@@ -71,11 +71,9 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
 |`REF-001`|P0|待实现|reference|SPACE_BLK 映射没有处理非零 `warp_group`|
-|`SCB-001`|P0|暂缓|scoreboard|MEM alignment 来源归属方案待 RTL 重构后确认|
 |`SCB-002`|P1|待实现|scoreboard|128-cycle timeout 固定，可能把合法长延迟误报为失败|
-|`RSV-001`|P0|待验证|reservation agent|alignment policy 已移除且定向通过，待提交和完整回归|
 |`RSV-002`|P1|待实现|reservation coverage|coverage 组件目前为空实现|
-|`RSV-003`|P1|待实现|reservation example|定向测试仍编码旧 port 对齐规则，external busy 测试字段名也已失效|
+|`RSV-003`|P1|待实现|reservation example|external busy 定向测试仍访问失效字段名|
 |`RSV-004`|P1|待实现|reservation checker|全局 `input_error` 会屏蔽无关 slot 的检查|
 |`RSV-005`|P1|待实现|reservation monitor|复位期间没有检查 DUT request/valid 必须为 0|
 
@@ -290,42 +288,12 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 - 目标依据：[地址模型的 SPACE_BLK 映射](spec/address-model.md#7-space_blk)。
 - 验收：使用非零 `warp_group`、`creq_wpnum` 为 1/2/4 的定向 reference 测试。
 
-### `SCB-001` 来源相关 write alignment
-
-- 现状：scoreboard 持有原始 creq 类型和实际 write transaction，但尚未实施普通
-  V2M 对齐、M2V v-write 可非对齐、VTRANS 可非对齐的分类检查；read alignment 也不再
-  由 reservation agent 检查。RTL 近期仍将重构，本问题暂缓实现。
-- 影响：最终 MEM/VLM beat alignment 的 spec 规则缺少正确的功能检查位置。
-- 目标依据：[地址模型的访问来源与对齐](spec/address-model.md#8-访问来源与-mem-beat-对齐)。
-- 候选方案：write 数据完整匹配后，在 `value_full_match` 中按 BANK 汇总所有地址和数据
-  均相同的 shmins 来源；只要任一候选是普通 V2M，该 BANK 就要求 32 Byte 对齐。该严格
-  策略可能因多个不可区分来源而误报，且必须处理已离开 `ref_record_q` 的 expired 来源、
-  `get_intersect()` 的 key-only 语义和 expectation 的检查/提交顺序。完整讨论见
-  [SCB-001 开发计划](../development/scb-001-mem-alignment-plan.md)。
-- 验收：普通 V2M、M2V、VTRANS 的 aligned/nonaligned 正反例均有定向测试。
-
 ### `SCB-002` 可配置 timeout
 
 - 现状：scoreboard 固定在 128 cycles 后把未完成 reference record 报为 expired。
 - 影响：协议没有最大完成延迟，合法长延迟可能被误报。
 - 目标依据：[DUT 概览的协议边界](spec/dut-overview.md#7-协议边界)。
 - 验收：timeout 可配置或关闭；超过默认诊断阈值但最终正确的事务不会被强制判错。
-
-### `RSV-001` 移除 reservation alignment policy
-
-- 现状：types 中的 alignment helper、checker 的 request/record/MEM alignment 判断以及
-  scheduler 的 alignment 拒绝路径已经删除。Read、write port 0/1 的完整非对齐地址均可
-  被接纳和保留；reservation 与到期 MEM 仍逐位比较完整地址。等待远端定向测试验收。
-- 影响：VTRANS 与 M2V/V2M 的实际来源不能由 reservation port 稳定区分。
-- 目标依据：`VLM-003`；reservation/MEM 地址仍必须完整相等。
-- 验收：reservation agent 对 read 和两个 write port 均不执行 alignment policy，非对齐
-  地址能够原样进入 scheduler record 并与同地址 MEM request 匹配；仅低 5 bit 不同的
-  reservation/MEM 仍报告完整地址 mismatch。Alignment policy 后续由 `SCB-001` 跟踪。
-- 2026-08-09 阶段证据：远端 VCS `W-2024.09-SP1_Full64` 执行
-  `scripts/ubuntu/check_vlm_reservation_vcs.sh alignment`，read、write port 0/1 非对齐地址
-  保留、同地址兑现和低位 mismatch 定向场景运行 PASS；随后执行 `compile`，reservation
-  agent、memory agent 与空 design 联合 parse、elaboration 和 link 通过。当前保留为
-  “待验证”，待变更提交并补充完整环境回归后转入已解决记录。
 
 ### `RSV-002` Reservation coverage
 
@@ -336,13 +304,12 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 
 ### `RSV-003` Reservation example 失效
 
-- 现状：`alignment_tb.sv` 已改为验证 reservation 不实施 alignment policy、同时保留
-  完整地址匹配；`external_busy_tb.sv` 仍需确认是否访问 scheduler 中不存在的
-  `EXTERNAL_BUSY_PERCENT` 大写字段。2026-08-06 Ubuntu 实测中的旧结果已经失效。
-- 影响：示例不能作为当前 spec 的可靠回归证据，部分目标可能无法编译。
-- 目标：示例检查 reservation 的完整地址匹配和 plusarg 覆盖的实际字段，不在
-  reservation example 中检查来源相关 alignment policy。
-- 验收：Ubuntu 脚本的 `alignment`、`external-busy` 目标编译并通过。
+- 现状：`alignment_tb.sv` 已验证非对齐 reservation 的完整地址匹配；
+  `external_busy_tb.sv` 仍访问 scheduler 中不存在的 `EXTERNAL_BUSY_PERCENT` 大写字段。
+- 影响：`external-busy` 目标无法作为当前 external busy 配置的可靠回归证据。
+- 目标：external busy 示例改用 scheduler 的实际字段，并验证 plusarg 覆盖。
+- 验收：Ubuntu 脚本的 `external-busy` 目标编译并通过；`alignment` 已由 `RSV-001`
+  关闭证据覆盖。
 
 ### `RSV-004` `input_error` 抑制粒度
 
@@ -370,5 +337,23 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 
 ## 5. 已解决记录
 
-当前没有在问题 ID 建立后同时具备代码和完整验收证据的已关闭项。后续问题完成
-后保留 ID 并转入本节；不根据历史描述补录无法重现的通过结果。
+### `RSV-001` Reservation alignment policy
+
+- 关闭日期：2026-08-11。
+- 修改：提交 `acb05a2` 删除 types alignment helper、checker 的 request/record/MEM
+  alignment 判断和 scheduler alignment 拒绝路径；reservation 与到期 MEM 继续逐位
+  比较完整地址。
+- 验证：远端 VCS `W-2024.09-SP1_Full64` 执行
+  `scripts/ubuntu/check_vlm_reservation_vcs.sh alignment`，read、write port 0/1 非对齐地址
+  保留、同地址兑现和低位 mismatch 定向场景 PASS；`compile` 完成 reservation agent、
+  memory agent 与空 design 的 parse、elaboration 和 link。2026-08-11 已确认完整验证通过。
+- 结论：reservation agent 不执行 alignment policy；完整地址兑现仍是稳定协议检查。
+
+### `SCB-001` 来源相关 MEM alignment
+
+- 关闭日期：2026-08-11。
+- 关闭类型：DUT contract 更新后不再适用，不需要实现或验证来源归属算法。
+- 依据：下游 SRAM 支持从任意 byte address 开始的 32-Byte read/write；普通 V2M 只要求
+  有效写 byte 的 BANK、BADDR、strobe 和 data 正确，不要求 MEM beat base 对齐。
+- 文档：已更新 DUT overview、地址模型、MEM/VLM 接口、scoreboard、reference、memory
+  agent 和 testpoint，并删除失效的 SCB-001 开发计划。

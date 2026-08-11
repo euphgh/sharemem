@@ -127,7 +127,7 @@ DUT 输出，因此 reservation 和 MEM monitor 在 reset 释放后报 X/Z 是�
 ### Scoreboard expired 或 reservation mismatch
 
 保留 transaction ID、方向、BANK、完整地址、issue/due cycle、当前 cycle、matched 与
-expired 日志。Address alignment、timeout、FFD_CYC 和运行中 reset 都有已登记缺口，
+expired 日志。Timeout、FFD_CYC 和运行中 reset 都有已登记缺口，
 先按错误 ID 进入[验证实现状态](../verification-status.md)，再判断是否为新问题。
 
 ## 8. CentOS 结果反馈
