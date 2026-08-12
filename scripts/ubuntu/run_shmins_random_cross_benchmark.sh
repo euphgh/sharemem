@@ -57,7 +57,7 @@ if [[ ! "$warmup" =~ ^[0-9]+$ ]]; then
     exit 2
 fi
 
-BENCH_IMPL=split "$script_dir/run_shmins_random_benchmark.sh" compile
+"$script_dir/run_shmins_random_benchmark.sh" compile
 
 extract_results() {
     local result_id="$1"

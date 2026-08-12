@@ -5,7 +5,7 @@ package shmins_sequence_compile_pkg;
   import shm_util_package::*;
 
   `include "uvm_macros.svh"
-  `include "shmins_split_sequence_item.svh"
+  `include "shmins_sequence_item.svh"
   `include "shmins_contiguous_sequence_item.svh"
   `include "shmins_strided_sequence_item.svh"
   `include "shmins_indexed_sequence_item.svh"

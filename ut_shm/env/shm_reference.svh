@@ -36,7 +36,8 @@ class shm_reference extends uvm_component;
     //AUTO_GEN_REF_TLM_EXTERN_BEGIN
     extern function void write_shmins_reference(shmins_sequence_item shmins_trans);
 
-    extern function void v2m_write_wmap(string label, int tidx, int eidx, int lidx, byte unsigned wdata, shm_wtrans_item item);
+    extern function void v2m_write_wmap(string label, int tidx, int eidx, int lidx, byte unsigned wdata,
+                                        shm_wtrans_item item);
     extern function void write_wmap(string label, int tidx, int eidx, int lidx, bit wen, bidx_t bid, shm_gid_t gid,
                                     baddr_t baddr, byte unsigned wdata, shm_wtrans_item item);
     //AUTO_GEN_REF_TLM_EXTERN_END
@@ -113,7 +114,8 @@ function void shm_reference::write_wmap(string label, int tidx, int eidx, int li
     end
 endfunction: write_wmap
 
-function void shm_reference::v2m_write_wmap(string label, int tidx, int eidx, int lidx, byte unsigned wdata, shm_wtrans_item item);
+function void shm_reference::v2m_write_wmap(string label, int tidx, int eidx, int lidx, byte unsigned wdata,
+                                            shm_wtrans_item item);
     bit     wen   = item.wstrb_2d_array[tidx][eidx][lidx];
     bidx_t  bid   = item.bid_2d_array[tidx][eidx];
     shm_gid_t gid = item.gid_2d_array[tidx][eidx];
@@ -152,6 +154,9 @@ function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_
         shm_gid_t write_gid = shm_gid_t'(int'(wgolden.creq_wpid) / WARP_PER_GID);
         // tidx: thread index, eidx: element index
         foreach(wgolden.baddr_2d_array[tidx, eidx]) begin
+            if (wgolden.wstrb_2d_array[tidx][eidx] == 0) begin
+                continue;
+            end
             // the value of wmap in read mode is the element/byte index
             for (int unsigned i = 0; i < elem_byte_n; i++) begin
                 baddr_t baddr = wgolden.baddr_2d_array[tidx][eidx] + i;
@@ -159,11 +164,16 @@ function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_
                 shm_gid_t read_gid = wgolden.gid_2d_array[tidx][eidx];
                 byte raw_data = ref_banks[bidx][read_gid].read(baddr);
                 rdata[tidx][eidx * elem_byte_n + i] = raw_data;
-                `uvm_info(get_type_name(), $sformatf("M2V Thd[%0d].Elem[%0d].Lane[%0d] R bank[%0d][0x%x] = %x", tidx, eidx, i, bidx, baddr, raw_data), UVM_FULL);
+                `uvm_info(get_type_name(),
+                          $sformatf("M2V Thd[%0d].Elem[%0d].Lane[%0d] R bank[%0d][0x%x] = %x",
+                                    tidx, eidx, i, bidx, baddr, raw_data), UVM_FULL);
             end
         end
 
         foreach(wgolden.baddr_2d_array[tidx, eidx]) begin
+            if (wgolden.wstrb_2d_array[tidx][eidx] == 0) begin
+                continue;
+            end
             for (int unsigned i = 0; i < elem_byte_n; i++) begin
                 baddr_t wr_baddr = waddr_base + eidx * elem_byte_n + i;
                 byte unsigned value = rdata[tidx][eidx * elem_byte_n + i];

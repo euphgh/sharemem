@@ -56,6 +56,29 @@ class shmins_split_benchmark_base_test extends uvm_test;
                                              ref longint unsigned checksum);
 
   //------------------------------------------------------------------------
+  // @brief Reconstructs one MADDR from the packed public transaction fields.
+  //
+  // @param item Transaction whose packed offset is decoded.
+  // @param thread_idx Source thread index.
+  // @param elem_idx Data element index.
+  // @return MADDR reconstructed independently of topology intermediate arrays.
+  //------------------------------------------------------------------------
+  extern protected function longint signed reconstruct_packed_maddr(shmins_sequence_item item,
+                                                                    int thread_idx,
+                                                                    int elem_idx);
+
+  //------------------------------------------------------------------------
+  // @brief Checks the real reference consumer against one randomized item.
+  //
+  // @param item Randomized topology item with packed offsets.
+  // @param validation_errors Aggregate error count updated in place.
+  // @post Active element addresses match the generated model; masked and
+  //       zero-length payload slots produce no reference access.
+  //------------------------------------------------------------------------
+  extern protected function void validate_reference_consumer(shmins_sequence_item item,
+                                                              ref longint unsigned validation_errors);
+
+  //------------------------------------------------------------------------
   // @brief Returns the stable result label for one topology.
   //
   // @param topology Address-generation topology.
@@ -100,11 +123,123 @@ function void shmins_split_benchmark_base_test::sample_item(
     ref longint unsigned checksum);
   retries += item.generation_retry_count;
   validation_errors += item.validation_error_count;
+  for (int thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
+    for (int elem_idx = 0; elem_idx < item.thread_elem_cnt(thread_idx); elem_idx++) begin
+      longint signed reconstructed_maddr;
+      shmins_sequence_item::shmins_address_result_t mapped;
+
+      if (!item.is_active_element(thread_idx, elem_idx)) begin
+        continue;
+      end
+      reconstructed_maddr = reconstruct_packed_maddr(item, thread_idx, elem_idx);
+      mapped = item.map_maddr(thread_idx, reconstructed_maddr);
+      if (reconstructed_maddr != item.elem_maddr[thread_idx][elem_idx] || !mapped.valid) begin
+        validation_errors++;
+        `uvm_error("SHMINS_CONSUMER_MADDR",
+                   $sformatf("thread=%0d elem=%0d generated=0x%0h reconstructed=0x%0h valid=%0b",
+                             thread_idx, elem_idx, item.elem_maddr[thread_idx][elem_idx],
+                             reconstructed_maddr, mapped.valid))
+      end
+    end
+  end
   checksum ^= longint'(item.creq_base);
   checksum ^= longint'(item.creq_tmsk);
   checksum ^= longint'(item.offs_elem[0][0]);
   checksum ^= longint'(item.creq_vdat[THD_N-1]);
 endfunction : sample_item
+
+function longint signed shmins_split_benchmark_base_test::reconstruct_packed_maddr(
+    shmins_sequence_item item,
+    int thread_idx,
+    int elem_idx);
+  longint signed base;
+
+  base = longint'(item.creq_base[MADDR_W-1:0]);
+  case (item.creq_itype)
+    LDST_S, LDST_V: begin
+      return base + item.decode_packed_offset(thread_idx, 0) +
+             longint'(elem_idx) * longint'(item.data_byte_w());
+    end
+    LDSTE_S: return base + longint'(elem_idx) * item.decode_packed_offset(thread_idx, 0);
+    LDSTE_V: return base + item.decode_packed_offset(thread_idx, elem_idx);
+    default: return -1;
+  endcase
+endfunction : reconstruct_packed_maddr
+
+function void shmins_split_benchmark_base_test::validate_reference_consumer(
+    shmins_sequence_item item,
+    ref longint unsigned validation_errors);
+  shm_wtrans_item consumer;
+  int zero_length_thread;
+
+  consumer = shm_wtrans_item::type_id::create("reference_consumer");
+  consumer.init_from(item);
+  zero_length_thread = -1;
+
+  for (int thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
+    int unsigned expected_count;
+
+    expected_count = 0;
+    if (item.creq_tmsk[thread_idx] === 1'b1) begin
+      expected_count = item.thread_elem_cnt(thread_idx);
+      if (expected_count > item.max_elem_cnt()) begin
+        expected_count = item.max_elem_cnt();
+      end
+      if (zero_length_thread < 0) begin
+        zero_length_thread = thread_idx;
+      end
+    end
+    if (consumer.baddr_2d_array[thread_idx].size() != expected_count) begin
+      validation_errors++;
+      `uvm_error("SHMINS_REFERENCE_LENGTH",
+                 $sformatf("thread=%0d expected_slots=%0d actual_slots=%0d",
+                           thread_idx, expected_count, consumer.baddr_2d_array[thread_idx].size()))
+    end
+
+    for (int elem_idx = 0; elem_idx < expected_count; elem_idx++) begin
+      if (item.is_active_element(thread_idx, elem_idx)) begin
+        shmins_sequence_item::shmins_address_result_t mapped;
+
+        mapped = item.map_maddr(thread_idx, reconstruct_packed_maddr(item, thread_idx, elem_idx));
+        if (!mapped.valid || consumer.wstrb_2d_array[thread_idx][elem_idx] == 0 ||
+            consumer.bid_2d_array[thread_idx][elem_idx] != mapped.physical_addr.bank_id ||
+            consumer.gid_2d_array[thread_idx][elem_idx] != mapped.physical_addr.gid ||
+            consumer.baddr_2d_array[thread_idx][elem_idx] != mapped.physical_addr.baddr) begin
+          validation_errors++;
+          `uvm_error("SHMINS_REFERENCE_MADDR",
+                     $sformatf("thread=%0d elem=%0d reference consumer mismatch", thread_idx, elem_idx))
+        end
+      end else if (consumer.wstrb_2d_array[thread_idx][elem_idx] != 0) begin
+        validation_errors++;
+        `uvm_error("SHMINS_REFERENCE_MASK",
+                   $sformatf("thread=%0d elem=%0d inactive slot has strobe=0x%0h",
+                             thread_idx, elem_idx, consumer.wstrb_2d_array[thread_idx][elem_idx]))
+      end
+    end
+  end
+
+  if (zero_length_thread >= 0) begin
+    shm_wtrans_item zero_length_consumer;
+    logic [7:0] saved_length;
+    byte unsigned saved_elem_num;
+
+    saved_length = item.creq_len[zero_length_thread];
+    saved_elem_num = item.elem_num[zero_length_thread];
+    item.creq_len[zero_length_thread] = 0;
+    item.elem_num[zero_length_thread] = 0;
+    zero_length_consumer = shm_wtrans_item::type_id::create("zero_length_consumer");
+    zero_length_consumer.init_from(item);
+    if (zero_length_consumer.baddr_2d_array[zero_length_thread].size() != 0) begin
+      validation_errors++;
+      `uvm_error("SHMINS_REFERENCE_ZERO_LENGTH",
+                 $sformatf("thread=%0d zero-length payload produced %0d slots",
+                           zero_length_thread,
+                           zero_length_consumer.baddr_2d_array[zero_length_thread].size()))
+    end
+    item.creq_len[zero_length_thread] = saved_length;
+    item.elem_num[zero_length_thread] = saved_elem_num;
+  end
+endfunction : validate_reference_consumer
 
 function string shmins_split_benchmark_base_test::topology_name(shmins_benchmark_topology_e topology);
   case (topology)
@@ -318,6 +453,12 @@ task shmins_random_cross_benchmark_test::measure_combination(
   retries = 0;
   validation_errors = 0;
   checksum = 0;
+  if (!randomize_combination(item, topology, rw_value, dtype_value, atype_w_value, atype_s_value, atype_g_value,
+                             space_value)) begin
+    `uvm_fatal("SHMINS_REFERENCE_CONSUMER_RANDOMIZE",
+               $sformatf("combination=%0d reference-consumer setup failed", combination_count))
+  end
+  validate_reference_consumer(item, validation_errors);
   start_ns = shmins_benchmark_monotonic_ns();
   for (int unsigned iteration_idx = 0; iteration_idx < iterations; iteration_idx++) begin
     if (randomize_combination(item, topology, rw_value, dtype_value, atype_w_value, atype_s_value, atype_g_value,
@@ -506,6 +647,11 @@ task shmins_random_unconstrained_benchmark_test::measure_topology(shmins_benchma
   retries = 0;
   validation_errors = 0;
   checksum = 0;
+  if (!item.randomize()) begin
+    `uvm_fatal("SHMINS_REFERENCE_CONSUMER_RANDOMIZE",
+               $sformatf("topology=%s reference-consumer setup failed", topology_name(topology)))
+  end
+  validate_reference_consumer(item, validation_errors);
   start_ns = shmins_benchmark_monotonic_ns();
   for (int unsigned iteration_idx = 0; iteration_idx < iterations; iteration_idx++) begin
     if (item.randomize()) begin

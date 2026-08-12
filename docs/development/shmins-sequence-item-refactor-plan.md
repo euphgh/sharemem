@@ -1,8 +1,8 @@
 # shmins sequence item 拆分开发计划
 
 本文规定 `shmins_sequence_item` 随机化性能重构的设计边界、目标结构、开发阶段和验收
-证据。Benchmark 阶段已经完成 contiguous、strided 和 indexed 原型及交叉性能测试；当前
-阶段把 SPLIT 实现接入 `ut_shm` 正式 sequence item package 和 master unit sequence。
+证据。Benchmark 阶段已经完成 contiguous、strided 和 indexed 原型及交叉性能测试；
+topology 实现现已接入 `ut_shm` 正式 sequence item package 和 master unit sequence。
 Driver、monitor、reference 和 scoreboard 继续通过公共 `shmins_sequence_item` handle
 工作，不按地址拓扑派生新的组件类型。
 
@@ -18,9 +18,9 @@ DUT 地址与 creq 合法性仍以 [地址模型](../ut_shm/spec/address-model.m
 solve-order、全局 uniqueness 和 thread range non-overlap 求解。许多 inactive thread、
 超出实际 length 或被 mask 的 element 也进入 solver，部分组合的随机化时间过长。
 
-现有 `shmins_post_randomize_sequence_item` 把 collision 检查移到 `post_randomize()`，但仍把
-不同地址生成形态、space、方向和 retry 算法集中在一个 class 中。它还保留旧的
-`c_addr_bound`，并从完整 ATYPE 编码域抽取候选，仍可能求解缓慢或耗尽 retry。
+历史 `shmins_post_randomize_sequence_item` 曾把 collision 检查移到 `post_randomize()`，
+但仍把不同地址生成形态、space、方向和 retry 算法集中在一个 class 中。该过渡实现和旧
+solver constraint 已在正式 topology 实现接管后删除。
 
 本阶段目标是：
 
@@ -28,7 +28,7 @@ solve-order、全局 uniqueness 和 thread range non-overlap 求解。许多 ina
 2. 只让低成本公共字段进入 solver，MADDR、base 和 offset 由子类与基类 helper
    过程式构造；
 3. 由独立 validator 复查 packed offset 和最终 transaction，不信任生成算法自身；
-4. 保留 original 和 monolithic post-randomize 实现作为性能基线；
+4. 通过稳定的交叉 benchmark 持续验证正式 topology 实现；
 5. 保持 driver、monitor、sequencer 和 reference 使用的公共 transaction API；
 6. 在远端 EDA 服务器上完成无 DUT 的 package/sequence 编译，再进入真实 DUT testcase。
 
@@ -354,20 +354,12 @@ driver、monitor、reference 和 `shm_wtrans_item` 已使用的字段、copy、R
 
 ## 7. Benchmark 基线
 
-Benchmark 保留三种实现选择：
+Benchmark 只编译正式 `shmins_sequence_item.svh` 及 contiguous、strided、indexed、VTRANS
+子类。历史 original 和 monolithic post-randomize 文件、生成 constraint 以及对应 filelist
+已经删除；`build/split/` 仅保留为兼容既有结果脚本的输出目录名。
 
-```text
-ORIGINAL          当前 solver-based item
-POST_RANDOMIZE    当前 monolithic post-randomize item
-SPLIT             本计划的新基类和子类
-```
-
-三种实现必须在互相隔离的 compilation 中定义各自的 `shmins_sequence_item`，不能同时
-include。为避免在原型阶段覆盖正式文件，新基类可以暂用独立文件名；未来决定集成时再
-替换正式 `shmins_sequence_item.svh`。
-
-Split benchmark 根据固定 profile 显式创建子类。`RANDOM` profile 若允许每次改变 ITYPE，
-必须在每次 attempt 前选择拓扑并创建相应子类；它不能在复用同一个对象时改变 class。
+Benchmark 根据固定 profile 显式创建子类。若以后允许每次改变 ITYPE，必须在每次
+attempt 前选择拓扑并创建相应子类，不能在复用同一个对象时改变 class。
 
 Benchmark 还需增加或确认以下可控字段，不能继续只固定 DTYP_8/ATYP_16：
 
@@ -390,16 +382,17 @@ Benchmark 还需增加或确认以下可控字段，不能继续只固定 DTYP_8
 4. **Indexed**：实现逐 active element 的合法 MADDR 采样和提交。
 5. **Strided**：实现 stride 可达区间、element 0 和 signed stride 规则。
 6. **VTRANS**：复用 contiguous 并增加输入限制。
-7. **Benchmark**：增加 SPLIT build、字段 knobs、profile matrix 和统计。
+7. **Benchmark**：增加 topology build、字段 knobs、profile matrix 和统计。
 8. **Benchmark 验证**：完成三种拓扑的交叉性能和无 inline override 测量。
-9. **正式集成**：增加 VTRANS 子类、domain-based master unit sequence 和 package include。
+9. **正式集成**：增加 VTRANS 子类、domain-based master unit sequence 和 package include，
+   并把公共基类迁入正式 `shmins_sequence_item.svh`。
 10. **空 design 编译**：不依赖真实 DUT，编译正式 item/sequence 源码和最小 UVM top。
 11. **系统验证**：空 design 编译通过后，由独立阶段运行真实 DUT testcase/regression。
 
-截至 2026-08-09，contiguous、strided 和 indexed 及 432 组交叉配置已经完成远端编译和
-随机化测试；阶段 9 的正式 package/sequence 接入和阶段 10 的空 design VCS 编译已经完成。
-Driver、monitor、reference、scoreboard 和真实 DUT regression 不在本次修改范围；发现
-contract 冲突时记录到 verification status，不顺带改变 DUT 检查语义。
+截至 2026-08-12，contiguous、strided 和 indexed 已完成远端交叉随机化测试，正式
+package/sequence 接入和空 design VCS 编译已经完成。系统集成发现 reference 曾映射超出
+length 或被 mask 的 payload 槽位；`shm_wtrans_item` 现只重建 active element，benchmark
+也从 packed offset 独立复算 active MADDR，以覆盖生成器与消费者之间的契约。
 
 ## 9. 远端验证矩阵和证据
 
@@ -436,7 +429,7 @@ Linux 6.17 kernel 不在支持列表，该环境 warning 未阻止编译。
 - VTRANS 支持的 dtype/itype 组合。
 
 每个用于性能结论的配置采用相同 VCS 版本、profile、字段配置、iteration、warmup、reuse
-和 seed，对三种实现各运行至少三次。先用小 iteration 排除长时间卡住，再使用不少于
+和 seed，对正式实现至少运行三次。先用小 iteration 排除长时间卡住，再使用不少于
 100 次 measured attempt 形成正式结果。
 
 ## 10. 当前集成阶段验收条件
@@ -452,14 +445,14 @@ Linux 6.17 kernel 不在支持列表，该环境 warning 未阻止编译。
 
 ## 11. 暂缓项
 
-以下工作不属于本阶段：
+以下工作仍不属于本阶段：
 
-- 修改 driver、monitor、reference、scoreboard；
+- 除 active-element 消费边界修复外，修改 driver、monitor、reference 或 scoreboard；
 - 修复 `REF-001` 或以现有 reference 验证非零 SPACE_BLK group；
 - 运行真实 DUT case、TC/LST regression 或 functional coverage；
 - 提取 address-space policy class；
 - 放宽 base 和 decoded offset 分别自然对齐的临时激励限制；
-- 删除 original 或 monolithic benchmark 基线。
+- 恢复已删除的 original 或 monolithic benchmark 基线。
 
 空 design 编译通过后仍需另立系统验证阶段，重新检查 `SHMINS-002`～`SHMINS-007`、真实
 DUT testcase、完整 ut_shm elaboration 和 regression 证据。

@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
 #
-# 在 macOS 上检查两个 shmins_sequence_item benchmark 实现的 SystemVerilog 语法。
+# 在本地检查正式 shmins_sequence_item benchmark 的 SystemVerilog 语法。
 
 set -euo pipefail
 
 usage() {
     cat <<'EOF'
 用法：
-  scripts/local/check_shmins_random_benchmark_slang.sh \
-      [original|post_randomize|all] [slang 额外参数...]
+  scripts/local/check_shmins_random_benchmark_slang.sh [slang 额外参数...]
 
 环境变量：
   SLANG     slang 可执行文件，默认 slang
   UVM_HOME  UVM 源码根目录，默认 <repo>/resources/uvm-1.2
 
-默认检查 all。两个实现各自启动一次 slang，避免同名的
-shmins_sequence_item 出现在同一个 compilation 中。
+检查公共基类以及 contiguous、strided、indexed 和 VTRANS 子类。
 EOF
 }
 
@@ -26,14 +24,6 @@ case "${1:-}" in
         ;;
 esac
 
-implementation="all"
-case "${1:-}" in
-    original | post_randomize | all)
-        implementation="$1"
-        shift
-        ;;
-esac
-
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(git -C "$script_dir/../.." rev-parse --show-toplevel)"
 
@@ -41,16 +31,25 @@ slang_bin="${SLANG:-slang}"
 uvm_home="${UVM_HOME:-$repo_root/resources/uvm-1.2}"
 uvm_src="$uvm_home/src"
 utility_dir="$repo_root/ut_shm/util"
+collection_dir="$utility_dir/sv-collection/libs"
+environment_dir="$repo_root/ut_shm/env"
 sequence_dir="$repo_root/ver_common/uvc/shmins_agent/sequences"
+vlm_memory_dir="$repo_root/ver_common/uvc/vlm_memory_agent"
 example_dir="$repo_root/examples/shmins_random_benchmark"
 
 required_files=(
     "$uvm_src/uvm_pkg.sv"
     "$uvm_src/uvm_macros.svh"
+    "$collection_dir/collection_pkg.sv"
     "$utility_dir/shm_util_package.sv"
+    "$environment_dir/shm_wtrans_item.svh"
+    "$environment_dir/vlm2aa.svh"
+    "$vlm_memory_dir/vlm_memory_sequence_item.svh"
     "$sequence_dir/shmins_sequence_item.svh"
-    "$sequence_dir/shmins_post_randomize_sequence_item.svh"
-    "$sequence_dir/shmins_seq_item_constraints.svh"
+    "$sequence_dir/shmins_contiguous_sequence_item.svh"
+    "$sequence_dir/shmins_strided_sequence_item.svh"
+    "$sequence_dir/shmins_indexed_sequence_item.svh"
+    "$sequence_dir/shmins_vtrans_sequence_item.svh"
     "$example_dir/shmins_random_benchmark_pkg.sv"
     "$example_dir/tb.sv"
     "$example_dir/benchmark_clock.c"
@@ -68,38 +67,25 @@ for required_file in "${required_files[@]}"; do
     fi
 done
 
-check_implementation() {
-    local selected="$1"
-    shift
-    local implementation_define=(-D UVM_NO_DPI)
-
-    if [[ "$selected" == "post_randomize" ]]; then
-        implementation_define+=(-D SHMINS_USE_POST_RANDOMIZE_ITEM)
-    fi
-
-    printf '使用 slang 检查 %s：%s\n' "$selected" "$slang_bin"
-    "$slang_bin" \
-        --single-unit \
-        --compat vcs \
-        --std 1800-2017 \
-        --top shmins_random_benchmark_tb \
-        "${implementation_define[@]}" \
-        -I "$uvm_src" \
-        -I "$utility_dir" \
-        -I "$sequence_dir" \
-        "$uvm_src/uvm_pkg.sv" \
-        "$utility_dir/shm_util_package.sv" \
-        "$example_dir/shmins_random_benchmark_pkg.sv" \
-        "$example_dir/tb.sv" \
-        "$@"
-}
-
 printf '使用 UVM：%s\n' "$uvm_home"
-if [[ "$implementation" == "all" ]]; then
-    check_implementation original "$@"
-    check_implementation post_randomize "$@"
-else
-    check_implementation "$implementation" "$@"
-fi
+printf '使用 slang 检查正式 sequence item：%s\n' "$slang_bin"
+"$slang_bin" \
+    --single-unit \
+    --compat vcs \
+    --std 1800-2017 \
+    --top shmins_random_benchmark_tb \
+    -D UVM_NO_DPI \
+    -I "$uvm_src" \
+    -I "$collection_dir" \
+    -I "$utility_dir" \
+    -I "$environment_dir" \
+    -I "$sequence_dir" \
+    -I "$vlm_memory_dir" \
+    "$uvm_src/uvm_pkg.sv" \
+    "$collection_dir/collection_pkg.sv" \
+    "$utility_dir/shm_util_package.sv" \
+    "$example_dir/shmins_random_benchmark_pkg.sv" \
+    "$example_dir/tb.sv" \
+    "$@"
 
 cc -std=c99 -Wall -Wextra -Werror -fsyntax-only "$example_dir/benchmark_clock.c"

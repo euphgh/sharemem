@@ -3,17 +3,15 @@ package shmins_random_benchmark_pkg;
   import shm_util_package::*;
 
   `include "uvm_macros.svh"
-`ifdef SHMINS_USE_SPLIT_ITEM
-  `include "shmins_split_sequence_item.svh"
+  `include "shmins_sequence_item.svh"
   `include "shmins_contiguous_sequence_item.svh"
   `include "shmins_strided_sequence_item.svh"
   `include "shmins_indexed_sequence_item.svh"
   `include "shmins_vtrans_sequence_item.svh"
-`elsif SHMINS_USE_POST_RANDOMIZE_ITEM
-  `include "shmins_post_randomize_sequence_item.svh"
-`else
-  `include "shmins_sequence_item.svh"
-`endif
+  `include "shmins_enum_field.svh"
+  `include "vlm_memory_sequence_item.svh"
+  `include "vlm2aa.svh"
+  `include "shm_wtrans_item.svh"
 
   import "DPI-C" pure function longint shmins_benchmark_monotonic_ns();
 
@@ -32,20 +30,10 @@ package shmins_random_benchmark_pkg;
     int unsigned warmup_iterations = 2;
 
     // Fixed branch selection used by each randomize attempt.
-`ifdef SHMINS_USE_SPLIT_ITEM
     string profile = "LDST_V_LOC";
-`else
-    string profile = "LDSTE_V_BLK";
-`endif
 
-    // Compile-time-selected transaction implementation reported in results.
-`ifdef SHMINS_USE_SPLIT_ITEM
+    // Stable implementation label reported in benchmark results.
     string item_implementation = "SPLIT";
-`elsif SHMINS_USE_POST_RANDOMIZE_ITEM
-    string item_implementation = "POST_RANDOMIZE";
-`else
-    string item_implementation = "ORIGINAL";
-`endif
 
     // Fixed instruction direction used by non-RANDOM profiles.
     string rw = "V2M";
@@ -289,7 +277,6 @@ package shmins_random_benchmark_pkg;
       end
     endcase
 
-`ifdef SHMINS_USE_SPLIT_ITEM
     if (random_profile) begin
       `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
                  "SPLIT currently supports only fixed topology profiles")
@@ -298,7 +285,6 @@ package shmins_random_benchmark_pkg;
       `uvm_fatal("SHMINS_RANDOM_BENCH_CONFIG",
                  "SPLIT supports only BENCH_CONSTRAINT_SET=ALL")
     end
-`endif
 
   endfunction : build_phase
 
@@ -415,7 +401,6 @@ package shmins_random_benchmark_pkg;
   function shmins_sequence_item shmins_random_benchmark_test::create_item(string item_name);
     shmins_sequence_item item;
 
-`ifdef SHMINS_USE_SPLIT_ITEM
     case (benchmark_itype)
       LDST_S, LDST_V: item = shmins_contiguous_sequence_item::type_id::create(item_name);
       LDSTE_S: item = shmins_strided_sequence_item::type_id::create(item_name);
@@ -426,27 +411,6 @@ package shmins_random_benchmark_pkg;
       end
     endcase
     item.m2v_unique_enable = m2v_unique_enable;
-`else
-    item = shmins_sequence_item::type_id::create(item_name);
-`ifdef SHMINS_USE_POST_RANDOMIZE_ITEM
-    item.m2v_unique_enable = m2v_unique_enable;
-`endif
-    if (constraint_set inside {"NO_ADDR_BOUND", "CORE"}) begin
-      item.c_addr_bound.constraint_mode(0);
-    end
-    if (constraint_set inside {"NO_SOLVE_ORDER", "NO_UNIQUENESS", "CORE"}) begin
-      item.c_offs_elem_solve_order.constraint_mode(0);
-    end
-    if (constraint_set inside {"NO_LDSTE_LOC_UNIQUE", "NO_COLLISION", "NO_UNIQUENESS", "CORE"}) begin
-      item.c_ldste_v_loc_unique.constraint_mode(0);
-    end
-    if (constraint_set inside {"NO_LDSTE_GLOBAL_UNIQUE", "NO_COLLISION", "NO_UNIQUENESS", "CORE"}) begin
-      item.c_ldste_v_global_unique.constraint_mode(0);
-    end
-    if (constraint_set inside {"NO_LDST_RANGE", "NO_COLLISION", "NO_UNIQUENESS", "CORE"}) begin
-      item.c_ldst_thread_range_no_overlap.constraint_mode(0);
-    end
-`endif
 
     return item;
   endfunction : create_item
@@ -458,7 +422,6 @@ package shmins_random_benchmark_pkg;
       };
     end
 
-`ifdef SHMINS_USE_SPLIT_ITEM
     return item.randomize() with {
       creq_rw == local::benchmark_rw;
       creq_dtype == local::benchmark_dtype;
@@ -473,46 +436,6 @@ package shmins_random_benchmark_pkg;
       (local::benchmark_wpnum < 0) ||
           (creq_wpnum == local::benchmark_wpnum);
     };
-`else
-    return item.randomize() with {
-      creq_rw == local::benchmark_rw;
-      creq_dtype == local::benchmark_dtype;
-      creq_atype_w == local::benchmark_atype_w;
-      creq_atype_s == local::benchmark_atype_s;
-      creq_atype_g == local::benchmark_atype_g;
-      creq_itype == local::benchmark_itype;
-      creq_space == local::benchmark_space;
-      creq_wpid == local::benchmark_wpid;
-      (local::benchmark_inv_size < 0) ||
-          (creq_inv_size == local::benchmark_inv_size);
-      (local::benchmark_wpnum < 0) ||
-          (creq_wpnum == local::benchmark_wpnum);
-      if (local::benchmark_space == SPACE_LOC) {
-        creq_base < WARP_STEP - 4096;
-      } else if (local::benchmark_space == SPACE_WRP) {
-        creq_base < (1 << BADDR_W) - 4096;
-      } else if (local::benchmark_space == SPACE_BLK) {
-        if (creq_inv_size <= 10) {
-          creq_base >= (creq_wpid / creq_wpnum) *
-                       WARP_STEP * BANK_N * creq_wpnum;
-          creq_base < ((creq_wpid / creq_wpnum) + 1) *
-                      WARP_STEP * BANK_N * creq_wpnum - 4096;
-        } else {
-          creq_base >= (creq_wpid / creq_wpnum) *
-                       16 * 1024 * BANK_N * creq_wpnum;
-          creq_base < ((creq_wpid / creq_wpnum) + 1) *
-                      16 * 1024 * BANK_N * creq_wpnum - 4096;
-        }
-      }
-      if (local::benchmark_rw == SHM_V2M &&
-          local::benchmark_itype == LDSTE_S &&
-          local::benchmark_space inside {SPACE_WRP, SPACE_BLK}) {
-        foreach (creq_vmsk[thread_idx]) {
-          creq_tmsk[thread_idx] -> creq_vmsk[thread_idx][0] == 1'b0;
-        }
-      }
-    };
-`endif
   endfunction : randomize_item
 
   function void shmins_random_benchmark_test::update_checksum(shmins_sequence_item item);
@@ -520,16 +443,10 @@ package shmins_random_benchmark_pkg;
     checksum = checksum ^ longint'(item.creq_tmsk);
     checksum = checksum ^ longint'(item.offs_elem[0][0]);
     checksum = checksum ^ longint'(item.creq_vdat[THD_N-1]);
-`ifdef SHMINS_USE_SPLIT_ITEM
     total_retry_count += item.generation_retry_count;
     total_validation_error_count += item.validation_error_count;
-`elsif SHMINS_USE_POST_RANDOMIZE_ITEM
-    total_retry_count += item.post_randomize_retry_count;
-`endif
   endfunction : update_checksum
 
-`ifdef SHMINS_USE_SPLIT_ITEM
   `include "shmins_random_cross_benchmark_test.svh"
-`endif
 
 endpackage : shmins_random_benchmark_pkg

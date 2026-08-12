@@ -66,17 +66,17 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 |`DBANK-004`|P0|待验证|VLM agent/scoreboard|gid busy、唯一到期解析、read response 和 actual memory 已编码且通过空 DUT 编译，待定向验证|
 |`DBANK-005`|P1|待实现|test/coverage|双 gid 地址、数据隔离、reservation ownership 和 M2V hazard 缺少定向证据|
 |`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 数据通路和 reference mask 已实现，待远端验证|
-|`SHMINS-002`|P0|待实现|shmins transaction|`do_copy()` 遗漏或错误复制关键字段|
-|`SHMINS-003`|P0|待实现|shmins constraints|地址约束没有实现 12 KiB 编码和地址空洞规则|
-|`SHMINS-004`|P1|待实现|unit sequence|signedness/granularity 配置没有约束到 item|
+|`SHMINS-002`|P0|待验证|shmins transaction|topology 基类已完整复制公共和生成字段，reference consumer 交叉测试通过|
+|`SHMINS-003`|P0|待验证|shmins transaction|过程式 MADDR 生成和 validator 已实现 12 KiB、空洞及两层映射，待 DUT 定向验证|
+|`SHMINS-004`|P1|待验证|unit sequence|ATYPE_S/G allowed-value domain 已接入 item inline constraint，待 testcase 验证|
 |`SHMINS-005`|P2|待实现|shmins agent|部分循环和位宽硬编码为当前 16-thread/4-bit 配置|
 |`SHMINS-006`|P1|待实现|shmins monitor|active creq payload 缺少系统性的 X/Z 检查|
-|`SHMINS-007`|P1|待实现|unit sequence/TC|V2M `LDSTE_S + WRP/BLK` 缺少屏蔽 element 0 的合法激励|
+|`SHMINS-007`|P1|待验证|unit sequence/TC|strided item 已约束 V2M WRP/BLK element 0 mask，待 DUT 定向验证|
 |`SHMINS-008`|P1|待实现|shmins monitor|固定 200-cycle ack timeout 与协议无最大延迟冲突|
 |`SHMINS-009`|P1|待实现|shmins monitor|credit/release 和 unexpected/duplicate ack 缺少完备检查|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
-|`SHMINS-011`|P2|待实现|shmins transaction|`compare_item()` 是无条件 fatal 的伪 API|
-|`SHMINS-012`|P0|实现中|shmins transaction/benchmark|sequence item 随机化过慢且 monolithic post-randomize 难以维护|
+|`SHMINS-011`|P2|待验证|shmins transaction|`compare_item()` 已使用注册字段比较且不再 fatal，待正反例验证|
+|`SHMINS-012`|P0|待验证|shmins transaction/benchmark|正式 topology item、consumer 交叉测试和空设计编译已通过，待 RTL testcase 回归|
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
@@ -205,27 +205,31 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `SHMINS-002` Transaction copy 完整性
 
-- 现状：`shmins_sequence_item.do_copy()` 未复制 `creq_info`，并对 `elem_num`、
-  `creq_vmsk`、`creq_offs_packed` 使用了 self-assignment。
-- 影响：`shm_wtrans_item.init_from()` 得不到完整 creq，VTRANS 识别、mask 和地址计算
-  可能错误。
+- 现状：正式 `shmins_sequence_item.do_copy()` 已复制所有公共 creq 字段、生成统计、
+  decoded offset、element MADDR 和两层映射结果；增强 benchmark 已通过真实
+  `shm_wtrans_item.init_from()` 消费复制结果。尚缺独立的逐字段 copy 正反例，特别是
+  VTRANS 非默认字段定向场景。
+- 影响：现有 benchmark 未发现 copy 丢失，但在独立定向覆盖完成前仍不能关闭该问题。
 - 目标：所有影响驱动、reference 和 scoreboard 的字段必须从 rhs 完整复制。
 - 验收：构造非默认字段 transaction，copy 后逐字段一致，并覆盖 VTRANS transaction。
 
 ### `SHMINS-003` 地址合法性约束
 
-- 现状：生成约束仍以 2 的幂范围限制 LOC/WRP/BLK，没有完整表达 12 KiB WARP、
-  8/16 KiB interleave 编码差异和地址空洞禁止规则。
-- 影响：激励可能生成 spec 非法地址，也可能错误排除合法边界。
+- 现状：正式 sequence item 已通过 `fast_legal_space_range()` 和
+  `legal_space_maddr_check()` 表达 LOC 12 KiB、WRP/BLK interleave 编码及地址空洞；
+  交叉 benchmark 已覆盖三种 space，但还没有覆盖全部 interleave 边界并与真实 DUT
+  行为闭环。
+- 影响：生成路径已有独立合法性复查，剩余风险集中在未覆盖的边界值和 DUT 集成行为。
 - 目标依据：[地址模型](spec/address-model.md)。
 - 验收：三种 space、全部支持 interleave size 和边界值的约束定向测试；随机请求不得
   落入地址空洞。
 
 ### `SHMINS-004` Unit sequence 配置丢失
 
-- 现状：`CREQ_ATYPE_S` 和 `CREQ_ATYPE_G` 能写入 sequence 配置，但普通请求的 inline
-  constraint 没有把它们约束到 `req.creq_atype_s/g`。
-- 影响：plusarg 输出与实际 creq 可能不一致。
+- 现状：`shmins_mst_unit_sequence` 已用 allowed-value domain 统一约束 ATYPE_W/S/G、
+  dtype、RW、itype 和 space，并支持 `set_fixed_*()` 把对应 domain 缩为单值；尚缺从
+  testcase 配置入口到 monitor transaction 的端到端定向证据。
+- 影响：item 生成侧配置已经贯通，但 testcase/plusarg 集成路径仍可能发生配置遗漏。
 - 目标：所有公开 sequence 配置必须确定对应 item 字段。
 - 验收：分别设置 signedness 和 granularity plusarg，monitor transaction 与配置一致。
 
@@ -247,11 +251,11 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `SHMINS-007` V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
 
-- 现状：不同 thread 的 element 0 都按 `creq_base + 0*offset` 生成相同 MADDR。V2M
-  对该地址形成多笔写，结果未定义；当前根 TC 注释了 `v2m/es_warp.tc` 和
-  `v2m/es_blk.tc`，unit sequence 也没有提供 element-0 mask 配置。
-- 影响：不能验证这两种 address space 下 element 1 及之后的合法 `LDSTE_S` V2M
-  地址和数据行为。M2V 不存在重叠写问题，仍属于支持组合。
+- 现状：strided item 已在 V2M，或开启 uniqueness 的 M2V，且 space 为 WRP/BLK 时
+  约束所有 active thread 的 element 0 masked；交叉 benchmark 已覆盖这些组合，但原有
+  testcase 尚未恢复，也没有真实 DUT 定向证据。
+- 影响：生成路径已避免 element 0 的确定性重叠；其余 element 的 reference/scoreboard
+  行为仍需在真实 DUT 场景确认。
 - 目标：V2M 定向激励至少约束所有 thread 的 `creq_vmsk[*][0]==0`，同时保证其余有效
   element 不产生未定义的同地址多写；M2V 不应用该限制。
 - 验收：新增合法 V2M WRP/BLK case，波形和 monitor transaction 中 element 0 全部
@@ -289,21 +293,20 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `SHMINS-011` 无效 transaction compare API
 
-- 现状：`shmins_sequence_item.compare_item()` 无条件执行
-  `uvm_fatal("please implement do_compare")`，当前仓库内没有调用者。
-- 影响：公开 API 暗示 transaction 可以比较，但任何调用都会直接终止仿真；后续代码
-  可能误用该入口。
-- 目标：没有稳定 contract 和调用者时删除该 API；如果后续需要 transaction compare，则改为
-  完整实现并定义字段、四态和返回值语义。
+- 现状：`compare_item()` 已委托 UVM `compare()`，不再无条件 fatal；正式 transaction
+  的已注册字段可参与比较，但尚无独立 positive/negative 定向测试来固定比较 contract。
+- 影响：调用 compare 不再终止仿真，但未注册的生成中间状态不属于当前比较语义。
+- 目标：明确稳定的比较字段、四态和返回值语义，并用正反例锁定 contract；若没有调用者，
+  也可删除该包装 API。
 - 验收：无用 API 被删除且现有编译通过，或保留的 compare 有正反例定向测试且不使用
   无条件 fatal。
 
 ### `SHMINS-012` Sequence item 随机化性能与结构拆分
 
-- 现状：SPLIT 公共基类、contiguous、strided、indexed 和 VTRANS 已接入正式 item
-  package；旧 master sequence 已删除，`shmins_mst_unit_sequence` 使用 normal/VTRANS
-  独立 allowed-value domain 和全局 VTRANS 概率显式创建子类。Benchmark 已完成 432 组
-  topology/space/direction/dtype/atype 交叉随机化测试，空 design 编译也已通过。
+- 现状：公共基类、contiguous、strided、indexed 和 VTRANS 已接入正式 item package；
+  公共基类已迁入 `shmins_sequence_item.svh`，旧 solver/monolithic item、生成 constraint
+  和对应 benchmark filelist 已删除。`shmins_mst_unit_sequence` 使用 normal/VTRANS 独立
+  allowed-value domain 和全局 VTRANS 概率显式创建子类。
 - 影响：随机化可能长时间停滞或以 retry exhaustion 结束，阻止 testcase 稳定产生合法
   creq；把全部地址形态和方向策略放在一个 class 中也使修复容易引入交叉回归。
 - 目标：按 MADDR 生成拓扑拆分为公共基类、contiguous、strided、indexed 和 VTRANS
@@ -313,9 +316,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 对齐边界：协议只要求 active element 的最终 MADDR 按 dtype 自然对齐；本阶段允许把
   base 和 decoded offset 分别对齐作为更强的激励限制，但独立 validator 必须直接检查
   最终 MADDR。
-- 本阶段范围：把 SPLIT item 接入正式 item package，增加 VTRANS 子类并用
-  `shmins_mst_unit_sequence` 替换旧 master/unit sequence。Driver、monitor、reference、
-  scoreboard、真实 DUT TC/LST 和 regression 行为不在本次范围。
+- 集成边界：driver、monitor、sequencer 和 reference 继续使用公共基类 handle。Reference
+  只允许对 active element 解码和映射；超出 length、被 vmsk 屏蔽或 inactive thread 的
+  payload 不形成地址，不得触发 MADDR mapping error。
 - 验收：正式 package include 四种子类；sequence 能根据 topology 和全局 VTRANS 概率
   显式创建对象；所有 allowed-value queue 以 `inside` 约束 item；远端空 design VCS
   compile 无 error。该证据不等同于真实 DUT 功能或完整 ut_shm regression 通过。
@@ -337,6 +340,16 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   `scripts/ubuntu/check_shmins_sequence_vcs.sh compile`，公共基类、四种子类、enum helper
   和 `shmins_mst_unit_sequence` 完成 parse、elaboration 和 simv link，无编译 error。
   Linux 6.17 unsupported-kernel warning 属于工具环境提示，不影响本次编译结论。
+- 2026-08-12 系统消费边界证据：`shm_wtrans_item` 改为按 length 分配数组，并只对
+  `tmsk && length && vmsk` 选中的 element 调用 `map_maddr()`；M2V reference 跳过 zero
+  strobe element。增强后的 benchmark 对 432 个组合各运行 20 次，逐组合额外使用真实
+  `shm_wtrans_item.init_from()` 对比 BANK/gid/BADDR，并强制验证一个 active thread 的
+  zero-length 场景；所有组合 `failures=0`、`validation_errors=0`，UVM error/fatal 为 0。
+  另对 `LDST_S × LOC/WRP/BLK × V2M/M2V` 六组各运行 100 次，600 次均成功；BLK 使用
+  `WPID=7, WPNUM=4` 覆盖高 gid。由此四种 itype、三种 space 和两种方向均已有 benchmark
+  生成证据。
+  同日 `make compile` 使用空 `RpuShmTop` 完成 27-module parse/elaboration/link。结果保留在
+  远端 `examples/shmins_random_benchmark/build/split/` 和 `build/ut_shm/compile.log`。
 - 与其他问题的关系：正式激励将应用 ATYPE_S/G domain，并为 `SHMINS-003`、
   `SHMINS-004` 和 `SHMINS-007` 提供实现基础；在真实 DUT 验证完成前不关闭这些问题。
 

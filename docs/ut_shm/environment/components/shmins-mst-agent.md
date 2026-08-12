@@ -26,7 +26,7 @@ Agent 从 Config DB 获取 `shmins_mst_agent_config` 和 `shmins_vif`。默认�
 |`ver_common/uvc/shmins_agent/shmins_mst_agent.svh`|agent 创建和连接|
 |`ver_common/uvc/shmins_agent/shmins_mst_driver.svh`|credit 控制和 creq 驱动|
 |`ver_common/uvc/shmins_agent/shmins_monitor.svh`|creq 采集和 ack timeout|
-|`ver_common/uvc/shmins_agent/sequences/shmins_split_sequence_item.svh`|正式公共 creq transaction、编码和 helper|
+|`ver_common/uvc/shmins_agent/sequences/shmins_sequence_item.svh`|正式公共 creq transaction、编码和 helper|
 |`ver_common/uvc/shmins_agent/sequences/shmins_mst_unit_sequence.svh`|domain 和 plusarg 可配置的 master unit sequence|
 |`ver_common/uvc/shmins_agent/sequences/shmins_contiguous_sequence_item.svh`|LDST_S/LDST_V 地址生成|
 |`ver_common/uvc/shmins_agent/sequences/shmins_strided_sequence_item.svh`|LDSTE_S 地址生成|
@@ -115,8 +115,9 @@ Agent/driver 缺少 config 或 vif 时分别使用 `SHMINS_NO_CFG`、`SHMINS_NO_
 Monitor 当前只严格判断 `creq_vld`，没有按 active/inactive thread 规则检查 payload
 四态，见 `SHMINS-006`。
 
-Transaction 的 `compare_item()` 仍是 placeholder，调用会 fatal；字段复制也存在已知
-问题。开发者不应把这些 helper 当作已经验证的公共 API。
+Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计字段；`compare_item()`
+使用 UVM 注册字段比较，不再无条件 fatal。两者仍由 `SHMINS-002/011` 跟踪独立正反例
+验证，不能仅以空设计编译作为完整 API 关闭证据。
 
 ## 8. 调试观察点
 
