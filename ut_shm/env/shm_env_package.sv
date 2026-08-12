@@ -25,12 +25,7 @@ package shm_env_package;
   `include "vlm_reservation_coverage.svh"
   `include "vlm_reservation_monitor.svh"
   `include "vlm_reservation_agent.svh"
-
-  `include "vlm_memory_slv_agent_config.svh"
-  `include "vlm_memory_monitor.svh"
-  `include "vlm_memory_slv_driver.svh"
-  `include "vlm_memory_slv_sequencer.svh"
-  `include "vlm_memory_slv_agent.svh"
+  `include "vlm_agent.svh"
 
   `include "shm_environment_config.svh"
   `include "shm_reference.svh"

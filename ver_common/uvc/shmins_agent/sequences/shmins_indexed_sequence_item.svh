@@ -216,7 +216,9 @@ function bit shmins_indexed_sequence_item::candidate_bytes_are_available(
     return 1'b0;
   end
   for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
-    if (used_bytes.exists(physical_byte_key(mapped.bank_id, mapped.baddr + byte_lane))) begin
+    shm_physical_addr_t byte_addr = mapped.physical_addr;
+    byte_addr.baddr += shm_baddr_t'(byte_lane);
+    if (used_bytes.exists(make_physical_byte_key(byte_addr))) begin
       return 1'b0;
     end
   end
@@ -234,7 +236,9 @@ function void shmins_indexed_sequence_item::reserve_candidate_bytes(
   end
   mapped = map_maddr(thread_idx, accepted_maddr);
   for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
-    used_bytes[physical_byte_key(mapped.bank_id, mapped.baddr + byte_lane)] = 1'b1;
+    shm_physical_addr_t byte_addr = mapped.physical_addr;
+    byte_addr.baddr += shm_baddr_t'(byte_lane);
+    used_bytes[make_physical_byte_key(byte_addr)] = 1'b1;
   end
 endfunction : reserve_candidate_bytes
 

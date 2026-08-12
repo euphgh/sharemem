@@ -10,6 +10,7 @@ class shm_wtrans_item extends shmins_sequence_item;
     typedef bit_rt_range#(MADDR_W) maddr_getter;
     typedef bit_rt_range#(BADDR_W) baddr_setter;
     typedef bit [$clog2(BANK_N)-1:0] bidx_t;
+    typedef bit [$clog2(GID_N)-1:0] gid_t;
 
     typedef vlm2aa::wmap_util wmap_util;
     typedef vlm2aa::wmap_t wmap_t;
@@ -18,6 +19,8 @@ class shm_wtrans_item extends shmins_sequence_item;
     wmap_t wmap;
     baddr_t baddr_2d_array[BANK_N][];
     bidx_t bid_2d_array[BANK_N][];
+    gid_t gid_2d_array[BANK_N][];
+    shm_logical_addr_t logical_addr_2d_array[BANK_N][];
     // support max dtype 64
     byte wstrb_2d_array[BANK_N][];
 
@@ -148,11 +151,15 @@ class shm_wtrans_item extends shmins_sequence_item;
             if (creq_tmsk[i] === 1'b1) begin
                 baddr_2d_array[i] = new[this_max_elem_cnt];
                 bid_2d_array [i] = new[this_max_elem_cnt];
+                gid_2d_array [i] = new[this_max_elem_cnt];
+                logical_addr_2d_array[i] = new[this_max_elem_cnt];
                 wstrb_2d_array[i] = new[this_max_elem_cnt];
             end
             else begin
                 baddr_2d_array[i] = new[0];
                 bid_2d_array [i] = new[0];
+                gid_2d_array [i] = new[0];
+                logical_addr_2d_array[i] = new[0];
                 wstrb_2d_array[i] = new[0];
             end
         end
@@ -188,56 +195,26 @@ class shm_wtrans_item extends shmins_sequence_item;
                 end
             end
 
-            // start map from unify addr to bank addr according to creq_space and creq_ilv_size
+            // Convert the common MADDR model through the shared logical and physical address layers.
             foreach(elem_unify_addr[eidx]) begin
-                vlm_memory_sequence_item out = new("golden_vlm_memory_sequence_item");
                 maddr_t elem_maddr = elem_unify_addr[eidx];
-                // data field from elem_madr
-                maddr_t inv_offs = maddr_getter::get_range(elem_maddr, inv_size-1, 0);
-                // convert maddr to baddr and bid
-                baddr_t elem_baddr;
-                maddr_t warp_index;
-                maddr_t inv_index;
-                bidx_t elem_bid = bidx_t'(maddr_getter::get_plus_range(elem_maddr, inv_size, $clog2(BANK_N)));
-                elem_baddr = baddr_setter::set_plus_range(elem_baddr, baddr_t'(inv_offs), 0, inv_size);
+                shmins_address_result_t mapped = map_maddr(tidx, longint'(elem_maddr));
 
-                if(creq_space == $bits(creq_space)'(SPACE_BLK)) begin
-                    //   |      inv_index      |    warp_offs   |  bank_idx  |  inv_offs  |
-                    //   | MADDR_W - $clog2(BANK_N) - inv_size - wpidx_width | wpidx_width | $clog2(BANK_N) | inv_size |
-                    int inv_index_w = MADDR_W - inv_size - $clog2(BANK_N) - wpidx_width;
-                    maddr_t warp_offs = maddr_getter::get_plus_range(elem_maddr, inv_size + $clog2(BANK_N), wpidx_width);
-                    inv_index = maddr_getter::get_range(elem_maddr, MADDR_W-1, inv_size + $clog2(BANK_N) + wpidx_width);
-                    warp_index = warp_offs;
-                    elem_baddr = baddr_setter::set_plus_range(elem_baddr, baddr_t'(inv_index), inv_size, inv_index_w);
-                    elem_baddr += baddr_t'(WARP_STEP * int'(warp_offs));
-                end
-                else if (creq_space == $bits(creq_space)'(SPACE_WRP)) begin
-                    // |  th_line_idx   |    bank_idx   |  thread_line_offs |
-                    // | VADDR_W - inv_size | $clog2(BANK_N) |    inv_size    |
-                    int inv_index_w = VADDR_W - inv_size;
-                    inv_index = maddr_getter::get_plus_range(elem_maddr, inv_size + $clog2(BANK_N), inv_index_w);
-                    warp_index = maddr_t'(creq_wpid);
-                    elem_baddr = baddr_setter::set_plus_range(elem_baddr, baddr_t'(inv_index), inv_size, inv_index_w);
-                    elem_baddr += baddr_t'(WARP_STEP * int'(warp_index));
-                end
-                else if (creq_space == $bits(creq_space)'(SPACE_LOC)) begin
-                    // |    dont care    |   VLM address   |
-                    // |        7        |      VADDR_W    |
-                    int inv_index_w = VADDR_W - inv_size;
-                    inv_index = maddr_getter::get_plus_range(elem_maddr, inv_size, inv_index_w);
-                    warp_index = maddr_t'(creq_wpid);
-                    elem_baddr = baddr_setter::set_plus_range(elem_baddr, baddr_t'(inv_index), inv_size, inv_index_w);
-                    elem_baddr += baddr_t'(WARP_STEP * int'(warp_index));
-                    elem_bid = tidx;
-                end
-                else begin
-                    `uvm_error(get_type_name(), "creq_space not expect");
+                if (!mapped.valid) begin
+                    `uvm_error(get_type_name(), $sformatf("failed to map thread %0d element %0d MADDR 0x%0h",
+                                                         tidx, eidx, elem_maddr));
+                    continue;
                 end
 
-                `uvm_info(get_type_name(), $sformatf("THD[%0d].Elem[%0d] %s Bank[%0d][0x%x].Strb[0x%x] = %s[0x%x] = (%0d x 12KB) + {0x%x, 0x%x} = B + Offs(0x%x)", 
-                tidx, eidx, action, elem_bid, elem_baddr, wstrb_2d_array[tidx][eidx], space_name, elem_maddr, warp_index, inv_index, inv_offs, eoff_val[eidx]), UVM_FULL);
-                baddr_2d_array[tidx][eidx] = elem_baddr;
-                bid_2d_array[tidx][eidx] = elem_bid;
+                `uvm_info(get_type_name(),
+                          $sformatf("THD[%0d].Elem[%0d] %s Bank[%0d].Gid[%0d][0x%x].Strb[0x%x] = %s[0x%x]",
+                                    tidx, eidx, action, mapped.physical_addr.bank_id, mapped.physical_addr.gid,
+                                    mapped.physical_addr.baddr, wstrb_2d_array[tidx][eidx], space_name, elem_maddr),
+                          UVM_FULL);
+                baddr_2d_array[tidx][eidx] = mapped.physical_addr.baddr;
+                bid_2d_array[tidx][eidx] = mapped.physical_addr.bank_id;
+                gid_2d_array[tidx][eidx] = mapped.physical_addr.gid;
+                logical_addr_2d_array[tidx][eidx] = mapped.logical_addr;
             end
         end: each_thread
     endfunction

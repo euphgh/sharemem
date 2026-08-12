@@ -52,7 +52,7 @@ typedef enum bit [1:0] {
 class shmins_sequence_item extends uvm_sequence_item;
   parameter int unsigned WARP_ID_WIDTH_MAX = $clog2(4);
   parameter int unsigned ELEM_MAX_N = VEC_BYTE_N;
-  parameter int unsigned VADDR_MAX = (1 << VADDR_W) - 1;
+  parameter int unsigned VADDR_MAX = WARP_STEP - 1;
 
   // Bounds rejection sampling when randomized control fields have no reachable
   // legal candidate. Exhaustion is reported instead of looping forever.
@@ -74,7 +74,7 @@ class shmins_sequence_item extends uvm_sequence_item;
   rand logic [$clog2(WARP_N)-1:0] creq_wpid = '0;
   rand logic [$clog2(WARP_N+1)-1:0] creq_wpnum = '0;
   rand int wpid_width = '0;
-  rand logic [VADDR_W-1:0] creq_vaddr = '0;
+  rand logic [BADDR_W-1:0] creq_vaddr = '0;
   rand logic [47:0] creq_base = '0;
 
   rand logic [3:0] creq_prio[THD_N] = '{THD_N{'0}};
@@ -143,7 +143,7 @@ class shmins_sequence_item extends uvm_sequence_item;
   // Keep a 4 KiB candidate window below each encoded upper bound.
   constraint c_post_randomize_unsigned_base_reachable {
     if (creq_atype_s == ATYP_U && creq_space == SPACE_LOC) {
-      creq_base < (1 << VADDR_W) - 4096;
+      creq_base < WARP_STEP - 4096;
     }
     if (creq_atype_s == ATYP_U && creq_space == SPACE_WRP) {
       creq_base < (1 << BADDR_W) - 4096;
@@ -500,10 +500,10 @@ endfunction : align_mask
 
 function int unsigned shmins_sequence_item::addr_max();
   case (creq_space)
-    SPACE_LOC: return 1 << VADDR_W;
+    SPACE_LOC: return WARP_STEP;
     SPACE_WRP: return 1 << BADDR_W;
     SPACE_BLK: return 1 << MADDR_W;
-    default:   return 1 << VADDR_W;
+    default:   return WARP_STEP;
   endcase
 endfunction : addr_max
 

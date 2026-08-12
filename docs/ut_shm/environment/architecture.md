@@ -85,19 +85,17 @@ uvm_test_top
     │   └── monitor
     ├── vlm_agt : vlm_agent
     │   ├── monitor
-    │   ├── memory_driver
     │   ├── reservation_checker
     │   ├── coverage
-    │   ├── mem_resolver
     │   └── scheduler
     ├── shm_ref : shm_reference
     └── shm_scb : shm_scoreboard
 ```
 
 `shm_environment` 总是创建 shmins agent 和统一 VLM agent。VLM agent 固定为 active-only，
-统一拥有 monitor、memory driver、reservation checker、coverage、MEM resolver 和
-scheduler。MEM resolver 是到期 reservation record 的唯一查询入口，monitor 和 driver
-不得各自消费或复制 scheduler 状态。
+统一拥有 monitor、reservation checker、coverage 和 scheduler。第一版由 checker 在
+pre-update 状态中同时完成唯一到期 record 解析，agent 保存该结果并负责 MEM transaction
+发布与 read-data response；monitor 不读取 scheduler 私有数组。
 
 `shm_ref` 与 `shm_scb` 只在 `shm_environment_config.shm_is_active == UVM_ACTIVE`
 时创建。该开关控制 ut_shm 专用 reference/scoreboard 路径，不等同于各 agent 的
@@ -117,11 +115,12 @@ active/passive 设置。
 |`shm_tb_top`|`*`|`clk_vif`|`virtual clk_if`|reservation 周期敏感组件|
 |`shm_base_test`|`shm_env`|`shm_environment_config`|`shm_environment_config`|`shm_environment`|
 |`shm_environment`|`shmins_mst_agt`|`cfg`|`shmins_mst_agent_config`|shmins agent|
-|`shm_environment`|`vlm_agt`|`cfg`|`vlm_agent_config`|统一 VLM agent|
+|`shm_environment`|`vlm_agt`|`cfg`|`vlm_reservation_agent_config`|统一 VLM agent|
 |`shm_environment`|`shm_ref`、`shm_scb`|`shm_environment_config`|`shm_environment_config`|reference、scoreboard|
 
-统一 VLM interface 和共享 `clk_vif` 存在 `vlm_agent_config` 中。Monitor、checker、
-resolver、scheduler 和 memory driver 必须使用同一个 cycle source 与 interface handle。
+统一 VLM interface 存在 `vlm_reservation_agent_config` 中，共享 `clk_vif` 通过 Config DB
+传给周期敏感组件。Monitor、checker、scheduler 和 agent MEM 路径必须使用同一个 cycle
+source 与 interface handle。
 
 Config DB 字段名是环境连接契约。修改名称或实例路径时，必须同步检查设置者、获取者
 和 wildcard 的覆盖范围。
@@ -135,8 +134,8 @@ scoreboard；reservation checker/resolver 保持在统一 VLM agent 内同步调
 |---|---|---|---|
 |`shmins_mst_agt.monitor.shmins_analysis_port`|analysis port → analysis imp|`shm_ref.shmins_analysis_export`|采样后的 `shmins_sequence_item`|
 |`shm_ref.wdata_ass_arr_port`|analysis port → analysis FIFO|`shm_scb.ref_wrvlm_analysis_export`|`shm_wtrans_item` 期望 byte map|
-|`vlm_agt.monitor.write_analysis_port`|analysis port → analysis FIFO|`shm_scb.rtl_wrvlm_analysis_export`|经唯一到期 record 补全 gid 的实际 MEM write transaction|
-|`vlm_agt.memory_driver.mem_port`|blocking transport port → imp|`shm_scb.mem_imp`|带 gid 的 MEM read request，并在同一 transaction 中返回数据|
+|`vlm_agt.write_analysis_port`|analysis port → analysis FIFO|`shm_scb.rtl_wrvlm_analysis_export`|经唯一到期 record 补全 gid 的实际 MEM write transaction|
+|`vlm_agt.mem_port`|blocking transport port → imp|`shm_scb.mem_imp`|带 gid 的 MEM read request，并在同一 transaction 中返回数据|
 
 统一 monitor 先产生原始 cycle snapshot；agent 在 scheduler pre-update 状态下完成 MEM
 匹配并返回 gid/match status，然后才发布 memory transaction。没有唯一匹配 record 的
@@ -195,6 +194,7 @@ Interface 文件在依赖它们的 class package 之前单独编译。Synopsys V
 `svt_uvm_pkg`、`svt_mem_uvm_pkg` 也必须先于 `shm_env_package` 可见。`.svh` class
 文件由对应 package include，不作为独立 compilation unit 重复加入 filelist。
 
-本文描述的是双 gid 接口迁移后的目标架构。现有源码仍保留独立
-`vlm_memory_slv_agent`、`vlm_reservation_agent` 和两个 interface；迁移步骤与禁止跨越的
-中间状态见[双 gid 接口重构开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。
+主环境已切换到双 gid 统一 `vlm_interface/vlm_agent`。旧 memory/reservation interface
+和 agent 源文件暂时保留作为迁移历史，但不再由 `shm_environment.f` 与主环境实例化；
+后续定向验证与清理顺序见
+[双 gid 接口重构开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。

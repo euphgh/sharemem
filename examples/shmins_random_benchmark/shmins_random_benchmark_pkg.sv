@@ -488,7 +488,7 @@ package shmins_random_benchmark_pkg;
       (local::benchmark_wpnum < 0) ||
           (creq_wpnum == local::benchmark_wpnum);
       if (local::benchmark_space == SPACE_LOC) {
-        creq_base < (1 << VADDR_W) - 4096;
+        creq_base < WARP_STEP - 4096;
       } else if (local::benchmark_space == SPACE_WRP) {
         creq_base < (1 << BADDR_W) - 4096;
       } else if (local::benchmark_space == SPACE_BLK) {

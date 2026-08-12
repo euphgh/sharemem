@@ -17,7 +17,7 @@ class shm_reference extends uvm_component;
 
     string filename = "vlm.ref";
     int    vlm_ref_fp;
-    svt_mem ref_banks[BANK_N];
+    svt_mem ref_banks[BANK_N][GID_N];
     typedef vlm2aa::baddr_t baddr_t;
     typedef bit [$clog2(BANK_N)-1:0] bidx_t;
 
@@ -37,7 +37,8 @@ class shm_reference extends uvm_component;
     extern function void write_shmins_reference(shmins_sequence_item shmins_trans);
 
     extern function void v2m_write_wmap(string label, int tidx, int eidx, int lidx, byte unsigned wdata, shm_wtrans_item item);
-    extern function void write_wmap(string label, int tidx, int eidx, int lidx, bit wen, bidx_t bid, baddr_t baddr, byte unsigned wdata, shm_wtrans_item item);
+    extern function void write_wmap(string label, int tidx, int eidx, int lidx, bit wen, bidx_t bid, shm_gid_t gid,
+                                    baddr_t baddr, byte unsigned wdata, shm_wtrans_item item);
     //AUTO_GEN_REF_TLM_EXTERN_END
     //extern function void shm_refmodel(shmins_sequence_item shmins_trans);
 
@@ -79,9 +80,9 @@ function void shm_reference::build_phase(uvm_phase phase);
         shm_environment_cfg.print();
     end
 
-    foreach(ref_banks[i]) begin
+    foreach(ref_banks[bank, gid]) begin
         int baddr_max = (1 << BADDR_W) - 1;
-        ref_banks[i] = new($sformatf("ref_bank_%0x", i),      // Memory name
+        ref_banks[bank][gid] = new($sformatf("ref_bank_%0x_gid_%0d", bank, gid), // Memory name
                            "REF_BANKS",                       // Suite name
                            8,                                // data width
                            0,                                // Address region
@@ -92,26 +93,32 @@ function void shm_reference::build_phase(uvm_phase phase);
 endfunction: build_phase
 
 task shm_reference::configure_phase(uvm_phase phase);
-    foreach(ref_banks[i]) begin
-        ref_banks[i].set_meminit(svt_mem::INCR, i << 4);
+    foreach(ref_banks[bank, gid]) begin
+        ref_banks[bank][gid].set_meminit(svt_mem::INCR, (bank * GID_N + gid) << 4);
     end
 endtask: configure_phase
 
-function void shm_reference::write_wmap(string label, int tidx, int eidx, int lidx, bit wen, bidx_t bid, baddr_t baddr, byte unsigned wdata, shm_wtrans_item item);
+function void shm_reference::write_wmap(string label, int tidx, int eidx, int lidx, bit wen, bidx_t bid,
+                                        shm_gid_t gid, baddr_t baddr, byte unsigned wdata, shm_wtrans_item item);
     if (wen) begin
-        `uvm_info(get_type_name(), $sformatf("%s Thd[%0d].Elem[%0d].Lane[%0d] W bank[%0d][0x%x] %0x", label, tidx, eidx, lidx, bid, baddr, wdata), UVM_FULL);
-        if (item.wmap[bid].exists(baddr))
-            `uvm_error(get_type_name(), $sformatf("%s write address overlap at %x, %x -> %x", label, baddr, item.wmap[bid][baddr], wdata));
-        item.wmap[bid][baddr] = wdata;
-        ref_banks[bid].write(baddr, wdata);
+        int unsigned physical_bank = physical_bank_index(bid, gid);
+        `uvm_info(get_type_name(),
+                  $sformatf("%s Thd[%0d].Elem[%0d].Lane[%0d] W bank[%0d].gid[%0d][0x%x] %0x",
+                            label, tidx, eidx, lidx, bid, gid, baddr, wdata), UVM_FULL);
+        if (item.wmap[physical_bank].exists(baddr))
+            `uvm_error(get_type_name(), $sformatf("%s write address overlap at %x, %x -> %x", label, baddr,
+                                                  item.wmap[physical_bank][baddr], wdata));
+        item.wmap[physical_bank][baddr] = wdata;
+        ref_banks[bid][gid].write(baddr, wdata);
     end
 endfunction: write_wmap
 
 function void shm_reference::v2m_write_wmap(string label, int tidx, int eidx, int lidx, byte unsigned wdata, shm_wtrans_item item);
     bit     wen   = item.wstrb_2d_array[tidx][eidx][lidx];
     bidx_t  bid   = item.bid_2d_array[tidx][eidx];
+    shm_gid_t gid = item.gid_2d_array[tidx][eidx];
     baddr_t baddr = item.baddr_2d_array[tidx][eidx] + baddr_t'(lidx);
-    write_wmap(label, tidx, eidx, lidx, wen, bid, baddr, wdata, item);
+    write_wmap(label, tidx, eidx, lidx, wen, bid, gid, baddr, wdata, item);
 endfunction: v2m_write_wmap
 
 function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_trans);
@@ -141,14 +148,16 @@ function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_
     else begin: m2v
         byte unsigned rdata[BANK_N][VEC_BYTE_N];
         int elem_byte_n = wgolden.data_byte_w();
-        baddr_t waddr_base = baddr_t'(wgolden.creq_vaddr) + baddr_t'(WARP_STEP * int'(wgolden.creq_wpid));
+        baddr_t waddr_base = baddr_t'(wgolden.creq_vaddr);
+        shm_gid_t write_gid = shm_gid_t'(int'(wgolden.creq_wpid) / WARP_PER_GID);
         // tidx: thread index, eidx: element index
         foreach(wgolden.baddr_2d_array[tidx, eidx]) begin
             // the value of wmap in read mode is the element/byte index
             for (int unsigned i = 0; i < elem_byte_n; i++) begin
                 baddr_t baddr = wgolden.baddr_2d_array[tidx][eidx] + i;
                 bidx_t bidx = wgolden.bid_2d_array[tidx][eidx];
-                byte raw_data = ref_banks[bidx].read(baddr);
+                shm_gid_t read_gid = wgolden.gid_2d_array[tidx][eidx];
+                byte raw_data = ref_banks[bidx][read_gid].read(baddr);
                 rdata[tidx][eidx * elem_byte_n + i] = raw_data;
                 `uvm_info(get_type_name(), $sformatf("M2V Thd[%0d].Elem[%0d].Lane[%0d] R bank[%0d][0x%x] = %x", tidx, eidx, i, bidx, baddr, raw_data), UVM_FULL);
             end
@@ -159,7 +168,7 @@ function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_
                 baddr_t wr_baddr = waddr_base + eidx * elem_byte_n + i;
                 byte unsigned value = rdata[tidx][eidx * elem_byte_n + i];
                 bit wen = wgolden.wstrb_2d_array[tidx][eidx][i];
-                write_wmap("M2V", tidx, eidx, i, wen, tidx, wr_baddr, value, wgolden);
+                write_wmap("M2V", tidx, eidx, i, wen, tidx, write_gid, wr_baddr, value, wgolden);
             end
         end
     end: m2v

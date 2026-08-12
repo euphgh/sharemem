@@ -1,130 +1,63 @@
-# vlm_memory_slv_agent
+# 统一 VLM agent 的 MEM 路径
 
-> 双 gid 接口迁移后，本组件不再作为独立 agent/monitor 存在。MEM driver 和 transaction
-> 发布职责并入统一 VLM agent，以便从唯一到期 reservation record 恢复 MEM gid。本文
-> 保留旧实现边界，并定义迁移时必须保留的 memory data contract。
+本文说明统一 `vlm_agent` 中的 MEM transaction、gid 解析和 read response。接口协议见
+[MEM/VLM 接口规范](../../spec/mem-vlm-interface.md)，reservation 窗口见
+[统一 VLM agent 的 reservation 路径](vlm-reservation-agent.md)。
 
-本文说明 VLM memory slave agent 如何观察 MEM 请求、维护实际 memory model，并按固定
-延迟返回读数据。端口采样和 `FFD_CYC` 的协议含义见
-[MEM/VLM 接口规范](../../spec/mem-vlm-interface.md)；本文只描述当前验证组件的数据流。
+## 1. 当前结构
 
-## 1. 组件结构
+主环境不再实例化独立 `vlm_memory_slv_agent`。统一 monitor 在同一个采样沿收集
+reservation、busy 和 MEM 请求；checker 使用 scheduler 的 pre-update 到期 record 为每个
+MEM bank 产生以下 metadata：
 
-```text
-vlm_memory_slv_agent
-├── vlm_memory_monitor
-├── vlm_memory_slv_driver     active 模式
-└── vlm_memory_slv_sequencer  active 模式
-```
+- `vlm_gid`：唯一到期 reservation 携带的 gid；
+- `gid_valid`：gid 是否来自有效解析；
+- `reservation_matched`：direction、bank、到期周期和完整地址是否全部匹配。
 
-Agent 从 Config DB 获取 `vlm_memory_slv_agent_config` 和 `memory_vif`。Monitor 始终创建；
-active 模式下再创建 driver 和 sequencer，并连接 `seq_item_port`。ut_shm 当前只支持完整
-active 环境，sequencer 虽然存在，但不参与读响应的数据来源。
+Agent 在 scheduler 推进前固定这组 metadata。实际 MEM 接口没有 gid，任何 monitor、
+driver、reference 或 scoreboard 都不得根据地址猜测 gid。
 
 ## 2. 主要源文件
 
 |文件|作用|
 |---|---|
-|`ver_common/uvc/vlm_memory_agent/vlm_memory_interface.sv`|MEM read/write 请求和 read data clocking block|
-|`ver_common/uvc/vlm_memory_agent/vlm_memory_sequence_item.svh`|按 bank 保存 enable、地址、数据和 strobe|
-|`ver_common/uvc/vlm_memory_agent/vlm_memory_slv_agent_config.svh`|agent active/passive 配置|
-|`ver_common/uvc/vlm_memory_agent/vlm_memory_slv_agent.svh`|组件创建、vif 分配和连接|
-|`ver_common/uvc/vlm_memory_agent/vlm_memory_slv_driver.svh`|read request 到 read response 的转换|
-|`ver_common/uvc/vlm_memory_agent/vlm_memory_monitor.svh`|MEM read/write transaction 采集|
+|`ver_common/uvc/vlm_agent/vlm_interface.sv`|统一 reservation/MEM interface|
+|`ver_common/uvc/vlm_memory_agent/vlm_memory_sequence_item.svh`|按 bank 保存 MEM payload 和 match metadata|
+|`ver_common/uvc/vlm_reservation_agent/vlm_reservation_monitor.svh`|原子采样 reservation 与 MEM|
+|`ver_common/uvc/vlm_reservation_agent/vlm_reservation_checker.svh`|唯一到期 record 匹配和 gid 解析|
+|`ver_common/uvc/vlm_reservation_agent/vlm_reservation_agent.svh`|发布 write、查询 read data 和定时返回|
+|`ut_shm/env/shm_scoreboard.svh`|实际 memory model 与 read transport 实现|
+
+旧的 `vlm_memory_interface`、monitor、driver、sequencer 和 agent 文件暂时保留为迁移历史，
+但不再进入主环境 filelist 或 UVM hierarchy。
 
 ## 3. Transaction
 
-`vlm_memory_sequence_item` 用 `vlm_read` 区分读写，并为每个 bank 保存：
+`vlm_memory_sequence_item` 用 `vlm_read` 区分方向，并为每个 logical bank 保存：
 
-- `vlm_bken`：该 bank 是否参与本笔 transaction；
-- `vlm_addr`：MEM beat 的起始 BADDR；
-- `vlm_data`：一个完整 MEM beat 的数据；
-- `vlm_strb`：逐 byte 写使能，读 transaction 中填为全 1。
+- `vlm_bken`、`vlm_addr`、`vlm_data` 和 `vlm_strb`；
+- `vlm_gid`、`gid_valid` 和 `reservation_matched`。
 
-它表达的是已经出现在 MEM 端口上的 transaction，不携带原始 creq 指令类型。下游 SRAM
-允许非对齐 beat，因此 memory agent 不需要恢复原始 creq 类型来执行 alignment policy。
+Write transaction 在请求周期发布。Read transaction 在请求周期固定地址和 gid metadata，
+从 scoreboard 查询对应 `<bank,gid,BADDR>` 数据，再在 `RPORT_DLY` 语义下驱动 `rdata`。
+返回时不得重新读取 scheduler record。
 
-## 4. Read response 路径
+## 4. 可信数据边界
 
-Driver 在 `main_phase` 先把 `rdata` 清零，等待初始 `rst_n===1`，随后逐拍观察 `rvld`。
-每次看到至少一个 bank 发出 read：
+只有 `gid_valid && reservation_matched` 的 transaction 可以访问可信 memory model：
 
-1. 创建 read transaction，复制所有 bank 的 `rvld/raddr`；
-2. 立即通过 `mem_port.b_transport()` 向 scoreboard 查询数据；
-3. 独立 fork 等待 `RPORT_DLY-1` 个后续 driver clocking event；
-4. 把 transaction 中的数据驱动到所有 bank 的 `rdata`。
+- matched write 按有效 strobe 更新 `rtl_banks[bank][gid]` 并进入 byte-map 比对；
+- matched read 从 `rtl_banks[bank][gid]` 获取 response；
+- unexpected、missing、地址不匹配或到期不匹配只产生协议诊断，不得污染 memory。
 
-每笔 read 使用独立 process，因此可以流水重叠。当前 transport 在 T0 就读取 memory
-snapshot，尚未实现截止到 `T0+FFD_CYC-1` 的写可见窗口，见 `VMEM-001`。
+`ref_banks` 与 `rtl_banks` 仍是两个独立模型。Reference 表示 creq 顺序架构结果；实际模型
+只表示 DUT 已经通过 MEM 接口兑现的 matched write。
 
-## 5. Monitor 路径
+## 5. 当前缺口
 
-Monitor 在初始 reset 释放后并行采集 read 和 write：
+- `VMEM-001`：read snapshot 尚未实现 `FFD_CYC` 写可见窗口；
+- `VMEM-002`：MEM strobe 和有效 write data 的 X/Z 检查仍不完整；
+- `ENV-001`：运行中 reset 尚未取消 pending read response 和重建 memory；
+- 双 gid 主路径尚缺 VCS 编译、gid 0/1 数据隔离和失败路径的定向证据。
 
-- read：在 `rvld` 有效时保存 enable 和地址，等待 `RPORT_DLY` 个 monitor clocking
-  event 后采样 `rdata`，再从 `read_analysis_port` 发布完整 transaction；
-- write：在 `wvld` 有效的同一采样沿保存地址、strobe 和数据，从
-  `write_analysis_port` 立即发布。
-
-当前 `shm_environment` 只把 write port 连接到 scoreboard。Read monitor port 可用于协议
-调试，但没有进入数据正确性比对主路径；read data 实际由 driver 与 scoreboard 的
-blocking transport 生成。
-
-## 6. 实际 memory model 的所有权
-
-Driver 和 monitor 都不直接保存 memory。`shm_scoreboard.rtl_banks` 是实际 memory model：
-
-- monitor 发布的实际 write 先按 strobe 更新 `rtl_banks`；
-- driver 的 blocking transport 从 `rtl_banks` 取得 read response；
-- reference 使用另一组 `ref_banks`，不能与 `rtl_banks` 共享对象。
-
-这条所有权边界保证 read response 来自 DUT 已经兑现的 write，而不是直接来自期望值。
-
-## 7. X/Z、reset 和错误边界
-
-Driver/monitor 未取得 vif 时报告 `VLM_MEMORY_NO_VIF` fatal。Monitor 目前没有对 valid、
-地址、strobe 和有效 data byte 做完整四态检查，见 `VMEM-002`。
-
-Driver 和 monitor 都只等待一次初始 reset。运行中 reset 不会自动取消已经 fork 的 read、
-重新清零输出或重建 memory 状态，属于跨组件问题 `ENV-001`。
-
-## 8. 调试观察点
-
-- `read_transaction_count`、`write_transaction_count` 和总 `transaction_count`；
-- T0 采样的 `rvld/raddr` 与 `RPORT_DLY` 后的 `rdata`；
-- write transaction 的 bank enable、byte strobe 与 `rtl_banks` 更新；
-- driver `mem_port` 是否连接到 scoreboard `mem_imp`；
-- `+file_debug` 生成的 `vlm_memory.rtl` transaction 记录。
-
-## 9. 相关测试
-
-`ut_shm/tests/shm_unit_test.svh` 间接覆盖 memory monitor、read service 和 scoreboard
-连接。`examples/vlm_reservation_compile/tb.sv` 可用于 reservation 与 memory agent 的
-联合 elaboration。当前没有覆盖 `FFD_CYC` 边界、MEM X/Z、流水 read 或运行中 reset
-取消 response 的独立定向测试。
-
-## 10. 开发 contract
-
-- MEM read 的采样点是 `rvld/raddr` 在 T0 的接口采样，不是更早的 reservation。
-- Read response 必须在 `RPORT_DLY` 语义下实现 `FFD_CYC` snapshot；截止周期之后的 write
-  不能进入这笔返回值。
-- 统一 monitor 只能采样实际接口行为；gid 只能由 reservation resolver 补全，不能根据
-  MEM address 或 reference 猜测。
-- Read driver 必须使用与 checker 相同的唯一到期 record 查询结果访问
-  `rtl_banks[bank][gid]`，不得独立消费 scheduler record。
-- 没有唯一 reservation match 的 MEM request 不得更新可信 memory model 或请求 read data。
-- 运行中 reset 必须取消 pending response，并阻止 reset 前 transaction 在释放后兑现。
-- 现阶段 passive 明确不支持；不能留下 driver 缺失但 scoreboard 仍假定 transport
-  存在的半连接组合。
-
-## 11. 当前实现状态
-
-- `VMEM-001`：read snapshot 未实现 `FFD_CYC`。
-- `VMEM-002`：MEM transaction 缺少完整 X/Z 检查。
-- `VMEM-003`：sequencer 和部分 compare API 没有有效行为。
-- `ENV-001`：运行中 reset 未清理 pending read 和 memory 状态。
-- `ENV-002`：passive 配置仍可能形成不完整连接。
-- 独立 memory interface/monitor/agent 将由统一 VLM interface/agent 取代，实施顺序见
-  [双 gid 接口重构开发计划](../../../development/shm-dual-bank-interface-refactor-plan.md)。
-
-问题详情和验收方法见[验证实现状态](../../verification-status.md)。
+问题状态和验收方法见[验证实现状态](../../verification-status.md)。

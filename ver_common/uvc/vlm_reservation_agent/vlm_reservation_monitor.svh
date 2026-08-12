@@ -15,11 +15,8 @@ class vlm_reservation_monitor extends uvm_component;
   // Agent configuration providing both business virtual interfaces.
   vlm_reservation_agent_config cfg;
 
-  // Reservation interface sampled for requests and observed busy values.
-  virtual vlm_reservation_interface reservation_vif;
-
-  // Read-only MEM interface sampled for actual request valid and addresses.
-  virtual vlm_memory_interface memory_vif;
+  // Unified interface sampled atomically for reservation and MEM activity.
+  virtual vlm_interface vif;
 
   // Shared cycle-number service obtained directly through UVM Config DB.
   virtual clk_if clk_vif;
@@ -56,7 +53,7 @@ class vlm_reservation_monitor extends uvm_component;
   // @brief Assigns business interfaces used by the monitor.
   //
   // @param cfg Valid configuration owned by the containing reservation agent.
-  // @pre cfg provides non-null reservation_vif and memory_vif handles.
+  // @pre cfg provides a non-null unified vif handle.
   // @post Subsequent collection uses the supplied business interfaces.
   //------------------------------------------------------------------------------
   extern function void set_config(vlm_reservation_agent_config cfg);
@@ -65,7 +62,7 @@ class vlm_reservation_monitor extends uvm_component;
   // @brief Waits for reset release, then returns one normalized reservation/MEM cycle.
   //
   // @param txn Output receiving the two-state cycle transaction.
-  // @pre clk_vif, reservation_vif, and memory_vif are non-null.
+  // @pre clk_vif and vif are non-null.
   // @post No X/Z checks occur while sampled rst_n is not exactly 1. After
   //       reset release, txn contains direct clocking-block samples normalized
   //       at the monitor's four-state boundary, and txn.cycle identifies the
@@ -87,7 +84,7 @@ class vlm_reservation_monitor extends uvm_component;
   // @brief Normalizes the sampled four-state busy tables into two-state values.
   //
   // @param txn Transaction receiving observed read and write busy tables.
-  // @pre The caller is synchronized to reservation_vif.mon_cb.
+  // @pre The caller is synchronized to vif.mon_cb.
   // @post Each busy X/Z is reported, converted to zero, and reflected in input_error.
   //------------------------------------------------------------------------------
   extern protected function void collect_busy(
@@ -97,7 +94,7 @@ class vlm_reservation_monitor extends uvm_component;
   // @brief Converts sampled VLM reservation ports into nullable request handles.
   //
   // @param txn Transaction receiving per-BANK read and write reservation handles.
-  // @pre The caller is synchronized to reservation_vif.mon_cb.
+  // @pre The caller is synchronized to vif.mon_cb.
   // @post Fully known active ports own new request instances; all other handles remain null.
   //------------------------------------------------------------------------------
   extern protected function void collect_reservation_requests(
@@ -107,7 +104,7 @@ class vlm_reservation_monitor extends uvm_component;
   // @brief Converts sampled actual MEM ports into nullable request handles.
   //
   // @param txn Transaction receiving per-BANK actual read and write handles.
-  // @pre The caller is synchronized to memory_vif.mon_cb at the same clock edge.
+  // @pre The caller is synchronized to vif.mon_cb at the same clock edge.
   // @post Fully known active ports own new request instances; all other handles remain null.
   //------------------------------------------------------------------------------
   extern protected function void collect_memory_requests(
@@ -145,28 +142,27 @@ function void vlm_reservation_monitor::set_config(vlm_reservation_agent_config c
   end
 
   // Both interfaces are sampled together and therefore must be configured before collection starts.
-  if (cfg.reservation_vif == null || cfg.memory_vif == null) begin
-    `uvm_fatal("VLM_RESERVATION_NO_VIF", "monitor config requires reservation_vif and memory_vif")
+  if (cfg.vif == null) begin
+    `uvm_fatal("VLM_RESERVATION_NO_VIF", "monitor config requires unified vif")
     return;
   end
 
   this.cfg = cfg;
-  reservation_vif = cfg.reservation_vif;
-  memory_vif = cfg.memory_vif;
+  vif = cfg.vif;
 endfunction : set_config
 
 task vlm_reservation_monitor::collect_cycle(output vlm_reservation_cycle_transaction_t txn);
   // Missing interfaces would prevent atomic cycle sampling and indicate an environment connection error.
-  if (clk_vif == null || reservation_vif == null || memory_vif == null) begin
-    `uvm_fatal("VLM_RESERVATION_MONITOR_NOT_READY", "collect_cycle() requires clk_vif and both business interfaces")
+  if (clk_vif == null || vif == null) begin
+    `uvm_fatal("VLM_RESERVATION_MONITOR_NOT_READY", "collect_cycle() requires clk_vif and unified vif")
     return;
   end
 
   // Reset values and interface payloads share the same clocking-block sampling boundary.
   // Treat X/Z reset as asserted so interface X/Z checks cannot run before a known release.
   do begin
-    @(reservation_vif.mon_cb);
-  end while (reservation_vif.mon_cb.rst_n !== 1'b1);
+    @(vif.mon_cb);
+  end while (vif.mon_cb.rst_n !== 1'b1);
 
   initialize_transaction(current_txn);
   current_txn.cycle = clk_vif.cycle_count;
@@ -207,23 +203,25 @@ function void vlm_reservation_monitor::collect_busy(ref vlm_reservation_cycle_tr
   for (int unsigned direction = 0; direction < VLM_RESERVATION_DIRECTION_N; direction++) begin
     // Visit every relative delay represented by the sampled busy window.
     for (int unsigned delay = 0; delay < VTAB_D; delay++) begin
-      // Normalize each sub-bank bit separately so every X/Z location is diagnosed precisely.
-      for (int unsigned sub_bank = 0; sub_bank < VLM_SUB_BANK_N; sub_bank++) begin
-        if (direction == VLM_RESERVATION_READ) begin
-          busy_value = reservation_vif.mon_cb.rbusy[delay][sub_bank];
-        end else begin
-          busy_value = reservation_vif.mon_cb.wbusy[delay][sub_bank];
-        end
+      // Normalize each gid/sub-bank bit separately so every X/Z location is diagnosed precisely.
+      for (int unsigned gid = 0; gid < GID_N; gid++) begin
+        for (int unsigned sub_bank = 0; sub_bank < VLM_SUB_BANK_N; sub_bank++) begin
+          if (direction == VLM_RESERVATION_READ) begin
+            busy_value = vif.mon_cb.rbusy[delay][gid][sub_bank];
+          end else begin
+            busy_value = vif.mon_cb.wbusy[delay][gid][sub_bank];
+          end
 
-        txn.observed_busy[direction][delay][sub_bank] = busy_value === 1'b1;
+          txn.observed_busy[direction][delay][gid][sub_bank] = busy_value === 1'b1;
 
         // Busy X/Z is converted to zero only after the monitor records the four-state interface violation.
-        if ($isunknown(busy_value)) begin
-          input_error_count++;
-          txn.input_error = 1'b1;
-          `uvm_error("VLM_RESERVATION_BUSY_XZ",
-                     $sformatf("cycle %0d direction %0d delay %0d sub bank %0d busy contains X/Z",
-                               txn.cycle, direction, delay, sub_bank))
+          if ($isunknown(busy_value)) begin
+            input_error_count++;
+            txn.input_error = 1'b1;
+            `uvm_error("VLM_RESERVATION_BUSY_XZ",
+                       $sformatf("cycle %0d direction %0d delay %0d gid %0d sub bank %0d busy contains X/Z",
+                                 txn.cycle, direction, delay, gid, sub_bank))
+          end
         end
       end
     end
@@ -237,7 +235,7 @@ function void vlm_reservation_monitor::collect_reservation_requests(
   // Convert each read reservation port only when request, address, and delay are fully known.
   for (int unsigned bank = 0; bank < BANK_N; bank++) begin
     // Unknown request valid cannot be interpreted as either an active event or an idle port.
-    if ($isunknown(reservation_vif.mon_cb.rreq[bank])) begin
+    if ($isunknown(vif.mon_cb.rreq[bank])) begin
       input_error_count++;
       txn.input_error = 1'b1;
       `uvm_error("VLM_RESERVATION_RREQ_XZ",
@@ -245,11 +243,11 @@ function void vlm_reservation_monitor::collect_reservation_requests(
       continue;
     end
 
-    if (reservation_vif.mon_cb.rreq[bank] === 1'b1) begin
+    if (vif.mon_cb.rreq[bank] === 1'b1) begin
       payload_known = 1'b1;
 
       // An active read reservation address must be fully known before creating a request instance.
-      if ($isunknown(reservation_vif.mon_cb.raddr[bank])) begin
+      if ($isunknown(vif.mon_cb.raddr[bank])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         payload_known = 1'b0;
@@ -258,7 +256,7 @@ function void vlm_reservation_monitor::collect_reservation_requests(
       end
 
       // An active read reservation delay must be fully known before creating a request instance.
-      if ($isunknown(reservation_vif.mon_cb.rdly[bank])) begin
+      if ($isunknown(vif.mon_cb.rdly[bank])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         payload_known = 1'b0;
@@ -266,10 +264,19 @@ function void vlm_reservation_monitor::collect_reservation_requests(
                    $sformatf("cycle %0d read reservation bank %0d delay contains X/Z", txn.cycle, bank))
       end
 
+      if ($isunknown(vif.mon_cb.rgid[bank])) begin
+        input_error_count++;
+        txn.input_error = 1'b1;
+        payload_known = 1'b0;
+        `uvm_error("VLM_RESERVATION_RGID_XZ",
+                   $sformatf("cycle %0d read reservation bank %0d gid contains X/Z", txn.cycle, bank))
+      end
+
       if (payload_known) begin
         txn.rsv_rreq_array[bank] = new();
-        txn.rsv_rreq_array[bank].address = reservation_vif.mon_cb.raddr[bank];
-        txn.rsv_rreq_array[bank].delay = reservation_vif.mon_cb.rdly[bank];
+        txn.rsv_rreq_array[bank].address = vif.mon_cb.raddr[bank];
+        txn.rsv_rreq_array[bank].delay = vif.mon_cb.rdly[bank];
+        txn.rsv_rreq_array[bank].gid = vif.mon_cb.rgid[bank];
       end
     end
   end
@@ -279,7 +286,7 @@ function void vlm_reservation_monitor::collect_reservation_requests(
     // Each configured write reservation port can independently produce one request handle.
     for (int unsigned port = 0; port < WRITE_PORT_N; port++) begin
       // Unknown request valid cannot create a write reservation request instance.
-      if ($isunknown(reservation_vif.mon_cb.wreq[bank][port])) begin
+      if ($isunknown(vif.mon_cb.wreq[bank][port])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         `uvm_error("VLM_RESERVATION_WREQ_XZ",
@@ -288,11 +295,11 @@ function void vlm_reservation_monitor::collect_reservation_requests(
         continue;
       end
 
-      if (reservation_vif.mon_cb.wreq[bank][port] === 1'b1) begin
+      if (vif.mon_cb.wreq[bank][port] === 1'b1) begin
         payload_known = 1'b1;
 
         // An active write reservation address must be fully known before creating a request instance.
-        if ($isunknown(reservation_vif.mon_cb.waddr[bank][port])) begin
+        if ($isunknown(vif.mon_cb.waddr[bank][port])) begin
           input_error_count++;
           txn.input_error = 1'b1;
           payload_known = 1'b0;
@@ -302,7 +309,7 @@ function void vlm_reservation_monitor::collect_reservation_requests(
         end
 
         // An active write reservation delay must be fully known before creating a request instance.
-        if ($isunknown(reservation_vif.mon_cb.wdly[bank][port])) begin
+        if ($isunknown(vif.mon_cb.wdly[bank][port])) begin
           input_error_count++;
           txn.input_error = 1'b1;
           payload_known = 1'b0;
@@ -311,10 +318,20 @@ function void vlm_reservation_monitor::collect_reservation_requests(
                                txn.cycle, bank, port))
         end
 
+        if ($isunknown(vif.mon_cb.wgid[bank][port])) begin
+          input_error_count++;
+          txn.input_error = 1'b1;
+          payload_known = 1'b0;
+          `uvm_error("VLM_RESERVATION_WGID_XZ",
+                     $sformatf("cycle %0d write reservation bank %0d port %0d gid contains X/Z",
+                               txn.cycle, bank, port))
+        end
+
         if (payload_known) begin
           txn.rsv_wreq_array[bank][port] = new();
-          txn.rsv_wreq_array[bank][port].address = reservation_vif.mon_cb.waddr[bank][port];
-          txn.rsv_wreq_array[bank][port].delay = reservation_vif.mon_cb.wdly[bank][port];
+          txn.rsv_wreq_array[bank][port].address = vif.mon_cb.waddr[bank][port];
+          txn.rsv_wreq_array[bank][port].delay = vif.mon_cb.wdly[bank][port];
+          txn.rsv_wreq_array[bank][port].gid = vif.mon_cb.wgid[bank][port];
         end
       end
     end
@@ -325,40 +342,42 @@ function void vlm_reservation_monitor::collect_memory_requests(ref vlm_reservati
   // Convert each BANK's actual read and write MEM ports into independent nullable handles.
   for (int unsigned bank = 0; bank < BANK_N; bank++) begin
     // Unknown MEM read valid cannot be interpreted as an actual request.
-    if ($isunknown(memory_vif.mon_cb.rvld[bank])) begin
+    if ($isunknown(vif.mon_cb.rvld[bank])) begin
       input_error_count++;
       txn.input_error = 1'b1;
       `uvm_error("VLM_RESERVATION_MEM_RVLD_XZ",
                  $sformatf("cycle %0d MEM read bank %0d valid contains X/Z", txn.cycle, bank))
-    end else if (memory_vif.mon_cb.rvld[bank] === 1'b1) begin
+    end else if (vif.mon_cb.rvld[bank] === 1'b1) begin
       // An active MEM read address must be fully known before creating a request instance.
-      if ($isunknown(memory_vif.mon_cb.raddr[bank])) begin
+      if ($isunknown(vif.mon_cb.mem_raddr[bank])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         `uvm_error("VLM_RESERVATION_MEM_RADDR_XZ",
                    $sformatf("cycle %0d MEM read bank %0d address contains X/Z", txn.cycle, bank))
       end else begin
         txn.mem_rreq_array[bank] = new();
-        txn.mem_rreq_array[bank].address = memory_vif.mon_cb.raddr[bank];
+        txn.mem_rreq_array[bank].address = vif.mon_cb.mem_raddr[bank];
       end
     end
 
     // Unknown MEM write valid cannot be interpreted as an actual request.
-    if ($isunknown(memory_vif.mon_cb.wvld[bank])) begin
+    if ($isunknown(vif.mon_cb.wvld[bank])) begin
       input_error_count++;
       txn.input_error = 1'b1;
       `uvm_error("VLM_RESERVATION_MEM_WVLD_XZ",
                  $sformatf("cycle %0d MEM write bank %0d valid contains X/Z", txn.cycle, bank))
-    end else if (memory_vif.mon_cb.wvld[bank] === 1'b1) begin
+    end else if (vif.mon_cb.wvld[bank] === 1'b1) begin
       // An active MEM write address must be fully known before creating a request instance.
-      if ($isunknown(memory_vif.mon_cb.waddr[bank])) begin
+      if ($isunknown(vif.mon_cb.mem_waddr[bank])) begin
         input_error_count++;
         txn.input_error = 1'b1;
         `uvm_error("VLM_RESERVATION_MEM_WADDR_XZ",
                    $sformatf("cycle %0d MEM write bank %0d address contains X/Z", txn.cycle, bank))
       end else begin
         txn.mem_wreq_array[bank] = new();
-        txn.mem_wreq_array[bank].address = memory_vif.mon_cb.waddr[bank];
+        txn.mem_wreq_array[bank].address = vif.mon_cb.mem_waddr[bank];
+        txn.mem_wreq_array[bank].strb = vif.mon_cb.wstrb[bank];
+        txn.mem_wreq_array[bank].data = vif.mon_cb.wdata[bank];
       end
     end
   end

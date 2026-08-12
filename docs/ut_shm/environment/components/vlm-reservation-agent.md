@@ -8,24 +8,24 @@
 ## 1. 组件结构和支持模式
 
 ```text
-vlm_reservation_agent
+vlm_agent
 ├── vlm_monitor
-├── vlm_memory_driver
 ├── vlm_reservation_checker
-├── vlm_mem_resolver
 ├── vlm_reservation_coverage
 └── vlm_reservation_scheduler
 ```
 
-目标 agent 取得统一 `vlm_interface` 和共享 `clk_if`，固定创建完整层次并主动驱动 busy
-与 read data；passive 模式明确不支持。现有源码仍使用两个 interface 和两个 agent，
-属于开发计划中的待迁移实现。
+Agent 取得统一 `vlm_interface` 和共享 `clk_if`，固定创建完整层次并主动驱动 busy 与 read
+data；passive 模式明确不支持。第一版由 checker 返回唯一到期 record 的 gid/match metadata，
+agent 自身负责发布 MEM transaction 和组织 read response，因此没有单独的 resolver/driver
+子组件，也不会产生第二个 MEM transaction 发布者。
 
 ## 2. 主要源文件
 
 |文件|作用|
 |---|---|
-|`ver_common/uvc/vlm_reservation_agent/vlm_reservation_interface.sv`|reservation request 与 busy clocking block|
+|`ver_common/uvc/vlm_agent/vlm_interface.sv`|统一 reservation、busy 和 MEM clocking block|
+|`ver_common/uvc/vlm_agent/vlm_agent.svh`|主环境使用的统一 agent 公共类型|
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_types.svh`|request、record、cycle transaction 和 result 类型|
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_agent.svh`|层次、配置、单周期调度和 busy 驱动|
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_monitor.svh`|四态采样和归一化|
@@ -40,9 +40,7 @@ Agent 的 `main_phase` 是唯一消耗周期的核心循环。每次迭代按以
 ```text
 monitor.collect_cycle()
         ↓
-checker.check_cycle()       读取 scheduler 的 pre-update 状态
-        ↓
-mem_resolver.resolve()      返回 gid 和 match status
+checker.check_cycle()       读取 pre-update 状态并返回 gid/match status
         ↓
 publish/serve MEM           发布 write 或组织 read response
         ↓
@@ -60,10 +58,10 @@ transaction cycle 不再属于同一状态。
 
 |位置|条件|Report ID|
 |---|---|---|
-|Agent/monitor 配置|缺少 config 或必要的 reservation/MEM interface|`VLM_RESERVATION_NO_CFG`、`VLM_RESERVATION_NO_VIF`|
+|Agent/monitor 配置|缺少 config 或统一 VLM interface|`VLM_RESERVATION_NO_CFG`、`VLM_RESERVATION_NO_VIF`|
 |External busy 配置|`EXTERNAL_BUSY_PERCENT` 超出 0～100；合法值也用同一 ID 打印最终配置|`VLM_RESERVATION_EXTERNAL_PERCENT`|
-|Monitor|开始采样时缺少 clock、reservation 或 MEM interface|`VLM_RESERVATION_MONITOR_NOT_READY`|
-|Agent|驱动 busy 时缺少 reservation interface 或 scheduler|`VLM_RESERVATION_AGENT_NOT_READY`|
+|Monitor|开始采样时缺少 clock 或统一 VLM interface|`VLM_RESERVATION_MONITOR_NOT_READY`|
+|Agent|驱动 busy 时缺少统一 VLM interface 或 scheduler|`VLM_RESERVATION_AGENT_NOT_READY`|
 |Scheduler|transaction cycle 与共享 cycle 不同，或相邻 transaction 不连续|`VLM_RESERVATION_CYCLE_MISMATCH`、`VLM_RESERVATION_NONCONSECUTIVE_CYCLE`|
 
 这些错误表示 testbench 连接、配置或内部处理顺序损坏，不属于 DUT 协议失败。

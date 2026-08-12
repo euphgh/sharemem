@@ -13,6 +13,9 @@ class vlm_memory_sequence_item extends uvm_sequence_item;
   rand logic [BADDR_W-1:0]        vlm_addr[BANK_N] = '{BANK_N{'0}};
   rand logic [VLM_DATA_BIT_W-1:0] vlm_data[BANK_N] = '{BANK_N{'0}};
   rand logic [VLM_DATA_BYTE_W-1:0] vlm_strb[BANK_N] = '{BANK_N{'0}};
+  logic [BANK_N-1:0]               vlm_gid = '0;
+  logic [BANK_N-1:0]               gid_valid = '0;
+  logic [BANK_N-1:0]               reservation_matched = '0;
 
   //
   rand int                        delay_cycle = '0;
@@ -86,6 +89,9 @@ class vlm_memory_sequence_item extends uvm_sequence_item;
 `uvm_field_sarray_int(vlm_addr , UVM_DEFAULT)
 `uvm_field_sarray_int(vlm_data , UVM_DEFAULT)
 `uvm_field_sarray_int(vlm_strb , UVM_DEFAULT)
+`uvm_field_int(vlm_gid, UVM_DEFAULT)
+`uvm_field_int(gid_valid, UVM_DEFAULT)
+`uvm_field_int(reservation_matched, UVM_DEFAULT)
 
 `uvm_object_utils_end
 endclass: vlm_memory_sequence_item

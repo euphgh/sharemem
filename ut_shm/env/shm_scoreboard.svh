@@ -20,19 +20,19 @@ class shm_scoreboard extends uvm_scoreboard;
     typedef vlm2aa::wmap_t wmap_t;
     typedef vlm2aa::baddr_t baddr_t;
 
-    typedef set_array_util#(baddr_t, BANK_N) waddr_util;
-    typedef waddr_util::set_t waddr_set_t[BANK_N];
+    typedef set_array_util#(baddr_t, PHYSICAL_BANK_N) waddr_util;
+    typedef waddr_util::set_t waddr_set_t[PHYSICAL_BANK_N];
     // time map type
-    typedef aa_array_util#(BANK_N, baddr_t, time) tmap_util;
+    typedef aa_array_util#(PHYSICAL_BANK_N, baddr_t, time) tmap_util;
     typedef tmap_util::aa_array_t tmap_t;
 
     // write aa of q array
-    typedef aa_of_q_array_util#(BANK_N, baddr_t, byte) wmmap_util;
+    typedef aa_of_q_array_util#(PHYSICAL_BANK_N, baddr_t, byte) wmmap_util;
     typedef wmmap_util::aa_of_q_array_t wmmap_t;
     typedef set_util#(byte) byte_set_util;
     typedef byte_set_util::set_t byte_set_t;
 
-    typedef aa_value_adapter_array_util#(BANK_N, baddr_t, byte) wmap_adapter_util;
+    typedef aa_value_adapter_array_util#(PHYSICAL_BANK_N, baddr_t, byte) wmap_adapter_util;
 
     wmap_t wmap_final;
     wmmap_t wmap_expired;
@@ -43,7 +43,7 @@ class shm_scoreboard extends uvm_scoreboard;
         tmap_t expired;
         function new (shm_wtrans_item tr_);
             this.tr = tr_;
-            for (int unsigned i = 0; i < BANK_N; i++) begin
+            for (int unsigned i = 0; i < PHYSICAL_BANK_N; i++) begin
                 matched[i].delete();
                 expired[i].delete();
             end
@@ -51,7 +51,7 @@ class shm_scoreboard extends uvm_scoreboard;
     endclass
     ref_record_t ref_record_q[$];
 
-    svt_mem rtl_banks[BANK_N];
+    svt_mem rtl_banks[BANK_N][GID_N];
     shm_environment_config shm_environment_cfg;
 
     uvm_analysis_export #(vlm_memory_sequence_item) rtl_wrvlm_analysis_export;
@@ -89,9 +89,13 @@ endclass: shm_scoreboard
 task shm_scoreboard::b_transport(vlm_memory_sequence_item trans, uvm_tlm_time delay);
     for(int unsigned bid = 0; bid < BANK_N; bid++) begin
         if (trans.vlm_bken[bid]) begin
+            if (!trans.gid_valid[bid] || !trans.reservation_matched[bid]) begin
+                `uvm_error(get_type_name(), $sformatf("MEM read bank %0d has no uniquely matched reservation gid", bid))
+                continue;
+            end
             for (int unsigned byte_offs = 0; byte_offs < VLM_DATA_BYTE_W; byte_offs++) begin
                 baddr_t byte_addr = trans.vlm_addr[bid] + baddr_t'(byte_offs);
-                byte rdata = rtl_banks[bid].read(byte_addr);
+                byte rdata = rtl_banks[bid][trans.vlm_gid[bid]].read(byte_addr);
                 trans.vlm_data[bid][byte_offs * 8 +: 8] = rdata;
             end
             `uvm_info(get_type_name(), $sformatf("VLM[%02d][%x] R: %x", bid, trans.vlm_addr[bid], trans.vlm_data[bid]), UVM_FULL)
@@ -191,11 +195,16 @@ task shm_scoreboard::compare_dut_with_ref();
         if (tr.vlm_read) continue;
         for(int unsigned bid = 0; bid < BANK_N; bid ++) begin
             if (!tr.vlm_bken[bid]) continue;
+            if (!tr.gid_valid[bid] || !tr.reservation_matched[bid]) begin
+                `uvm_error(get_type_name(),
+                           $sformatf("MEM write bank %0d has no uniquely matched reservation gid", bid))
+                continue;
+            end
             for (int unsigned byte_offs = 0; byte_offs < VLM_DATA_BYTE_W; byte_offs++) begin
                 if (tr.vlm_strb[bid][byte_offs]) begin
                     baddr_t byte_waddr = tr.vlm_addr[bid] + baddr_t'(byte_offs);
                     byte unsigned wdata = tr.vlm_data[bid][byte_offs * 8 +: 8];
-                    rtl_banks[bid].write(byte_waddr, wdata);
+                    rtl_banks[bid][tr.vlm_gid[bid]].write(byte_waddr, wdata);
                 end
             end
         end
@@ -309,9 +318,9 @@ function void shm_scoreboard::build_phase(uvm_phase phase);
         shm_environment_cfg.print();
     end
 
-    foreach(rtl_banks[i]) begin
+    foreach(rtl_banks[bank, gid]) begin
         int baddr_max = (1 << BADDR_W) - 1;
-        rtl_banks[i] = new($sformatf("rtl_bank_%0x", i),
+        rtl_banks[bank][gid] = new($sformatf("rtl_bank_%0x_gid_%0d", bank, gid),
                            "RTL_BANKS",         // Memory name
                            8,                   // Suite name
                            0,                   // data width
@@ -370,8 +379,8 @@ endfunction: check_phase
 // Stimulate the DUT
 //-----------------------------------------------------------------------------
 task shm_scoreboard::configure_phase(uvm_phase phase);
-    foreach(rtl_banks[i]) begin
-        rtl_banks[i].set_meminit(svt_mem::INCR, i << 4);
+    foreach(rtl_banks[bank, gid]) begin
+        rtl_banks[bank][gid].set_meminit(svt_mem::INCR, (bank * GID_N + gid) << 4);
     end
 endtask: configure_phase
 

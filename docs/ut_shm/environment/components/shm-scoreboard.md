@@ -148,6 +148,6 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 - `SCB-002`：timeout 固定为 128 cycles。
 - `VMEM-001`：read service 未实现 `FFD_CYC` snapshot。
 - `ENV-001`：运行中 reset 未清理 outstanding 和实际 memory 状态。
-- 当前 scoreboard memory 和 wmap 仍缺少 gid 维度，待按双 gid 开发计划迁移。
+- scoreboard memory、wmap 和 read service 已接入 reservation match metadata，尚缺 VCS 与数据隔离定向证据。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

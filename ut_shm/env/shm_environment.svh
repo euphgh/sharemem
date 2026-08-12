@@ -7,14 +7,12 @@ class shm_environment extends uvm_env;
     shm_scoreboard shm_scb;
 
     shmins_mst_agent       shmins_mst_agt;
-    vlm_memory_slv_agent   vlm_memory_slv_agt;
-    vlm_reservation_agent  vlm_reservation_agt;
+    vlm_agent              vlm_agt;
 
     shm_environment_config shm_environment_cfg;
 
     virtual shmins_interface          shmins_vif;
-    virtual vlm_memory_interface      memory_vif;
-    virtual vlm_reservation_interface reservation_vif;
+    virtual vlm_interface             vlm_vif;
     virtual clk_if                    clk_vif;
 
     int unsigned shm_env_id;
@@ -43,10 +41,9 @@ function void shm_environment::build_phase(uvm_phase phase);
     end
 
     if (shm_environment_cfg.shmins_mst_agent_cfg == null ||
-        shm_environment_cfg.vlm_memory_slv_agent_cfg == null ||
         shm_environment_cfg.vlm_reservation_agent_cfg == null) begin
         `uvm_fatal("SHM_ENV_CFG_NOT_INITIALIZED",
-                   "shm_environment_config.init() must create all three agent configs")
+                   "shm_environment_config.init() must create both agent configs")
     end
 
     if (!uvm_config_db#(virtual shmins_interface)::get(
@@ -54,44 +51,28 @@ function void shm_environment::build_phase(uvm_phase phase);
         `uvm_fatal("SHM_ENV_NO_SHMINS_VIF", "shm_environment requires virtual interface 'shmins_vif'")
     end
 
-    if (!uvm_config_db#(virtual vlm_memory_interface)::get(
-            this, "", "memory_vif", memory_vif)) begin
-        `uvm_fatal("SHM_ENV_NO_MEMORY_VIF", "shm_environment requires virtual interface 'memory_vif'")
-    end
-
-    if (!uvm_config_db#(virtual vlm_reservation_interface)::get(
-            this, "", "reservation_vif", reservation_vif)) begin
-        `uvm_fatal("SHM_ENV_NO_RESERVATION_VIF",
-                   "shm_environment requires virtual interface 'reservation_vif'")
+    if (!uvm_config_db#(virtual vlm_interface)::get(this, "", "vlm_vif", vlm_vif)) begin
+        `uvm_fatal("SHM_ENV_NO_VLM_VIF", "shm_environment requires virtual interface 'vlm_vif'")
     end
 
     if (!uvm_config_db#(virtual clk_if)::get(this, "", "clk_vif", clk_vif)) begin
         `uvm_fatal("SHM_ENV_NO_CLK_VIF", "shm_environment requires virtual interface 'clk_vif'")
     end
 
-    shm_environment_cfg.vlm_reservation_agent_cfg.reservation_vif = reservation_vif;
-    shm_environment_cfg.vlm_reservation_agent_cfg.memory_vif      = memory_vif;
+    shm_environment_cfg.vlm_reservation_agent_cfg.vif = vlm_vif;
 
     uvm_config_db#(shmins_mst_agent_config)::set(
         this, "shmins_mst_agt", "cfg", shm_environment_cfg.shmins_mst_agent_cfg);
     uvm_config_db#(virtual shmins_interface)::set(
         this, "shmins_mst_agt", "shmins_vif", shmins_vif);
 
-    uvm_config_db#(vlm_memory_slv_agent_config)::set(
-        this, "vlm_memory_slv_agt", "cfg", shm_environment_cfg.vlm_memory_slv_agent_cfg);
-    uvm_config_db#(virtual vlm_memory_interface)::set(
-        this, "vlm_memory_slv_agt", "memory_vif", memory_vif);
-
     uvm_config_db#(vlm_reservation_agent_config)::set(
-        this, "vlm_reservation_agt", "cfg", shm_environment_cfg.vlm_reservation_agent_cfg);
+        this, "vlm_agt", "cfg", shm_environment_cfg.vlm_reservation_agent_cfg);
     uvm_config_db#(virtual clk_if)::set(
-        this, "vlm_reservation_agt.*", "clk_vif", clk_vif);
+        this, "vlm_agt.*", "clk_vif", clk_vif);
 
     shmins_mst_agt = shmins_mst_agent::type_id::create("shmins_mst_agt", this);
-    vlm_memory_slv_agt =
-        vlm_memory_slv_agent::type_id::create("vlm_memory_slv_agt", this);
-    vlm_reservation_agt =
-        vlm_reservation_agent::type_id::create("vlm_reservation_agt", this);
+    vlm_agt = vlm_agent::type_id::create("vlm_agt", this);
 
     if (shm_environment_cfg.shm_is_active == UVM_ACTIVE) begin
         uvm_config_db#(shm_environment_config)::set(
@@ -111,13 +92,12 @@ function void shm_environment::connect_phase(uvm_phase phase);
         shmins_mst_agt.monitor.shmins_analysis_port.connect(shm_ref.shmins_analysis_export);
     end
 
-    if (shm_scb != null && vlm_memory_slv_agt.monitor != null) begin
-        vlm_memory_slv_agt.monitor.write_analysis_port.connect(
-            shm_scb.rtl_wrvlm_analysis_export);
+    if (shm_scb != null && vlm_agt != null) begin
+        vlm_agt.write_analysis_port.connect(shm_scb.rtl_wrvlm_analysis_export);
     end
 
-    if (shm_scb != null && vlm_memory_slv_agt.driver != null) begin
-        vlm_memory_slv_agt.driver.mem_port.connect(shm_scb.mem_imp);
+    if (shm_scb != null && vlm_agt != null) begin
+        vlm_agt.mem_port.connect(shm_scb.mem_imp);
     end
 
     if (shm_ref != null && shm_scb != null) begin

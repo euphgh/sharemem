@@ -225,6 +225,13 @@ function void vlm_reservation_checker::initialize_result(ref vlm_reservation_che
   result.mem_match_error_count     = 0;
   result.dly_zero_error_count      = 0;
   result.matched_mem_request_count = 0;
+  for (int unsigned direction = 0; direction < VLM_RESERVATION_DIRECTION_N; direction++) begin
+    for (int unsigned bank = 0; bank < BANK_N; bank++) begin
+      result.mem_gid[direction][bank] = '0;
+      result.mem_gid_valid[direction][bank] = 1'b0;
+      result.mem_reservation_matched[direction][bank] = 1'b0;
+    end
+  end
 endfunction : initialize_result
 
 function void vlm_reservation_checker::check_busy_state(
@@ -286,62 +293,64 @@ function void vlm_reservation_checker::check_busy_state(
   for (int unsigned direction = 0; direction < VLM_RESERVATION_DIRECTION_N; direction++) begin
     // Busy state covers every future relative delay in the scheduler window.
     for (int unsigned delay = 0; delay < VTAB_D; delay++) begin
-      // Sub-bank ownership is derived from address[6:5] of every record at this direction and delay.
-      for (int unsigned sub_bank = 0; sub_bank < VLM_SUB_BANK_N; sub_bank++) begin
-        has_record = 1'b0;
+      // Gid and sub-bank ownership are derived from every record at this direction and delay.
+      for (int unsigned gid = 0; gid < GID_N; gid++) begin
+        for (int unsigned sub_bank = 0; sub_bank < VLM_SUB_BANK_N; sub_bank++) begin
+          has_record = 1'b0;
 
-        // Multiple different BANK records may legally contribute to the same SHM busy bit.
-        for (int unsigned bank = 0; bank < BANK_N; bank++) begin
-          rec = scheduler.shm_records[direction][delay][bank];
-          if (rec != null) begin
-            rec_sub_bank = rec.address[6:5];
-            if (rec_sub_bank == sub_bank) begin
-              has_record = 1'b1;
+          // Multiple different BANK records may legally contribute to the same SHM busy bit.
+          for (int unsigned bank = 0; bank < BANK_N; bank++) begin
+            rec = scheduler.shm_records[direction][delay][bank];
+            if (rec != null) begin
+              rec_sub_bank = rec.address[6:5];
+              if (int'(rec.gid) == gid && rec_sub_bank == sub_bank) begin
+                has_record = 1'b1;
+              end
             end
           end
-        end
 
-        expected_busy = scheduler.external_busy[direction][delay][sub_bank] |
-                        scheduler.shm_busy[direction][delay][sub_bank];
+          expected_busy = scheduler.external_busy[direction][delay][gid][sub_bank] |
+                          scheduler.shm_busy[direction][delay][gid][sub_bank];
 
         // External and DUT SHM ownership may never occupy the same direction, delay, and sub-bank slot.
-        if (scheduler.external_busy[direction][delay][sub_bank] &&
-            scheduler.shm_busy[direction][delay][sub_bank]) begin
+          if (scheduler.external_busy[direction][delay][gid][sub_bank] &&
+              scheduler.shm_busy[direction][delay][gid][sub_bank]) begin
           result.busy_error_count++;
           busy_error_count++;
           `uvm_error("VLM_RESERVATION_BUSY_OVERLAP",
                      $sformatf("cycle %0d direction %0d delay %0d sub bank %0d has external and SHM ownership",
                                txn.cycle, direction, delay, sub_bank))
-        end
+          end
 
         // SHM busy must be exactly the OR reduction of all BANK records selecting this sub bank.
-        if (scheduler.shm_busy[direction][delay][sub_bank] != has_record) begin
+          if (scheduler.shm_busy[direction][delay][gid][sub_bank] != has_record) begin
           result.busy_error_count++;
           busy_error_count++;
           `uvm_error("VLM_RESERVATION_SHM_BUSY_RECORD",
                      $sformatf("cycle %0d direction %0d delay %0d sub bank %0d SHM busy is %0b, expected %0b",
                                txn.cycle, direction, delay, sub_bank,
-                               scheduler.shm_busy[direction][delay][sub_bank], has_record))
-        end
+                               scheduler.shm_busy[direction][delay][gid][sub_bank], has_record))
+          end
 
         // Final busy is a derived view and must never differ from the OR of its two ownership sources.
-        if (scheduler.final_busy[direction][delay][sub_bank] != expected_busy) begin
+          if (scheduler.final_busy[direction][delay][gid][sub_bank] != expected_busy) begin
           result.busy_error_count++;
           busy_error_count++;
           `uvm_error("VLM_RESERVATION_FINAL_BUSY",
                      $sformatf("cycle %0d direction %0d delay %0d sub bank %0d final busy is %0b, expected %0b",
                                txn.cycle, direction, delay, sub_bank,
-                               scheduler.final_busy[direction][delay][sub_bank], expected_busy))
-        end
+                               scheduler.final_busy[direction][delay][gid][sub_bank], expected_busy))
+          end
 
         // A cycle containing any monitor X/Z cannot provide a reliable normalized observed-busy comparison.
-        if (!txn.input_error && txn.observed_busy[direction][delay][sub_bank] != expected_busy) begin
+          if (!txn.input_error && txn.observed_busy[direction][delay][gid][sub_bank] != expected_busy) begin
           result.busy_error_count++;
           busy_error_count++;
           `uvm_error("VLM_RESERVATION_OBSERVED_BUSY",
                      $sformatf("cycle %0d direction %0d delay %0d sub bank %0d observed busy is %0b, expected %0b",
                                txn.cycle, direction, delay, sub_bank,
-                               txn.observed_busy[direction][delay][sub_bank], expected_busy))
+                               txn.observed_busy[direction][delay][gid][sub_bank], expected_busy))
+          end
         end
       end
     end
@@ -406,9 +415,9 @@ function bit vlm_reservation_checker::check_reservation_request(
   end
 
   sub_bank = rsv.address[6:5];
-  observed_target_busy = !txn.input_error && txn.observed_busy[direction][rsv.delay][sub_bank];
-  owned_target_busy = scheduler.external_busy[direction][rsv.delay][sub_bank] |
-                      scheduler.shm_busy[direction][rsv.delay][sub_bank];
+  observed_target_busy = !txn.input_error && txn.observed_busy[direction][rsv.delay][rsv.gid][sub_bank] &&
+                         scheduler.external_busy[direction][rsv.delay][rsv.gid][sub_bank];
+  owned_target_busy = scheduler.external_busy[direction][rsv.delay][rsv.gid][sub_bank];
 
   // A request is illegal when either reliable observed busy or authoritative scheduler ownership is occupied.
   if (observed_target_busy || owned_target_busy) begin
@@ -518,8 +527,8 @@ function void vlm_reservation_checker::check_mem_request_pair(
   rec_due_cycle = rec.issue_cycle + rec.issue_delay;
 
   // A legal MEM request requires exclusive SHM ownership of its delay-zero sub-bank slot.
-  if (!scheduler.shm_busy[direction][0][sub_bank] ||
-      scheduler.external_busy[direction][0][sub_bank]) begin
+  if (!scheduler.shm_busy[direction][0][rec.gid][sub_bank] ||
+      scheduler.external_busy[direction][0][rec.gid][sub_bank]) begin
     request_matches = 1'b0;
     result.mem_match_error_count++;
     mem_match_error_count++;
@@ -549,6 +558,9 @@ function void vlm_reservation_checker::check_mem_request_pair(
   end
 
   if (request_matches) begin
+    result.mem_gid[direction][bank] = rec.gid;
+    result.mem_gid_valid[direction][bank] = 1'b1;
+    result.mem_reservation_matched[direction][bank] = 1'b1;
     result.matched_mem_request_count++;
     matched_mem_request_count++;
   end

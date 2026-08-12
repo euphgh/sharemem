@@ -2,9 +2,9 @@
 
 This example checks that VCS can elaborate `RpuShmTop` together with:
 
-- `vlm_reservation_agent`;
-- `vlm_memory_slv_agent`, including its monitor, driver, and sequencer;
-- `vlm_reservation_interface` and `vlm_memory_interface`;
+- unified `vlm_agent`, including atomic monitoring, reservation checking, gid resolution,
+  scheduling, MEM publication, and read response;
+- unified `vlm_interface`;
 - the shared `clk_if`.
 
 The compile and directed-test commands run on the Ubuntu VCS environment. Run

@@ -266,7 +266,11 @@ function bit shmins_strided_sequence_item::candidate_stream_is_legal(
     for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
       longint unsigned key;
 
-      key = physical_byte_key(mapped.bank_id, mapped.baddr + byte_lane);
+      begin
+        shm_physical_addr_t byte_addr = mapped.physical_addr;
+        byte_addr.baddr += shm_baddr_t'(byte_lane);
+        key = make_physical_byte_key(byte_addr);
+      end
       if (used_bytes.exists(key) || candidate_bytes.exists(key)) begin
         return 1'b0;
       end
@@ -294,7 +298,11 @@ function void shmins_strided_sequence_item::commit_strided_stream(
     end
     mapped = map_maddr(thread_idx, elem_maddr[thread_idx][elem_idx]);
     for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
-      used_bytes[physical_byte_key(mapped.bank_id, mapped.baddr + byte_lane)] = 1'b1;
+      begin
+        shm_physical_addr_t byte_addr = mapped.physical_addr;
+        byte_addr.baddr += shm_baddr_t'(byte_lane);
+        used_bytes[make_physical_byte_key(byte_addr)] = 1'b1;
+      end
     end
   end
 endfunction : commit_strided_stream

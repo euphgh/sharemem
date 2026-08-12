@@ -22,11 +22,11 @@ $VER_CMN/uvc/clock/clk_if.sv
 +incdir+$VER_CMN/uvc/shmins_agent/sequences
 $VER_CMN/uvc/shmins_agent/shmins_interface.sv
 
-+incdir+$VER_CMN/uvc/vlm_memory_agent
-$VER_CMN/uvc/vlm_memory_agent/vlm_memory_interface.sv
++incdir+$VER_CMN/uvc/vlm_agent
+$VER_CMN/uvc/vlm_agent/vlm_interface.sv
 
++incdir+$VER_CMN/uvc/vlm_memory_agent
 +incdir+$VER_CMN/uvc/vlm_reservation_agent
-$VER_CMN/uvc/vlm_reservation_agent/vlm_reservation_interface.sv
 
 # Environment Checkers Directory
 +incdir+$TB_DIR/env

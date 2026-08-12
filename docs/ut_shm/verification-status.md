@@ -6,8 +6,8 @@
 `SHMINS-012` 的 benchmark-only 拆分计划；同日已完成公共基类和
 contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结果见
 [实测快照](guide/ubuntu-vcs-check.md#6-2026-08-06-实测快照)，不作为闭环以下功能问题的证据。
-2026-08-11 已将双 gid BANK 接口写入当前 spec；RTL top 已改动，但验证环境代码尚未
-迁移，实施顺序由
+2026-08-11 已将双 gid BANK 接口写入当前 spec；RTL top 和验证环境主数据路径已开始
+同步迁移，实施顺序由
 [双 gid 开发计划](../development/shm-dual-bank-interface-refactor-plan.md)统一规定。
 
 ## 1. 状态和优先级
@@ -60,10 +60,10 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
 |`COV-001`|P1|待实现|跨组件|ut_shm 尚未建立 functional coverage 模型|
-|`DBANK-001`|P0|待实现|共享地址/shmins|逻辑地址→物理 gid/BADDR 两层映射、16-bit `creq_vaddr` 和 M2V byte-overlap 未实现|
-|`DBANK-002`|P0|待实现|reference/expected model|wmap、ref memory 和派生地址缺少 gid 维度|
-|`DBANK-003`|P0|待实现|interface/environment|MEM/reservation interface 和 monitor 尚未合并，top 新端口未贯通|
-|`DBANK-004`|P0|待实现|VLM agent/scoreboard|gid busy、跨 gid MEM-port conflict、唯一到期 resolver、read driver 和 actual memory 未实现|
+|`DBANK-001`|P0|待验证|共享地址/shmins|两层映射、16-bit `creq_vaddr` 和 M2V byte-overlap 已编码且通过空 DUT 编译，待定向验证|
+|`DBANK-002`|P0|待验证|reference/expected model|gid-aware wmap、reference memory 和派生地址已编码且通过空 DUT 编译，待定向验证|
+|`DBANK-003`|P0|待验证|interface/environment|统一 interface/agent 和 top 新端口已接入且通过空 DUT 编译，待定向验证|
+|`DBANK-004`|P0|待验证|VLM agent/scoreboard|gid busy、唯一到期解析、read response 和 actual memory 已编码且通过空 DUT 编译，待定向验证|
 |`DBANK-005`|P1|待实现|test/coverage|双 gid 地址、数据隔离、reservation ownership 和 M2V hazard 缺少定向证据|
 |`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 数据通路和 reference mask 已实现，待远端验证|
 |`SHMINS-002`|P0|待实现|shmins transaction|`do_copy()` 遗漏或错误复制关键字段|
@@ -80,10 +80,10 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
-|`REF-001`|P0|待实现|reference|SPACE_BLK 映射没有处理非零 `warp_group`|
+|`REF-001`|P0|实现中|reference|已改用公共 absolute-warp 映射，待非零 `warp_group` 定向验证|
 |`SCB-002`|P1|待实现|scoreboard|128-cycle timeout 固定，可能把合法长延迟误报为失败|
 |`RSV-002`|P1|待实现|reservation coverage|coverage 组件目前为空实现|
-|`RSV-003`|P1|待实现|reservation example|external busy 定向测试仍访问失效字段名|
+|`RSV-003`|P1|待验证|reservation example|external busy 定向测试已迁移到统一 VLM interface，待远端运行|
 |`RSV-004`|P1|待实现|reservation checker|全局 `input_error` 会屏蔽无关 slot 的检查|
 |`RSV-005`|P1|待实现|reservation monitor|复位期间没有检查 DUT request/valid 必须为 0|
 
@@ -105,10 +105,22 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 在 `DBANK-004` 提供可信 resolver 后一起接入。完整逐文件和阶段验收见
 [开发计划](../development/shm-dual-bank-interface-refactor-plan.md#4-必须遵守的实现顺序)。
 
+2026-08-11 当前验证记录：
+
+- `make preflight` 在新远端服务器通过，完整 filelist、VIP 和空 `RpuShmTop` 输入齐全；
+- VCS license 恢复后，`scripts/ubuntu/check_vlm_reservation_vcs.sh compile` 完成统一
+  VLM interface/agent 空设计示例的 parse、elaboration 和 simv link；
+- 随后执行 `make compile`，27 个模块全部完成编译，`shm_tb_top` 使用空
+  `RpuShmTop` 完成 elaboration 和 simv link。日志保留在远端
+  `build/ut_shm/compile.log`，末尾记录 `51.332 seconds to compile + .300 seconds to
+  elab + 1.183 seconds to link`；
+- 以上证据解除静态编译门禁，因此 `DBANK-001`～`DBANK-004` 转为“待验证”；它不等同于
+  双 gid 定向功能测试或真实 RTL regression 通过。
+
 ### `DBANK-001` 两层地址模型与合法激励
 
-- 现状：验证参数仍定义旧 `VADDR_W/BADDR_W`，三种 space 直接形成旧 BADDR，M2V
-  `creq_vaddr` 仍按单 WARP local address 生成。
+- 现状：共享参数已删除 `VADDR_W` 并定义双 gid 物理地址；split item 已回填逻辑/物理
+  element 地址、使用 gid-aware byte key，并为 M2V 生成 byte-disjoint writeback BADDR。
 - 目标：三种 space 输出 `<bank,absolute warp,laddr>`，公共 helper 统一生成 gid/BADDR；
   `creq_vaddr` 改为 16 bit 并携带 gid 内 WARP 基址；M2V 排除有效 read/write byte overlap。
 - 验收：地址公式测试覆盖 warp 0/3/4/7、SPACE_BLK 非零 group 和 WARP 首尾；三类
@@ -116,8 +128,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `DBANK-002` gid-aware reference 与 expected memory key
 
-- 现状：`wmap`、element 地址数组和 `ref_banks` 只以 bank/BADDR 索引，reference M2V
-  还会额外增加 `creq_wpid*WARP_STEP`。
+- 现状：`wmap` 已用 flattened `<bank,gid>` storage index，`ref_banks` 已扩展为
+  `[BANK_N][GID_N]`；reference M2V 直接使用 `creq_vaddr` 并从 wpid 取得 write gid。
 - 目标：全部 expected physical byte key 改为 `<bank,gid,BADDR>`；reference M2V 直接使用
   `creq_vaddr`，只从 wpid 得到 write gid。
 - 验收：相同 bank/BADDR、不同 gid 的数据隔离；V2M/VTRANS/M2V 的 wpid 3/4 定向
@@ -125,8 +137,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `DBANK-003` 统一 VLM interface 与静态连接
 
-- 现状：tb/environment 仍实例化独立 memory/reservation interface 和 agent，busy 没有
-  gid，新增 `rgid/wgid` 未连接。
+- 现状：tb/environment 已只实例化统一 `vlm_interface` 和 `vlm_agent`，busy、`rgid/wgid`
+  及 MEM 信号已连接；旧 memory/reservation agent 不再由主环境实例化。
 - 目标：一个 VLM interface 原子承载 MEM/reservation 信号，一个 monitor 负责采样，
   仍保留 reservation cycle 和 memory 两种 transaction。
 - 验收：空 DUT和集成 top 编译/elaboration 通过；gid 宽度/XZ 检查接入；只有一个 MEM
@@ -134,8 +146,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `DBANK-004` Reservation resolver 与数据路径
 
-- 现状：scheduler busy 没有 gid，record 不保存 gid；memory driver和 scoreboard 无法从
-  无 gid MEM 接口判断物理 BANK。
+- 现状：scheduler busy 和 record 已携带 gid；checker 从唯一到期 record 生成 per-BANK
+  match metadata，统一 agent 固定 metadata 后驱动 read response/发布 write，scoreboard
+  只对 matched transaction 访问对应 gid memory。
 - 目标：busy ownership 使用 `[direction][delay][gid][subbank]`，MEM port record 保持
   `[direction][delay][bank]`；resolver 从唯一到期 record 恢复 gid，read driver复用同一
   match result，scoreboard actual memory增加gid，未匹配 MEM 不更新可信模型。
@@ -353,8 +366,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `REF-001` SPACE_BLK `warp_group`
 
-- 现状：`shm_wtrans_item.generate_wdata()` 把 `warp_index` 直接设为 `warp_offs`，没有
-  加入 `warp_group * creq_wpnum`。
+- 现状：`shm_wtrans_item.generate_wdata()` 已改用 sequence item 的公共两层地址映射，
+  SPACE_BLK 逻辑地址包含 `warp_group*wpnum+warp_offset`；尚无非零 group 的定向证据。
 - 影响：非零 MADDR 高位对应的 SPACE_BLK BADDR 和 WARP 选择错误。
 - 目标依据：[地址模型的 SPACE_BLK 映射](spec/address-model.md#7-space_blk)。
 - 验收：使用非零 `warp_group`、`creq_wpnum` 为 1/2/4 的定向 reference 测试。

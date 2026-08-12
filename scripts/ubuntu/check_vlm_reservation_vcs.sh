@@ -60,8 +60,8 @@ utility_package="$repo_root/ut_shm/util/shm_util_package.sv"
 clock_interface="$repo_root/ver_common/uvc/clock/clk_if.sv"
 memory_agent_dir="$repo_root/ver_common/uvc/vlm_memory_agent"
 reservation_agent_dir="$repo_root/ver_common/uvc/vlm_reservation_agent"
-memory_interface="$memory_agent_dir/vlm_memory_interface.sv"
-reservation_interface="$reservation_agent_dir/vlm_reservation_interface.sv"
+vlm_agent_dir="$repo_root/ver_common/uvc/vlm_agent"
+vlm_interface="$vlm_agent_dir/vlm_interface.sv"
 dut_source="$design_root/RpuTop/src/RpuShm/RpuShmTop.sv"
 
 vcs_common=(
@@ -73,6 +73,7 @@ vcs_common=(
     "+incdir+$repo_root/ut_shm/util"
     "+incdir+$memory_agent_dir"
     "+incdir+$reservation_agent_dir"
+    "+incdir+$vlm_agent_dir"
 )
 vcs_extra=("$@")
 
@@ -100,8 +101,7 @@ compile_integration() {
     local simv="$build_dir/simv"
 
     prepare_build
-    require_file "$memory_interface"
-    require_file "$reservation_interface"
+    require_file "$vlm_interface"
     require_file "$dut_source"
     require_file "$example_dir/tb.sv"
 
@@ -111,8 +111,7 @@ compile_integration() {
         "${vcs_common[@]}" \
             "$utility_package" \
             "$clock_interface" \
-            "$memory_interface" \
-            "$reservation_interface" \
+            "$vlm_interface" \
             "$dut_source" \
             "$example_dir/tb.sv" \
             "${vcs_extra[@]}" \
@@ -147,8 +146,7 @@ run_external_busy() {
     local simv="$build_dir/external_busy_simv"
 
     prepare_build
-    require_file "$memory_interface"
-    require_file "$reservation_interface"
+    require_file "$vlm_interface"
     require_file "$example_dir/external_busy_tb.sv"
 
     printf 'Ubuntu VCS：编译并运行 reservation external busy 定向测试\n'
@@ -157,8 +155,7 @@ run_external_busy() {
         "${vcs_common[@]}" \
             "$utility_package" \
             "$clock_interface" \
-            "$memory_interface" \
-            "$reservation_interface" \
+            "$vlm_interface" \
             "$example_dir/external_busy_tb.sv" \
             "${vcs_extra[@]}" \
             -top external_busy_tb \

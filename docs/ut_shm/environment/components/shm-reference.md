@@ -48,10 +48,12 @@ Reference 按 `shmins_monitor` 发布 creq 的顺序立即更新 `ref_banks`。D
 2. MADDR 映射得到的逻辑 `<bank_id, absolute_warp_id, laddr>`；
 3. 公共物理映射得到的 `<bank_id, gid, BADDR>`；
 4. element mask 展开的逐 byte strobe；
-5. 本笔指令预期写出的 `wmap[bank][gid][baddr]=byte`。
+5. 本笔指令预期写出的物理 byte map。当前集合工具用
+   `wmap[physical_bank_index(bank,gid)][baddr]=byte` 扁平存储，语义 key 仍是
+   `<bank,gid,BADDR>`。
 
-这些计算必须与地址 spec 的 LOC/WRP/BLK、interleave 和地址空洞规则一致。当前
-SPACE_BLK 对非零 `warp_group` 的展开不完整，见 `REF-001`。
+这些计算通过公共 helper 落实地址 spec 的 LOC/WRP/BLK、interleave 和地址空洞规则。
+SPACE_BLK 已包含非零 `warp_group`，但仍按 `REF-001` 管理其定向验证。
 
 ## 5. V2M 和 VTRANS
 
@@ -118,11 +120,11 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 
 ## 11. 当前实现状态
 
-- `REF-001`：SPACE_BLK 映射遗漏非零 `warp_group`。
+- `REF-001`：SPACE_BLK 公共映射已接入，等待非零 `warp_group` 定向验证。
 - `SHMINS-001`：reference mask 已实现，等待远端 DUT/VCS 定向验证。
 - `SHMINS-002`：输入 transaction copy 会丢失关键字段。
 - `SHMINS-003`：生成约束可能给 reference 输入非法地址。
 - `ENV-001`：运行中 reset 未重建 `ref_banks` 或取消旧期望。
-- 当前 reference memory、wmap 和 M2V 写回仍是单 gid 旧模型，待按双 gid 开发计划迁移。
+- 双 gid reference memory、wmap 和 M2V 写回主路径已编码，尚缺 VCS 与 wpid 3/4 定向证据。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

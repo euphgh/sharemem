@@ -63,8 +63,8 @@ constraint c_addr_bound {
     // LDST_S / LDST_V: addr = base + offs[0] + k*dbw
     // guard k==0 so constraint is emitted once per thread
     (k == 0 && creq_itype inside {LDST_S, LDST_V} && creq_dtype == DTYP_32 && creq_space == SPACE_LOC && elem_cnt_max > 0) -> (
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(1 << VADDR_W)-1]}) &&
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) * 4 inside {[0:(1 << VADDR_W)-1]})
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:WARP_STEP-1]}) &&
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) * 4 inside {[0:WARP_STEP-1]})
     );
     (k == 0 && creq_itype inside {LDST_S, LDST_V} && creq_dtype == DTYP_32 && creq_space == SPACE_WRP && elem_cnt_max > 0) -> (
       ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(1 << BADDR_W)-1]}) &&
@@ -72,51 +72,52 @@ constraint c_addr_bound {
     );
     // TODO: curr SPACE_BLK mode constraint to unify address is too strong.
     (k == 0 && creq_itype inside {LDST_S, LDST_V} && creq_dtype == DTYP_32 && creq_space == SPACE_BLK) -> (
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(1 << (VADDR_W + 4 + wpid_width))-1]}) &&
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + creq_len[t] inside {[0:(1 << (VADDR_W + 4 + wpid_width))-1]})
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(WARP_STEP << (4 + wpid_width))-1]}) &&
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + creq_len[t] inside {[0:(WARP_STEP << (4 + wpid_width))-1]})
     );
     (k == 0 && creq_itype inside {LDST_S, LDST_V} && creq_dtype == DTYP_16 && creq_space == SPACE_LOC && elem_cnt_max > 0) -> (
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(1 << VADDR_W)-1]}) &&
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) * 2 inside {[0:(1 << VADDR_W)-1]})
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:WARP_STEP-1]}) &&
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) * 2 inside {[0:WARP_STEP-1]})
     );
     (k == 0 && creq_itype inside {LDST_S, LDST_V} && creq_dtype == DTYP_16 && creq_space == SPACE_WRP && elem_cnt_max > 0) -> (
       ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(1 << BADDR_W)-1]}) &&
       ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) * 2 inside {[0:(1 << BADDR_W)-1]})
     );
     (k == 0 && creq_itype inside {LDST_S, LDST_V} && creq_dtype == DTYP_16 && creq_space == SPACE_BLK && elem_cnt_max > 0) -> (
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(1 << (VADDR_W + 4 + wpid_width))-1]}) &&
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + creq_len[t] inside {[0:(1 << (VADDR_W + 4 + wpid_width))-1]})
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(WARP_STEP << (4 + wpid_width))-1]}) &&
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + creq_len[t] inside {[0:(WARP_STEP << (4 + wpid_width))-1]})
     );
     (k == 0 && creq_itype inside {LDST_S, LDST_V} && creq_dtype == DTYP_8 && creq_space == SPACE_LOC && elem_cnt_max > 0) -> (
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(1 << VADDR_W)-1]}) &&
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) inside {[0:(1 << VADDR_W)-1]})
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:WARP_STEP-1]}) &&
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) inside {[0:WARP_STEP-1]})
     );
     (k == 0 && creq_itype inside {LDST_S, LDST_V} && creq_dtype == DTYP_8 && creq_space == SPACE_WRP && elem_cnt_max > 0) -> (
       ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(1 << BADDR_W)-1]}) &&
       ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) inside {[0:(1 << BADDR_W)-1]})
     );
     (k == 0 && creq_itype inside {LDST_S, LDST_V} && creq_dtype == DTYP_8 && creq_space == SPACE_BLK && elem_cnt_max > 0) -> (
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(1 << (VADDR_W + 4 + wpid_width))-1]}) &&
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) inside {[0:(1 << (VADDR_W + 4 + wpid_width))-1]})
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] inside {[0:(WARP_STEP << (4 + wpid_width))-1]}) &&
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][0] + (int'(elem_cnt_max) - 1) inside
+       {[0:(WARP_STEP << (4 + wpid_width))-1]})
     );
 
     // LDSTE_S: addr = base + k * offs[0]
     (k == 0 && creq_itype == LDSTE_S && creq_space == SPACE_LOC && elem_cnt_max > 0) -> (
       (offs_elem[t][0] != 0) && // zero cause all address of elem are same
-      (offs_elem[t][0] inside {[- (1 << VADDR_W):(1 << VADDR_W)-1]}) && // contraint abs not too big
-      ((int'(creq_base[MADDR_W-1:0])) inside {[0:(1 << VADDR_W)-1]}) &&
-      ((int'(creq_base[MADDR_W-1:0])) + (int'(elem_cnt_max) - 1) * offs_elem[t][0] inside {[0:(1 << VADDR_W)-1]})
+      (offs_elem[t][0] inside {[-WARP_STEP:WARP_STEP-1]}) && // contraint abs not too big
+      ((int'(creq_base[MADDR_W-1:0])) inside {[0:WARP_STEP-1]}) &&
+      ((int'(creq_base[MADDR_W-1:0])) + (int'(elem_cnt_max) - 1) * offs_elem[t][0] inside {[0:WARP_STEP-1]})
     );
 
     // LDSTE_V: addr = base + offs[k] (per-element)
     (creq_itype == LDSTE_V && k < int'(elem_cnt_max) && creq_space == SPACE_LOC) -> (
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][k] inside {[0:(1 << VADDR_W)-1]})
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][k] inside {[0:WARP_STEP-1]})
     );
     (creq_itype == LDSTE_V && k < int'(elem_cnt_max) && creq_space == SPACE_WRP) -> (
       ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][k] inside {[0:(1 << BADDR_W)-1]})
     );
     (creq_itype == LDSTE_V && k < int'(elem_cnt_max) && creq_space == SPACE_BLK) -> (
-      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][k] inside {[0:(1 << (VADDR_W + 4 + wpid_width))-1]})
+      ((int'(creq_base[MADDR_W-1:0])) + offs_elem[t][k] inside {[0:(WARP_STEP << (4 + wpid_width))-1]})
     );
   }
 }

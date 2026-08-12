@@ -4,10 +4,8 @@
 initial begin
   uvm_config_db#(virtual shmins_interface)::set(
       null, "*", "shmins_vif", shmins_intf);
-  uvm_config_db#(virtual vlm_memory_interface)::set(
-      null, "*", "memory_vif", vlm_memory_intf);
-  uvm_config_db#(virtual vlm_reservation_interface)::set(
-      null, "*", "reservation_vif", vlm_reservation_intf);
+  uvm_config_db#(virtual vlm_interface)::set(
+      null, "*", "vlm_vif", vlm_intf);
   uvm_config_db#(virtual clk_if)::set(
       null, "*", "clk_vif", clock_intf);
 end

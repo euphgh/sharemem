@@ -1,11 +1,11 @@
 `timescale 1ns/1ps
 
-package vlm_reservation_compile_test_pkg;
+package vlm_compile_test_pkg;
   import uvm_pkg::*;
   import shm_util_package::*;
 
   `include "uvm_macros.svh"
-
+  `include "vlm_memory_sequence_item.svh"
   `include "vlm_reservation_types.svh"
   `include "vlm_reservation_agent_config.svh"
   `include "vlm_reservation_scheduler.svh"
@@ -13,118 +13,55 @@ package vlm_reservation_compile_test_pkg;
   `include "vlm_reservation_coverage.svh"
   `include "vlm_reservation_monitor.svh"
   `include "vlm_reservation_agent.svh"
-
-  `include "vlm_memory_sequence_item.svh"
-  `include "vlm_memory_slv_agent_config.svh"
-  `include "vlm_memory_monitor.svh"
-  `include "vlm_memory_slv_driver.svh"
-  `include "vlm_memory_slv_sequencer.svh"
-  `include "vlm_memory_slv_agent.svh"
+  `include "vlm_agent.svh"
 
   //----------------------------------------------------------------------------
-  // @brief Builds reservation and memory agents connected to interfaces from tb.
-  //
-  // This test only proves UVM construction and elaboration. It does not raise
-  // an objection, drive requests, or require the DUT shell to produce behavior.
+  // @brief Builds the unified VLM agent against an empty DUT shell.
   //----------------------------------------------------------------------------
-  class vlm_reservation_compile_test extends uvm_test;
+  class vlm_compile_test extends uvm_test;
+    vlm_reservation_agent_config cfg;
+    vlm_agent agent;
 
-    // Interface configuration passed to the reservation agent.
-    vlm_reservation_agent_config reservation_cfg;
-
-    // Activation policy passed to the VLM memory slave agent.
-    vlm_memory_slv_agent_config memory_cfg;
-
-    // Reservation agent whose complete child hierarchy is compiled.
-    vlm_reservation_agent reservation_agent;
-
-    // VLM memory slave agent whose complete child hierarchy is compiled.
-    vlm_memory_slv_agent memory_agent;
-
-    //--------------------------------------------------------------------------
-    // @brief Constructs the compile-only UVM test.
+    //------------------------------------------------------------------------
+    // @brief Constructs the compile-only test.
     //
-    // @param name   UVM component instance name.
+    // @param name UVM component instance name.
     // @param parent Parent component that owns this test.
-    //--------------------------------------------------------------------------
-    function new(string name = "vlm_reservation_compile_test", uvm_component parent = null);
+    //------------------------------------------------------------------------
+    function new(string name = "vlm_compile_test", uvm_component parent = null);
       super.new(name, parent);
-    endfunction
+    endfunction : new
 
-    //--------------------------------------------------------------------------
-    // @brief Retrieves interfaces and constructs both VLM agents.
+    //------------------------------------------------------------------------
+    // @brief Retrieves the unified interface and builds one VLM agent.
     //
-    // @param phase UVM build phase used for configuration and construction.
-    // @post Both agents receive their required configuration and interfaces.
-    //--------------------------------------------------------------------------
+    // @param phase UVM build phase.
+    //------------------------------------------------------------------------
     virtual function void build_phase(uvm_phase phase);
       super.build_phase(phase);
-
-      reservation_cfg = vlm_reservation_agent_config::type_id::create("reservation_cfg");
-      memory_cfg      = vlm_memory_slv_agent_config::type_id::create("memory_cfg");
-
-      if (!uvm_config_db#(virtual vlm_reservation_interface)::get(this, "", "reservation_vif",
-                                                                 reservation_cfg.reservation_vif)) begin
-        `uvm_fatal("COMPILE_NO_RESERVATION_VIF", "compile test requires reservation_vif")
+      cfg = vlm_reservation_agent_config::type_id::create("cfg");
+      if (!uvm_config_db#(virtual vlm_interface)::get(this, "", "vlm_vif", cfg.vif)) begin
+        `uvm_fatal("COMPILE_NO_VLM_VIF", "compile test requires vlm_vif")
       end
+      uvm_config_db#(vlm_reservation_agent_config)::set(this, "agent", "cfg", cfg);
+      agent = vlm_agent::type_id::create("agent", this);
+    endfunction : build_phase
 
-      if (!uvm_config_db#(virtual vlm_memory_interface)::get(this, "", "memory_vif",
-                                                            reservation_cfg.memory_vif)) begin
-        `uvm_fatal("COMPILE_NO_MEMORY_VIF", "compile test requires memory_vif")
-      end
+    `uvm_component_utils(vlm_compile_test)
+  endclass : vlm_compile_test
 
-      uvm_config_db#(vlm_reservation_agent_config)::set(this, "reservation_agent", "cfg", reservation_cfg);
-      uvm_config_db#(vlm_memory_slv_agent_config)::set(this, "memory_agent", "cfg", memory_cfg);
-      uvm_config_db#(virtual vlm_memory_interface)::set(this, "memory_agent", "memory_vif", reservation_cfg.memory_vif);
-
-      reservation_agent = vlm_reservation_agent::type_id::create("reservation_agent", this);
-      memory_agent      = vlm_memory_slv_agent::type_id::create("memory_agent", this);
-    endfunction
-
-    `uvm_component_utils(vlm_reservation_compile_test)
-
-  endclass : vlm_reservation_compile_test
-
-endpackage : vlm_reservation_compile_test_pkg
+endpackage : vlm_compile_test_pkg
 
 module tb;
   import uvm_pkg::*;
   import shm_util_package::*;
-  import vlm_reservation_compile_test_pkg::*;
+  import vlm_compile_test_pkg::*;
 
   logic clk = 1'b0;
   logic rst_n = 1'b0;
 
-  // Shared clock service used by monitor, checker, and scheduler.
-  clk_if clk_vif (
-      .clk(clk)
-  );
-
-  // Reservation interface connecting DUT requests and agent-driven busy.
-  vlm_reservation_interface reservation_vif(clk, rst_n);
-
-  // MEM interface exposing DUT requests to the reservation monitor.
-  vlm_memory_interface memory_vif(clk, rst_n);
-
-  always #5ns clk = ~clk;
-
-  logic [BANK_N-1:0]         mem_rvld         ;
-  logic [BANK_N-1:0][BADDR_W-1:0] mem_raddr   ;
-  logic [BANK_N-1:0][255:0]  mem_rdata        ;
-  logic [BANK_N-1:0]         mem_wvld         ;
-  logic [BANK_N-1:0][BADDR_W-1:0] mem_waddr   ;
-  logic [BANK_N-1:0][31:0]   mem_wstrb        ;
-  logic [BANK_N-1:0][255:0]  mem_wdata        ;
-
-    //BANK REQUEST IO
-  logic [VTAB_D-1:0][3:0]    vlm_wbusy        ;
-  logic [VTAB_D-1:0][3:0]    vlm_rbusy        ;
-  logic [BANK_N-1:0][1:0]    vlm_wreq         ;
-  logic [BANK_N-1:0][1:0][BADDR_W-1:0] vlm_waddr ;
-  logic [BANK_N-1:0][1:0][$clog2(VTAB_D)-1:0] vlm_wdly ;
-  logic [BANK_N-1:0]         vlm_rreq         ;
-  logic [BANK_N-1:0][BADDR_W-1:0] vlm_raddr     ;
-  logic [BANK_N-1:0][$clog2(VTAB_D)-1:0] vlm_rdly;
+  clk_if clk_vif(.clk(clk));
+  vlm_interface vlm_vif(.clk(clk), .rst_n(rst_n));
 
   RpuShmTop #(
       .WARP_STEP (WARP_STEP),
@@ -137,7 +74,6 @@ module tb;
       .ID_W      (ID_W),
       .THD_N     (THD_N),
       .BANK_N    (BANK_N),
-      .VADDR_W   (VADDR_W),
       .MADDR_W   (MADDR_W),
       .BADDR_W   (BADDR_W)
   ) dut (
@@ -161,49 +97,31 @@ module tb;
       .vack_id    (),
       .mack_done  (),
       .mack_id    (),
-      .mem_rvld   (mem_rvld),
-      .mem_raddr  (mem_raddr),
-      .mem_rdata  (mem_rdata),
-      .mem_wvld   (mem_wvld),
-      .mem_waddr  (mem_waddr),
-      .mem_wstrb  (mem_wstrb),
-      .mem_wdata  (mem_wdata),
-      .vlm_wbusy  (vlm_wbusy),
-      .vlm_rbusy  (vlm_rbusy),
-      .vlm_wreq   (vlm_wreq),
-      .vlm_waddr  (vlm_waddr),
-      .vlm_wdly   (vlm_wdly),
-      .vlm_rreq   (vlm_rreq),
-      .vlm_raddr  (vlm_raddr),
-      .vlm_rdly   (vlm_rdly)
+      .mem_rvld   (vlm_vif.rvld),
+      .mem_raddr  (vlm_vif.mem_raddr),
+      .mem_rdata  (vlm_vif.rdata),
+      .mem_wvld   (vlm_vif.wvld),
+      .mem_waddr  (vlm_vif.mem_waddr),
+      .mem_wstrb  (vlm_vif.wstrb),
+      .mem_wdata  (vlm_vif.wdata),
+      .vlm_wbusy  (vlm_vif.wbusy),
+      .vlm_rbusy  (vlm_vif.rbusy),
+      .vlm_wreq   (vlm_vif.wreq),
+      .vlm_waddr  (vlm_vif.waddr),
+      .vlm_wdly   (vlm_vif.wdly),
+      .vlm_wgid   (vlm_vif.wgid),
+      .vlm_rreq   (vlm_vif.rreq),
+      .vlm_raddr  (vlm_vif.raddr),
+      .vlm_rdly   (vlm_vif.rdly),
+      .vlm_rgid   (vlm_vif.rgid)
   );
 
-  always @(*) begin
-    memory_vif.rvld = mem_rvld;
-    memory_vif.raddr = mem_raddr;
-    mem_rdata = memory_vif.rdata; 
-    memory_vif.wvld = mem_wvld;
-    memory_vif.waddr = mem_waddr;
-    memory_vif.wstrb = mem_wstrb;
-    memory_vif.wdata = mem_wdata;
-
-    vlm_wbusy = reservation_vif.wbusy; 
-    vlm_rbusy = reservation_vif.rbusy; 
-
-    reservation_vif.wreq = vlm_wreq;
-    reservation_vif.waddr = vlm_waddr;
-    reservation_vif.wdly = vlm_wdly;
-    reservation_vif.rreq = vlm_rreq;
-    reservation_vif.raddr = vlm_raddr;
-    reservation_vif.rdly = vlm_rdly;
-  end
+  always #5ns clk = ~clk;
 
   initial begin
-    uvm_config_db#(virtual clk_if)::set(null, "uvm_test_top.reservation_agent.*", "clk_vif", clk_vif);
-    uvm_config_db#(virtual vlm_reservation_interface)::set(null, "uvm_test_top", "reservation_vif",
-                                                          reservation_vif);
-    uvm_config_db#(virtual vlm_memory_interface)::set(null, "uvm_test_top", "memory_vif", memory_vif);
-    run_test("vlm_reservation_compile_test");
+    uvm_config_db#(virtual clk_if)::set(null, "uvm_test_top.agent.*", "clk_vif", clk_vif);
+    uvm_config_db#(virtual vlm_interface)::set(null, "uvm_test_top", "vlm_vif", vlm_vif);
+    run_test("vlm_compile_test");
   end
 
 endmodule : tb

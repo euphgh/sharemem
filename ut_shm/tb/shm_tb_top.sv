@@ -12,12 +12,7 @@ module shm_tb_top;
       .rst_n (rst_n)
   );
 
-  vlm_memory_interface vlm_memory_intf (
-      .clk   (clk),
-      .rst_n (rst_n)
-  );
-
-  vlm_reservation_interface vlm_reservation_intf (
+  vlm_interface vlm_intf (
       .clk   (clk),
       .rst_n (rst_n)
   );
@@ -37,7 +32,6 @@ module shm_tb_top;
       .ID_W      (ID_W),
       .THD_N     (THD_N),
       .BANK_N    (BANK_N),
-      .VADDR_W   (VADDR_W),
       .MADDR_W   (MADDR_W),
       .BADDR_W   (BADDR_W)
   ) DUT (
@@ -63,22 +57,24 @@ module shm_tb_top;
       .mack_done  (shmins_intf.mack_done),
       .mack_id    (shmins_intf.mack_id),
 
-      .mem_rvld   (vlm_memory_intf.rvld),
-      .mem_raddr  (vlm_memory_intf.raddr),
-      .mem_rdata  (vlm_memory_intf.rdata),
-      .mem_wvld   (vlm_memory_intf.wvld),
-      .mem_waddr  (vlm_memory_intf.waddr),
-      .mem_wstrb  (vlm_memory_intf.wstrb),
-      .mem_wdata  (vlm_memory_intf.wdata),
+      .mem_rvld   (vlm_intf.rvld),
+      .mem_raddr  (vlm_intf.mem_raddr),
+      .mem_rdata  (vlm_intf.rdata),
+      .mem_wvld   (vlm_intf.wvld),
+      .mem_waddr  (vlm_intf.mem_waddr),
+      .mem_wstrb  (vlm_intf.wstrb),
+      .mem_wdata  (vlm_intf.wdata),
 
-      .vlm_rbusy  (vlm_reservation_intf.rbusy),
-      .vlm_wbusy  (vlm_reservation_intf.wbusy),
-      .vlm_rreq   (vlm_reservation_intf.rreq),
-      .vlm_raddr  (vlm_reservation_intf.raddr),
-      .vlm_rdly   (vlm_reservation_intf.rdly),
-      .vlm_wreq   (vlm_reservation_intf.wreq),
-      .vlm_waddr  (vlm_reservation_intf.waddr),
-      .vlm_wdly   (vlm_reservation_intf.wdly)
+      .vlm_rbusy  (vlm_intf.rbusy),
+      .vlm_wbusy  (vlm_intf.wbusy),
+      .vlm_rreq   (vlm_intf.rreq),
+      .vlm_raddr  (vlm_intf.raddr),
+      .vlm_rdly   (vlm_intf.rdly),
+      .vlm_rgid   (vlm_intf.rgid),
+      .vlm_wreq   (vlm_intf.wreq),
+      .vlm_waddr  (vlm_intf.waddr),
+      .vlm_wdly   (vlm_intf.wdly),
+      .vlm_wgid   (vlm_intf.wgid)
   );
 
   `include "shm_ut_connect.svh"

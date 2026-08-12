@@ -12,8 +12,8 @@ typedef enum bit {
 // Number of independently scheduled reservation directions.
 localparam int unsigned VLM_RESERVATION_DIRECTION_N = 2;
 
-// Two-state busy table indexed by relative delay and sub-bank identifier.
-typedef bit [VTAB_D-1:0][VLM_SUB_BANK_N-1:0] vlm_busy_table_t;
+// Two-state busy table indexed by relative delay, gid, and sub-bank identifier.
+typedef bit [VTAB_D-1:0][GID_N-1:0][VLM_SUB_BANK_N-1:0] vlm_busy_table_t;
 
 //------------------------------------------------------------------------------
 // @brief Carries one fully known actual MEM request sampled by the monitor.
@@ -26,6 +26,10 @@ typedef bit [VTAB_D-1:0][VLM_SUB_BANK_N-1:0] vlm_busy_table_t;
 class vlm_mem_req;
   // Known BANK-local address carried by the actual MEM request.
   bit [BADDR_W-1:0] address;
+
+  // MEM write byte enables and data sampled in the request cycle.
+  bit [VLM_DATA_BYTE_W-1:0] strb;
+  bit [VLM_DATA_BIT_W-1:0] data;
 endclass : vlm_mem_req
 
 //------------------------------------------------------------------------------
@@ -38,6 +42,9 @@ endclass : vlm_mem_req
 class vlm_rsv_req extends vlm_mem_req;
   // Requested number of cycles from issue to the actual MEM request.
   int unsigned delay;
+
+  // Low/high physical bank selected by this reservation.
+  shm_gid_t gid;
 endclass : vlm_rsv_req
 
 //------------------------------------------------------------------------------
@@ -50,6 +57,9 @@ endclass : vlm_rsv_req
 class vlm_shm_record_t;
   // Complete known BANK-local address reserved by the DUT, including low bits.
   bit [BADDR_W-1:0] address;
+
+  // Low/high physical bank carried by the accepted reservation request.
+  shm_gid_t gid;
 
   // Source write-port index; read reservations use zero by convention.
   int unsigned write_port;
@@ -118,6 +128,11 @@ typedef struct {
 
   // Number of MEM requests matched to their unique due records in this cycle.
   int unsigned matched_mem_request_count;
+
+  // Per-direction, per-BANK gid resolution for actual MEM requests.
+  shm_gid_t mem_gid[VLM_RESERVATION_DIRECTION_N][BANK_N];
+  bit mem_gid_valid[VLM_RESERVATION_DIRECTION_N][BANK_N];
+  bit mem_reservation_matched[VLM_RESERVATION_DIRECTION_N][BANK_N];
 } vlm_reservation_check_result_t;
 
 `endif // INC_VLM_RESERVATION_TYPES_SVH

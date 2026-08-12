@@ -290,6 +290,7 @@ function bit vlm_reservation_scheduler::admit_reservation(
     const ref vlm_rsv_req       rsv,
     longint unsigned            issue_cycle);
   int unsigned target_delay;
+  int unsigned gid;
   int unsigned sub_bank;
   vlm_shm_record_t rec;
 
@@ -308,11 +309,11 @@ function bit vlm_reservation_scheduler::admit_reservation(
   end
 
   target_delay = rsv.delay - 1;
+  gid           = int'(rsv.gid);
   sub_bank     = rsv.address[6:5];
 
-  // The shifted target must be free of ownership established before this transaction.
-  if (external_busy[direction][target_delay][sub_bank] ||
-      shm_busy[direction][target_delay][sub_bank]) begin
+  // External occupancy blocks only the selected gid. DUT records are instead serialized per MEM bank port below.
+  if (gid >= GID_N || external_busy[direction][target_delay][gid][sub_bank]) begin
     rejected_record_count++;
     return 1'b0;
   end
@@ -326,6 +327,7 @@ function bit vlm_reservation_scheduler::admit_reservation(
   // Copy the monitor-owned request into an independent immutable scheduler record.
   rec = new();
   rec.address     = rsv.address;
+  rec.gid         = rsv.gid;
   rec.write_port  = write_port;
   rec.issue_cycle = issue_cycle;
   rec.issue_delay = rsv.delay;
@@ -348,7 +350,8 @@ function void vlm_reservation_scheduler::rebuild_shm_busy();
       // Multiple BANK records may set the same bit without creating a DUT-internal conflict.
       for (int unsigned bank = 0; bank < BANK_N; bank++) begin
         if (shm_records[direction][delay][bank] != null) begin
-          shm_busy[direction][delay][shm_records[direction][delay][bank].address[6:5]] = 1'b1;
+          shm_busy[direction][delay][shm_records[direction][delay][bank].gid]
+                  [shm_records[direction][delay][bank].address[6:5]] = 1'b1;
         end
       end
     end
@@ -362,19 +365,20 @@ function void vlm_reservation_scheduler::generate_external_busy();
   for (int unsigned direction = 0; direction < VLM_RESERVATION_DIRECTION_N; direction++) begin
     // Every relative delay is eligible; generation is not restricted to the newest window entry.
     for (int unsigned delay = 0; delay < VTAB_D; delay++) begin
-      // Apply one independent percentage decision to each currently unowned sub-bank slot.
-      for (int unsigned sub_bank = 0; sub_bank < VLM_SUB_BANK_N; sub_bank++) begin
-        if (external_busy[direction][delay][sub_bank] ||
-            shm_busy[direction][delay][sub_bank]) begin
-          continue;
-        end
+      // Apply one independent percentage decision to each currently unowned gid/sub-bank slot.
+      for (int unsigned gid = 0; gid < GID_N; gid++) begin
+        for (int unsigned sub_bank = 0; sub_bank < VLM_SUB_BANK_N; sub_bank++) begin
+          if (external_busy[direction][delay][gid][sub_bank] || shm_busy[direction][delay][gid][sub_bank]) begin
+            continue;
+          end
 
-        random_percent = $urandom_range(99, 0);
+          random_percent = $urandom_range(99, 0);
 
-        // A result below the configured percentage changes this free slot to external ownership.
-        if (random_percent < external_busy_percent) begin
-          external_busy[direction][delay][sub_bank] = 1'b1;
-          generated_external_slot_count++;
+          // A result below the configured percentage changes this free slot to external ownership.
+          if (random_percent < external_busy_percent) begin
+            external_busy[direction][delay][gid][sub_bank] = 1'b1;
+            generated_external_slot_count++;
+          end
         end
       end
     end

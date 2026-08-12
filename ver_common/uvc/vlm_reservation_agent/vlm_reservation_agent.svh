@@ -14,11 +14,15 @@ class vlm_reservation_agent extends uvm_agent;
   // Minimal interface configuration obtained through UVM Config DB.
   vlm_reservation_agent_config cfg;
 
-  // Reservation interface observed for requests and driven for busy.
-  virtual vlm_reservation_interface reservation_vif;
+  // Unified reservation and MEM business interface.
+  virtual vlm_interface vif;
 
-  // Read-only MEM interface used only for actual request valid and address.
-  virtual vlm_memory_interface memory_vif;
+  // Publishes resolved MEM reads and writes with immutable gid metadata.
+  uvm_analysis_port #(vlm_memory_sequence_item) read_analysis_port;
+  uvm_analysis_port #(vlm_memory_sequence_item) write_analysis_port;
+
+  // Obtains read data from the scoreboard memory model.
+  uvm_tlm_b_transport_port #(vlm_memory_sequence_item) mem_port;
 
   // Component owning four-state sampling and two-state normalization.
   vlm_reservation_monitor monitor;
@@ -75,15 +79,24 @@ class vlm_reservation_agent extends uvm_agent;
   extern virtual task main_phase(uvm_phase phase);
 
   //------------------------------------------------------------------------------
-  // @brief Processes one transaction in checker, coverage, scheduler order.
+  // @brief Checks and covers one transaction against pre-update scheduler state.
   //
   // @param txn Two-state reservation and MEM transaction for one cycle.
   // @pre Scheduler still exposes the state sampled in txn.
-  // @post current_check_result contains the checker outcome and scheduler final
-  //       busy is prepared for the next drive.
+  // @post current_check_result contains immutable MEM gid/match metadata; the
+  //       scheduler has not yet advanced.
   //------------------------------------------------------------------------------
   extern function void process_cycle(
       const ref vlm_reservation_cycle_transaction_t txn);
+
+  //------------------------------------------------------------------------------
+  // @brief Publishes resolved writes and schedules resolved read responses.
+  //
+  // @param txn Atomically sampled reservation and MEM transaction.
+  // @param result Pre-update checker result containing per-BANK gid resolution.
+  //------------------------------------------------------------------------------
+  extern protected task process_memory_requests(const ref vlm_reservation_cycle_transaction_t txn,
+                                                const ref vlm_reservation_check_result_t result);
 
   //------------------------------------------------------------------------------
   // @brief Drives scheduler final busy onto the reservation interface.
@@ -99,6 +112,9 @@ endclass : vlm_reservation_agent
 
 function vlm_reservation_agent::new(string name = "vlm_reservation_agent", uvm_component parent = null);
   super.new(name, parent);
+  read_analysis_port = new("read_analysis_port", this);
+  write_analysis_port = new("write_analysis_port", this);
+  mem_port = new("mem_port", this);
 endfunction : new
 
 function void vlm_reservation_agent::build_phase(uvm_phase phase);
@@ -113,12 +129,11 @@ function void vlm_reservation_agent::build_phase(uvm_phase phase);
   end
 
   // Both interfaces are mandatory because every cycle combines reservation and actual MEM observations.
-  if (cfg.reservation_vif == null || cfg.memory_vif == null) begin
-    `uvm_fatal("VLM_RESERVATION_NO_VIF", "reservation agent config requires reservation_vif and memory_vif")
+  if (cfg.vif == null) begin
+    `uvm_fatal("VLM_RESERVATION_NO_VIF", "reservation agent config requires unified vif")
   end
 
-  reservation_vif = cfg.reservation_vif;
-  memory_vif      = cfg.memory_vif;
+  vif = cfg.vif;
 
   // The command-line setting has higher priority than the value supplied by the test config object.
   configured_external_busy_percent = cfg.EXTERNAL_BUSY_PERCENT;
@@ -155,6 +170,7 @@ task vlm_reservation_agent::main_phase(uvm_phase phase);
   super.main_phase(phase);
 
   // Establish a deterministic all-idle busy value before the first sampled reservation cycle.
+  vif.slv_cb.rdata <= '0;
   drive_busy();
 
   forever begin
@@ -163,6 +179,8 @@ task vlm_reservation_agent::main_phase(uvm_phase phase);
 
     // Checking, empty coverage sampling, scheduling, and driving all complete in the sampled cycle.
     process_cycle(current_txn);
+    process_memory_requests(current_txn, current_check_result);
+    scheduler.process_cycle(current_txn);
     drive_busy();
   end
 endtask : main_phase
@@ -175,18 +193,73 @@ function void vlm_reservation_agent::process_cycle(const ref vlm_reservation_cyc
   current_check_result = reservation_checker.check_cycle(txn);
   coverage.sample_cycle(txn, current_check_result);
 
-  // Advance the window only after all current-cycle observations have been checked and sampled.
-  scheduler.process_cycle(txn);
 endfunction : process_cycle
 
+task vlm_reservation_agent::process_memory_requests(
+    const ref vlm_reservation_cycle_transaction_t txn,
+    const ref vlm_reservation_check_result_t result);
+  vlm_memory_sequence_item read_transaction;
+  vlm_memory_sequence_item write_transaction;
+  bit has_read;
+  bit has_write;
+
+  has_read = 1'b0;
+  has_write = 1'b0;
+  read_transaction = vlm_memory_sequence_item::type_id::create("resolved_read_transaction");
+  write_transaction = vlm_memory_sequence_item::type_id::create("resolved_write_transaction");
+  read_transaction.vlm_read = 1'b1;
+  write_transaction.vlm_read = 1'b0;
+
+  for (int unsigned bank = 0; bank < BANK_N; bank++) begin
+    if (txn.mem_rreq_array[bank] != null) begin
+      has_read = 1'b1;
+      read_transaction.vlm_bken[bank] = 1'b1;
+      read_transaction.vlm_addr[bank] = txn.mem_rreq_array[bank].address;
+      read_transaction.vlm_gid[bank] = result.mem_gid[VLM_RESERVATION_READ][bank];
+      read_transaction.gid_valid[bank] = result.mem_gid_valid[VLM_RESERVATION_READ][bank];
+      read_transaction.reservation_matched[bank] = result.mem_reservation_matched[VLM_RESERVATION_READ][bank];
+    end
+    if (txn.mem_wreq_array[bank] != null) begin
+      has_write = 1'b1;
+      write_transaction.vlm_bken[bank] = 1'b1;
+      write_transaction.vlm_addr[bank] = txn.mem_wreq_array[bank].address;
+      write_transaction.vlm_strb[bank] = txn.mem_wreq_array[bank].strb;
+      write_transaction.vlm_data[bank] = txn.mem_wreq_array[bank].data;
+      write_transaction.vlm_gid[bank] = result.mem_gid[VLM_RESERVATION_WRITE][bank];
+      write_transaction.gid_valid[bank] = result.mem_gid_valid[VLM_RESERVATION_WRITE][bank];
+      write_transaction.reservation_matched[bank] = result.mem_reservation_matched[VLM_RESERVATION_WRITE][bank];
+    end
+  end
+
+  if (has_write) begin
+    write_analysis_port.write(write_transaction);
+  end
+  if (has_read) begin
+    uvm_tlm_time delay = new("read_memory_delay");
+    mem_port.b_transport(read_transaction, delay);
+    fork
+      begin
+        automatic vlm_memory_sequence_item completed_transaction = read_transaction;
+        repeat (RPORT_DLY - 1) @(vif.slv_cb);
+        for (int unsigned bank = 0; bank < BANK_N; bank++) begin
+          if (completed_transaction.vlm_bken[bank] && completed_transaction.reservation_matched[bank]) begin
+            vif.slv_cb.rdata[bank] <= completed_transaction.vlm_data[bank];
+          end
+        end
+        read_analysis_port.write(completed_transaction);
+      end
+    join_none
+  end
+endtask : process_memory_requests
+
 function void vlm_reservation_agent::drive_busy();
-  if (reservation_vif == null || scheduler == null) begin
-    `uvm_fatal("VLM_RESERVATION_AGENT_NOT_READY", "drive_busy() requires reservation_vif and scheduler")
+  if (vif == null || scheduler == null) begin
+    `uvm_fatal("VLM_RESERVATION_AGENT_NOT_READY", "drive_busy() requires unified vif and scheduler")
   end
 
   // Publish the scheduler's read and write tables together so the next edge observes one coherent window.
-  reservation_vif.slv_cb.rbusy <= scheduler.final_busy[VLM_RESERVATION_READ];
-  reservation_vif.slv_cb.wbusy <= scheduler.final_busy[VLM_RESERVATION_WRITE];
+  vif.slv_cb.rbusy <= scheduler.final_busy[VLM_RESERVATION_READ];
+  vif.slv_cb.wbusy <= scheduler.final_busy[VLM_RESERVATION_WRITE];
 endfunction : drive_busy
 
 `endif // INC_VLM_RESERVATION_AGENT_SVH

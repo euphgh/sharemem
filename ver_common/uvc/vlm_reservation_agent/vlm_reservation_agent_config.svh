@@ -11,11 +11,8 @@
 //------------------------------------------------------------------------------
 class vlm_reservation_agent_config extends uvm_object;
 
-  // Reservation interface observed for requests and driven for busy.
-  virtual vlm_reservation_interface reservation_vif;
-
-  // Read-only MEM interface used only for actual request valid and address.
-  virtual vlm_memory_interface memory_vif;
+  // Unified interface observed for reservation/MEM requests and driven for busy/read data.
+  virtual vlm_interface vif;
 
   // Percentage probability applied independently to every free external busy slot.
   int unsigned EXTERNAL_BUSY_PERCENT;
@@ -45,7 +42,7 @@ endfunction : new
 
 function bit vlm_reservation_agent_config::validate();
   // Both interfaces and a bounded percentage are required before the active agent can run.
-  return reservation_vif != null && memory_vif != null && EXTERNAL_BUSY_PERCENT <= 100;
+  return vif != null && EXTERNAL_BUSY_PERCENT <= 100;
 endfunction : validate
 
 `endif // INC_VLM_RESERVATION_AGENT_CONFIG_SVH

@@ -48,7 +48,7 @@ typedef enum bit[1:0] {
 class shmins_sequence_item extends uvm_sequence_item;
   parameter WARP_ID_WIDTH_MAX = $clog2(4);
   parameter int unsigned ELEM_MAX_N = VEC_BYTE_N;
-  parameter int unsigned VADDR_MAX = (1 << VADDR_W)-1;
+  parameter int unsigned VADDR_MAX = WARP_STEP-1;
 
   // item data
   rand creq_rw_e      creq_rw       = SHM_V2M ;
@@ -67,7 +67,7 @@ class shmins_sequence_item extends uvm_sequence_item;
   rand logic [$clog2(WARP_N)-1:0] creq_wpid = '0 ;
   rand logic [$clog2(WARP_N+1)-1:0] creq_wpnum = '0 ;
   rand int wpid_width = '0 ;
-  rand logic [VADDR_W-1:0] creq_vaddr = '0 ;
+  rand logic [BADDR_W-1:0] creq_vaddr = '0 ;
   rand logic [47:0] creq_base = '0 ; // byte addr
 
   rand logic [3:0] creq_prio[THD_N] = '{THD_N{'0}}; // thd prio
@@ -162,10 +162,10 @@ class shmins_sequence_item extends uvm_sequence_item;
   // Address space upper bound
   function int unsigned addr_max();
     case (creq_space)
-      SPACE_LOC: return 1 << VADDR_W;
+      SPACE_LOC: return WARP_STEP;
       SPACE_WRP: return 1 << BADDR_W;
       SPACE_BLK: return 1 << MADDR_W;
-      default:   return 1 << VADDR_W;
+      default:   return WARP_STEP;
     endcase
   endfunction
 

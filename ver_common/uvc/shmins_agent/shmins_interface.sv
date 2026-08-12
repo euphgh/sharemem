@@ -14,7 +14,7 @@ interface shmins_interface (
   logic        [THD_N-1:0][3:0]      creq_prio ; //thd prio
   logic        [THD_N-1:0][7:0]      creq_len  ; //element length:0~32
   logic        [19:0]                creq_typ  ; //[15:14]:space[1:0]+[13:10]:ilv_size+[9]:ack_en+[8:7]typ+[6:3]atyp+[2:1]dwidth+[0:0]rw
-  logic        [VADDR_W-1:0]         creq_vaddr;
+  logic        [BADDR_W-1:0]         creq_vaddr;
   logic        [THD_N-1:0]                 creq_tmsk ; //thread mask
   logic        [THD_N-1:0][VEC_BYTE_N-1:0] creq_vmsk ; //element mask
   logic        [47:0]                creq_base ; //byte addr

@@ -28,7 +28,6 @@ class shm_environment_config extends uvm_object;
     // Environment Agent Config Instantiation
     //---------------------------------------------------------------------
     shmins_mst_agent_config shmins_mst_agent_cfg;
-    vlm_memory_slv_agent_config vlm_memory_slv_agent_cfg;
     vlm_reservation_agent_config vlm_reservation_agent_cfg;
 
     extern function new(string name = "shm_environment_config");
@@ -51,15 +50,11 @@ endfunction: new
 
 function void shm_environment_config::init();
     shmins_mst_agent_cfg = shmins_mst_agent_config::type_id::create("shmins_mst_agent_cfg");
-    vlm_memory_slv_agent_cfg =
-        vlm_memory_slv_agent_config::type_id::create("vlm_memory_slv_agent_cfg");
     vlm_reservation_agent_cfg =
         vlm_reservation_agent_config::type_id::create("vlm_reservation_agent_cfg");
     
     shmins_mst_agent_cfg.is_active             = env_is_active;
     shmins_mst_agent_cfg.shmins_mst_is_active  = env_is_active;
-    vlm_memory_slv_agent_cfg.is_active         = env_is_active;
-    vlm_memory_slv_agent_cfg.vlm_memory_slv_is_active = env_is_active;
 endfunction: init
 
 `endif // INC_SHM_ENVIRONMENT_CONFIG_SVH
