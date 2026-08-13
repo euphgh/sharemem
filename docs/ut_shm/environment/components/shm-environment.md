@@ -1,6 +1,6 @@
 # shm_environment
 
-本文说明双 gid 目标架构中 `shm_environment` 如何创建两个 agent、reference 和
+本文说明当前双 gid 架构中 `shm_environment` 如何创建两个 agent、reference 和
 scoreboard，并把 tb top
 发布的 virtual interface 与各组件连接起来。整体层次和跨组件数据流分别见
 [环境总体架构](../architecture.md)与[数据流和数据模型](../data-flow-and-models.md)。
@@ -72,9 +72,9 @@ Environment 按以下顺序建立依赖：
 Reservation agent 不通过 environment TLM 与 scoreboard 相连。它直接读取 reservation
 和 MEM interface，在 agent 内完成周期同步检查。
 
-双 gid 目标架构将 memory/reservation interface 和 monitor 合并为统一 VLM agent。届时
-environment 只配置一个 `vlm_vif`，实际 write 和 read service transaction 都必须先由
-唯一到期 reservation record 补全 gid，再连接 scoreboard。当前分离连接仅代表迁移前实现。
+双 gid 架构已将 memory/reservation interface 和 monitor 合并为统一 VLM agent。
+Environment 只配置一个 `vlm_vif`；实际 write 和 read service transaction 都先由唯一
+到期 reservation record 补全 gid，再连接 scoreboard。
 
 ## 6. Phase 与 reset
 
@@ -112,6 +112,8 @@ interface 的 `rst_n` 处理 reset。
 
 ## 10. 当前实现状态
 
+- 统一 VLM environment 和 shmins/reference/scoreboard 主路径已于 2026-08-13 在真实 RTL
+  集成 testcase 中跑通。
 - `ENV-001`：运行中 reset 尚未统一清理。
 - `ENV-002`：公开配置仍能表达当前不支持的 passive 组合。
 

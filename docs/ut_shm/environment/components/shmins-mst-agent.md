@@ -132,8 +132,8 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 
 `ut_shm/tests/shm_unit_test.svh` 通过 `shmins_mst_unit_sequence` 覆盖当前集成激励入口，
 可用 plusarg 改变 transaction 数量、normal domain 和 VTRANS 比例。当前没有独立的 credit/release、ack
-完整性、四态输入、transaction copy 或 reset 静默单元测试；V2M
-`LDSTE_S + SPACE_WRP/SPACE_BLK` 也缺少 element-0 mask 激励。相关缺口由
+完整性、四态输入、transaction copy 或 reset 静默单元测试。Strided item 已为 V2M
+`LDSTE_S + SPACE_WRP/SPACE_BLK` 生成 element-0 mask，但仍缺少独立 DUT 定向 case。相关缺口由
 `SHMINS-001`～`SHMINS-010` 的验收项追踪。
 
 ## 10. 开发 contract
@@ -152,18 +152,23 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 
 ## 11. 当前实现状态
 
-- `SHMINS-001`：`creq_tmsk` 数据链已实现，等待远端 DUT/VCS 定向验证。
-- `SHMINS-002`：transaction copy 不完整。
-- `SHMINS-003`：地址约束与 12 KiB 地址模型不一致。
-- `SHMINS-004`：部分 unit-sequence 配置未作用到 item。
+- `SHMINS-012`：topology-based 正式 sequence item、benchmark、consumer 和真实 RTL 集成
+  已于 2026-08-13 验证完成并关闭。
+- `SHMINS-001`：`creq_tmsk` 数据链已实现并通过系统 smoke，等待 mask 边界定向验证。
+- `SHMINS-002`：transaction copy 已完整实现并通过 reference consumer 交叉测试，等待
+  独立逐字段/VTRANS 定向验证。
+- `SHMINS-003`：过程式 MADDR 生成、12 KiB/空洞检查和两层映射已实现并通过系统 smoke，
+  等待全部边界定向验证。
+- `SHMINS-004`：ATYPE_S/G 等 allowed-value domain 已作用到 item，等待 testcase 配置到
+  monitor 的端到端定向验证。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。
 - `SHMINS-006`：缺少 active payload X/Z 检查。
-- `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 缺少 element-0 mask 激励。
+- `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 已实现，等待 DUT 定向验证。
 - `SHMINS-008`：固定 ack timeout 与协议无最大延迟冲突。
 - `SHMINS-009`：credit/release 和 ack 完备性检查不足。
 - `SHMINS-010`：复位期间 release/ack 静默没有检查。
 - `ENV-001`：运行中 reset 未取消 driver/monitor pending 状态。
-- 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 尚未按新 spec 实现，见开发计划和
-  verification status 中的双 gid 迁移项。
+- 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 已接入并通过真实 RTL 集成 smoke；
+  gid 边界、数据隔离和冲突/失败路径仍由 verification status 中的双 gid 迁移项跟踪。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

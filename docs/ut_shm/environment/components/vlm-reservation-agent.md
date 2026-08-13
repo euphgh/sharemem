@@ -1,6 +1,6 @@
 # 统一 VLM agent 的 reservation 路径
 
-本文说明双 gid 目标架构中统一 VLM agent 如何按周期联合采样 reservation 和 MEM 请求，
+本文说明当前双 gid 架构中统一 VLM agent 如何按周期联合采样 reservation 和 MEM 请求，
 检查 busy 与到期匹配，为 MEM transaction 恢复 gid，并生成下一周期 busy。协议规则见
 [MEM/VLM 接口规范](../../spec/mem-vlm-interface.md)；本文区分稳定检查职责和当前尚未
 修复的实现差异。
@@ -352,11 +352,13 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 ## 15. 当前实现状态
 
 - `RSV-002`：coverage 是空实现。
-- `RSV-003`：external-busy 示例仍访问失效字段名。
+- `RSV-003`：external-busy 示例已迁移到统一 interface，等待独立远端运行。
 - `RSV-004`：全局 `input_error` 会屏蔽无关 slot 的检查。
 - `RSV-005`：复位期间没有检查 DUT request/valid 必须为 0。
 - `ENV-001`：运行中 reset 未清理 scheduler record 和 busy 状态。
-- 当前源码尚未增加 gid busy、record gid、resolver 和统一 interface/agent；实施顺序见
-  [双 gid 接口重构开发计划](../../../development/shm-dual-bank-interface-refactor-plan.md)。
+- gid busy、record gid、resolver 和统一 interface/agent 已接入，并于 2026-08-13 随真实
+  RTL 集成 testcase 跑通；busy ownership、端口冲突和 resolver 失败路径仍需按
+  [双 gid 接口重构开发计划](../../../development/shm-dual-bank-interface-refactor-plan.md)
+  完成独立定向验证。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

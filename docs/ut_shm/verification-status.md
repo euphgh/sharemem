@@ -9,6 +9,9 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 2026-08-11 已将双 gid BANK 接口写入当前 spec；RTL top 和验证环境主数据路径已开始
 同步迁移，实施顺序由
 [双 gid 开发计划](../development/shm-dual-bank-interface-refactor-plan.md)统一规定。
+2026-08-13 已确认修改后的验证环境和正式 topology-based shmins sequence item 在真实
+RTL 集成 testcase 中跑通，`SHMINS-012` 因此完成系统验证并关闭；双 gid 和其他 SHMINS
+细分定向项仍按各自验收条件继续跟踪。
 
 ## 1. 状态和优先级
 
@@ -60,12 +63,12 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
 |`COV-001`|P1|待实现|跨组件|ut_shm 尚未建立 functional coverage 模型|
-|`DBANK-001`|P0|待验证|共享地址/shmins|两层映射、16-bit `creq_vaddr` 和 M2V byte-overlap 已编码且通过空 DUT 编译，待定向验证|
-|`DBANK-002`|P0|待验证|reference/expected model|gid-aware wmap、reference memory 和派生地址已编码且通过空 DUT 编译，待定向验证|
-|`DBANK-003`|P0|待验证|interface/environment|统一 interface/agent 和 top 新端口已接入且通过空 DUT 编译，待定向验证|
-|`DBANK-004`|P0|待验证|VLM agent/scoreboard|gid busy、唯一到期解析、read response 和 actual memory 已编码且通过空 DUT 编译，待定向验证|
+|`DBANK-001`|P0|待验证|共享地址/shmins|两层映射、16-bit `creq_vaddr` 和 M2V byte-overlap 已通过 RTL 集成 smoke，待边界定向验证|
+|`DBANK-002`|P0|待验证|reference/expected model|gid-aware wmap、reference memory 和派生地址已通过 RTL 集成 smoke，待数据隔离定向验证|
+|`DBANK-003`|P0|待验证|interface/environment|统一 interface/agent 和 top 新端口已通过 RTL 集成 smoke，待协议定向验证|
+|`DBANK-004`|P0|待验证|VLM agent/scoreboard|gid resolver、read response 和 actual memory 已通过 RTL 集成 smoke，待冲突/失败路径定向验证|
 |`DBANK-005`|P1|待实现|test/coverage|双 gid 地址、数据隔离、reservation ownership 和 M2V hazard 缺少定向证据|
-|`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 数据通路和 reference mask 已实现，待远端验证|
+|`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 数据通路和 reference mask 已通过 RTL 集成 smoke，待 mask 边界定向验证|
 |`SHMINS-002`|P0|待验证|shmins transaction|topology 基类已完整复制公共和生成字段，reference consumer 交叉测试通过|
 |`SHMINS-003`|P0|待验证|shmins transaction|过程式 MADDR 生成和 validator 已实现 12 KiB、空洞及两层映射，待 DUT 定向验证|
 |`SHMINS-004`|P1|待验证|unit sequence|ATYPE_S/G allowed-value domain 已接入 item inline constraint，待 testcase 验证|
@@ -76,11 +79,10 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 |`SHMINS-009`|P1|待实现|shmins monitor|credit/release 和 unexpected/duplicate ack 缺少完备检查|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
 |`SHMINS-011`|P2|待验证|shmins transaction|`compare_item()` 已使用注册字段比较且不再 fatal，待正反例验证|
-|`SHMINS-012`|P0|待验证|shmins transaction/benchmark|正式 topology item、consumer 交叉测试和空设计编译已通过，待 RTL testcase 回归|
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
-|`REF-001`|P0|实现中|reference|已改用公共 absolute-warp 映射，待非零 `warp_group` 定向验证|
+|`REF-001`|P0|待验证|reference|公共 absolute-warp 映射已通过 RTL 集成 smoke，待非零 `warp_group` 定向验证|
 |`SCB-002`|P1|待实现|scoreboard|128-cycle timeout 固定，可能把合法长延迟误报为失败|
 |`RSV-002`|P1|待实现|reservation coverage|coverage 组件目前为空实现|
 |`RSV-003`|P1|待验证|reservation example|external busy 定向测试已迁移到统一 VLM interface，待远端运行|
@@ -116,11 +118,15 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   elab + 1.183 seconds to link`；
 - 以上证据解除静态编译门禁，因此 `DBANK-001`～`DBANK-004` 转为“待验证”；它不等同于
   双 gid 定向功能测试或真实 RTL regression 通过。
+- 2026-08-13 用户确认修改后的统一验证环境和 shmins sequence item 已在真实 RTL 集成
+  testcase 中跑通。这证明主数据路径能够工作，但不替代 `DBANK-001`～`DBANK-005`
+  验收项要求的 gid 边界、数据隔离、busy ownership、冲突和失败路径定向测试。
 
 ### `DBANK-001` 两层地址模型与合法激励
 
-- 现状：共享参数已删除 `VADDR_W` 并定义双 gid 物理地址；split item 已回填逻辑/物理
-  element 地址、使用 gid-aware byte key，并为 M2V 生成 byte-disjoint writeback BADDR。
+- 现状：共享参数已删除 `VADDR_W` 并定义双 gid 物理地址；正式 topology item 已回填
+  逻辑/物理 element 地址、使用 gid-aware byte key，并为 M2V 生成 byte-disjoint writeback
+  BADDR；主路径已通过 RTL 集成 smoke。
 - 目标：三种 space 输出 `<bank,absolute warp,laddr>`，公共 helper 统一生成 gid/BADDR；
   `creq_vaddr` 改为 16 bit 并携带 gid 内 WARP 基址；M2V 排除有效 read/write byte overlap。
 - 验收：地址公式测试覆盖 warp 0/3/4/7、SPACE_BLK 非零 group 和 WARP 首尾；三类
@@ -196,8 +202,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 现状：tb top、interface、transaction、copy、factory field、driver 和 monitor 已贯通
   `THD_N` bit `creq_tmsk`。普通请求约束非全零，VTRANS 约束全 1；monitor 报告 X/Z 和
   全零值，reference 为非 active thread 创建空的地址/BANK/strobe 数组，不解释 inactive
-  payload，也不生成对应读写期望。本地 Slang 语义检查已通过，尚未在远端 DUT/VCS
-  环境执行定向场景。
+  payload，也不生成对应读写期望。该主路径已通过 benchmark consumer 检查和真实 RTL
+  集成 smoke，尚未执行稀疏 mask、inactive payload X/Z 等独立定向场景。
 - 影响：代码路径已具备 mask 行为，但在稀疏 mask、inactive payload X/Z 和 DUT 意外
   输出场景验证完成前，不能确认功能关闭。
 - 目标依据：[creq/ack 接口](spec/creq-ack-interface.md)。
@@ -301,58 +307,6 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 验收：无用 API 被删除且现有编译通过，或保留的 compare 有正反例定向测试且不使用
   无条件 fatal。
 
-### `SHMINS-012` Sequence item 随机化性能与结构拆分
-
-- 现状：公共基类、contiguous、strided、indexed 和 VTRANS 已接入正式 item package；
-  公共基类已迁入 `shmins_sequence_item.svh`，旧 solver/monolithic item、生成 constraint
-  和对应 benchmark filelist 已删除。`shmins_mst_unit_sequence` 使用 normal/VTRANS 独立
-  allowed-value domain 和全局 VTRANS 概率显式创建子类。
-- 影响：随机化可能长时间停滞或以 retry exhaustion 结束，阻止 testcase 稳定产生合法
-  creq；把全部地址形态和方向策略放在一个 class 中也使修复容易引入交叉回归。
-- 目标：按 MADDR 生成拓扑拆分为公共基类、contiguous、strided、indexed 和 VTRANS
-  子类；space 由公共 helper 处理，V2M/M2V 由 collision 策略处理。Offset 应从合法
-  MADDR 域反推，不再从完整 ATYP32 空间盲目 rejection。完整方案见
-  [拆分开发计划](../development/shmins-sequence-item-refactor-plan.md)。
-- 对齐边界：协议只要求 active element 的最终 MADDR 按 dtype 自然对齐；本阶段允许把
-  base 和 decoded offset 分别对齐作为更强的激励限制，但独立 validator 必须直接检查
-  最终 MADDR。
-- 集成边界：driver、monitor、sequencer 和 reference 继续使用公共基类 handle。Reference
-  只允许对 active element 解码和映射；超出 length、被 vmsk 屏蔽或 inactive thread 的
-  payload 不形成地址，不得触发 MADDR mapping error。
-- 验收：正式 package include 四种子类；sequence 能根据 topology 和全局 VTRANS 概率
-  显式创建对象；所有 allowed-value queue 以 `inside` 约束 item；远端空 design VCS
-  compile 无 error。该证据不等同于真实 DUT 功能或完整 ut_shm regression 通过。
-- 2026-08-08 阶段证据：使用 `.env` 和 `scripts/local/` 同步/执行脚本，
-  hx16 VCS `T-2022.06-SP2-5_Full64` 完成 SPLIT compile。三个 100-attempt
-  代表配置均为 `successes=100`、`failures=0`、`validation_errors=0`：
-  `LDST_V/LOC, V2M, DTYP_32, ATYP_32/U/1B` 为 0.300077 ms/attempt；
-  `LDST_S/BLK, V2M, DTYP_8, ATYP_32/S/1B, G=16 KiB, WPID=7, WPNUM=4`
-  为 0.464200 ms/attempt；`LDST_V/WRP, M2V, DTYP_16, ATYP_16/S/DW,
-  G=8 KiB` 为 0.314345 ms/attempt。最后一次脚本运行日志保留在远端
-  `examples/shmins_random_benchmark/build/split/run.log`，其余阶段结果记录于本节；
-  后续完整矩阵需改用每 profile 独立日志。这些结果只支持 contiguous
-  阶段，不满足整个 `SHMINS-012` 的关闭条件。
-- 2026-08-09 交叉 benchmark 证据：432 组配置、每组 100 次 measured randomization，
-  共 43,200 次，`failures=0`、`validation_errors=0`；contiguous、strided、indexed
-  平均分别为 0.223491、0.253070、0.149968 ms/attempt。无 inline override 的三种
-  topology 各完成 1000 次且无失败。结果保留在远端 benchmark build 目录。
-- 2026-08-09 正式激励语法证据：远端 VCS `W-2024.09-SP1_Full64` 执行
-  `scripts/ubuntu/check_shmins_sequence_vcs.sh compile`，公共基类、四种子类、enum helper
-  和 `shmins_mst_unit_sequence` 完成 parse、elaboration 和 simv link，无编译 error。
-  Linux 6.17 unsupported-kernel warning 属于工具环境提示，不影响本次编译结论。
-- 2026-08-12 系统消费边界证据：`shm_wtrans_item` 改为按 length 分配数组，并只对
-  `tmsk && length && vmsk` 选中的 element 调用 `map_maddr()`；M2V reference 跳过 zero
-  strobe element。增强后的 benchmark 对 432 个组合各运行 20 次，逐组合额外使用真实
-  `shm_wtrans_item.init_from()` 对比 BANK/gid/BADDR，并强制验证一个 active thread 的
-  zero-length 场景；所有组合 `failures=0`、`validation_errors=0`，UVM error/fatal 为 0。
-  另对 `LDST_S × LOC/WRP/BLK × V2M/M2V` 六组各运行 100 次，600 次均成功；BLK 使用
-  `WPID=7, WPNUM=4` 覆盖高 gid。由此四种 itype、三种 space 和两种方向均已有 benchmark
-  生成证据。
-  同日 `make compile` 使用空 `RpuShmTop` 完成 27-module parse/elaboration/link。结果保留在
-  远端 `examples/shmins_random_benchmark/build/split/` 和 `build/ut_shm/compile.log`。
-- 与其他问题的关系：正式激励将应用 ATYPE_S/G domain，并为 `SHMINS-003`、
-  `SHMINS-004` 和 `SHMINS-007` 提供实现基础；在真实 DUT 验证完成前不关闭这些问题。
-
 ### `VMEM-001` `FFD_CYC` read snapshot
 
 - 现状：memory driver 在采样 `mem_rvld/mem_raddr` 后立即调用 scoreboard
@@ -380,7 +334,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 ### `REF-001` SPACE_BLK `warp_group`
 
 - 现状：`shm_wtrans_item.generate_wdata()` 已改用 sequence item 的公共两层地址映射，
-  SPACE_BLK 逻辑地址包含 `warp_group*wpnum+warp_offset`；尚无非零 group 的定向证据。
+  SPACE_BLK 逻辑地址包含 `warp_group*wpnum+warp_offset`，并已通过 RTL 集成 smoke；尚无
+  非零 group 的定向证据。
 - 影响：非零 MADDR 高位对应的 SPACE_BLK BADDR 和 WARP 选择错误。
 - 目标依据：[地址模型的 SPACE_BLK 映射](spec/address-model.md#7-space_blk)。
 - 验收：使用非零 `warp_group`、`creq_wpnum` 为 1/2/4 的定向 reference 测试。
@@ -433,6 +388,27 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   为 X/Z 时不启动业务 X/Z 检查，也不产生正常 transaction。
 
 ## 5. 已解决记录
+
+### `SHMINS-012` Sequence item 随机化性能与结构拆分
+
+- 关闭日期：2026-08-13。
+- 修改：正式 `shmins_sequence_item.svh` 现为公共 transaction 和地址 helper 基类；
+  contiguous、strided、indexed 与 VTRANS 子类按 MADDR 拓扑生成地址，master unit sequence
+  通过 normal/VTRANS allowed-value domain 和全局 VTRANS 概率显式创建对应子类。旧 solver、
+  monolithic post-randomize item、生成 constraint 和历史 benchmark filelist 已删除。
+- 消费边界：`shm_wtrans_item` 只为 `tmsk && length && vmsk` 选中的 active element 重建、
+  映射地址；超出 length、masked 或 inactive payload 不再触发 `map_maddr()`。M2V reference
+  同样跳过 zero-strobe element。
+- Benchmark：2026-08-09 的 432 组交叉矩阵每组 100 次，共 43,200 次随机化，全部
+  `failures=0`、`validation_errors=0`；三种 topology 无 inline override 各 1000 次通过。
+  2026-08-12 增强矩阵对 432 组各运行 20 次，并通过真实
+  `shm_wtrans_item.init_from()` 检查 BANK/gid/BADDR 和 zero-length active-thread 场景；另有
+  `LDST_S × LOC/WRP/BLK × V2M/M2V` 共 600 次全部通过。
+- 编译与集成：远端 VCS `W-2024.09-SP1_Full64` 已完成正式 sequence 最小 top 和空
+  `RpuShmTop` 的 parse、elaboration、link；2026-08-13 用户确认修改后的验证环境和 sequence
+  item 已在真实 RTL 集成 testcase 中跑通，不再出现 inactive element MADDR mapping error。
+- 结论：随机化性能重构、正式 API 迁移和系统消费边界均已完成。`SHMINS-002/003/004/007`
+  仍按各自更细的 copy、地址边界、配置和 strided 定向验收条件独立跟踪。
 
 ### `RSV-001` Reservation alignment policy
 

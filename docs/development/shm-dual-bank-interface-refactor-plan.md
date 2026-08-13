@@ -254,6 +254,11 @@ MEM port record: [direction][delay][bank_id]
 
 ## 6. 文档与状态维护
 
+2026-08-13 集成里程碑：统一 VLM 环境、双 gid 主数据路径和 topology-based shmins
+sequence item 已在真实 RTL testcase 中跑通。该结果解除“尚未接入真实设计”的集成风险，
+但阶段 7 要求的 gid 边界、数据隔离、busy ownership、reservation 冲突/失败路径和 coverage
+仍未由一次系统 smoke 覆盖，因此 `DBANK-001`～`DBANK-005` 保持各自当前状态。
+
 每完成一个阶段：
 
 1. 更新 [verification-status](../ut_shm/verification-status.md) 对应项的状态和证据；
@@ -261,4 +266,3 @@ MEM port record: [direction][delay][bank_id]
 3. 记录实际运行的 compile/test 命令、seed 和结果位置；
 4. 若实现发现 spec 歧义，先修订 spec，再继续代码修改；
 5. 不以旧代码行为覆盖本计划第 1 节的固定契约。
-

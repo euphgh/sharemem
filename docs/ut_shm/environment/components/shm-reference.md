@@ -104,7 +104,9 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 
 `ut_shm/tests/shm_unit_test.svh` 是当前 reference 的集成使用入口。现阶段没有把地址
 映射、VTRANS 转置、M2V 读写回或跨 creq 重叠拆成独立 reference 单元测试；尤其需要
-按 `REF-001` 增加非零 `warp_group` 定向场景，并按 `SHMINS-002` 验证 copy 后字段完整。
+按 `REF-001` 增加非零 `warp_group` 定向场景，并按 `SHMINS-002` 增加 copy 后字段完整性的
+独立正反例。2026-08-13 当前 reference 主路径已随新 sequence item 在真实 RTL 集成
+testcase 中跑通。
 
 ## 10. 开发 contract
 
@@ -120,11 +122,13 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 
 ## 11. 当前实现状态
 
-- `REF-001`：SPACE_BLK 公共映射已接入，等待非零 `warp_group` 定向验证。
-- `SHMINS-001`：reference mask 已实现，等待远端 DUT/VCS 定向验证。
-- `SHMINS-002`：输入 transaction copy 会丢失关键字段。
-- `SHMINS-003`：生成约束可能给 reference 输入非法地址。
+- `REF-001`：SPACE_BLK 公共映射已接入并通过系统 smoke，等待非零 `warp_group` 定向验证。
+- `SHMINS-001`：reference mask 已实现并通过系统 smoke，等待 mask 边界定向验证。
+- `SHMINS-002`：输入 transaction copy 已修复并通过 consumer 交叉测试，等待独立 copy 验证。
+- `SHMINS-003`：正式生成器和 validator 已保证 active 地址合法并通过系统 smoke，等待完整
+  interleave/space 边界定向验证。
 - `ENV-001`：运行中 reset 未重建 `ref_banks` 或取消旧期望。
-- 双 gid reference memory、wmap 和 M2V 写回主路径已编码，尚缺 VCS 与 wpid 3/4 定向证据。
+- 双 gid reference memory、wmap 和 M2V 写回主路径已通过真实 RTL 集成 smoke，尚缺
+  wpid 3/4 和 gid 数据隔离定向证据。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。
