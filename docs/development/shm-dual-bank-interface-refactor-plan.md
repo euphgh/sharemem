@@ -263,8 +263,8 @@ sequence item 已在真实 RTL testcase 中跑通。该结果解除“尚未接�
 2026-08-13 SPACE_BLK contract 后续改为 group-relative MADDR。Spec、正式地址 helper 和
 benchmark 已同步更新；空 design 全环境 VCS 编译通过，432 组合与三 topology 无 inline
 constraint benchmark 通过，两轮各 1248 个独立公式检查覆盖全部 13 个 interleave size。
-当前 Ubuntu EDA 工作区只有空 `RpuShmTop`，新版公式的真实 RTL BLK regression 仍需在
-具备真实 design 和 regression framework 的环境执行。
+当前 Ubuntu EDA 工作区只有空 `RpuShmTop`，因此 RTL 功能回归由实际集成环境执行；
+用户已确认新版 SPACE_BLK RTL regression 通过，`SHMINS-003` 与 `REF-001` 于同日关闭。
 
 每完成一个阶段：
 

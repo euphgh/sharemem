@@ -11,7 +11,8 @@ DUT 地址与 creq 合法性仍以 [地址模型](../ut_shm/spec/address-model.m
 [creq/ack 接口](../ut_shm/spec/creq-ack-interface.md)为准。本文描述如何产生合法激励，
 不重新定义 DUT 行为。实现问题由
 [`SHMINS-012`](../ut_shm/verification-status.md#shmins-012-sequence-item-随机化性能与结构拆分)
-已转入关闭记录；更细的地址边界验证仍由 `SHMINS-003` 跟踪。
+已转入关闭记录；group-relative BLK 地址边界和 RTL regression 完成后，`SHMINS-003`
+也已于 2026-08-13 关闭。
 
 ## 1. 背景和目标
 

@@ -12,8 +12,8 @@ contiguous 子类的第一版 hx16 验证。Phase 6 的 macOS/Ubuntu 构建结�
 2026-08-13 已确认修改后的验证环境和正式 topology-based shmins sequence item 在真实
 RTL 集成 testcase 中跑通，`SHMINS-012` 因此完成系统验证并关闭；双 gid 和其他 SHMINS
 细分定向项仍按各自验收条件继续跟踪。同日 SPACE_BLK contract 改为 group-relative
-MADDR；该版本的空 DUT 编译和独立公式 benchmark 已通过，但真实 RTL BLK regression
-尚未在具备真实 design 的环境中重跑。
+MADDR；空 DUT 编译、独立公式 benchmark 和真实 RTL BLK regression 均已通过，
+`SHMINS-003` 与 `REF-001` 已关闭。
 
 ## 1. 状态和优先级
 
@@ -65,14 +65,13 @@ MADDR；该版本的空 DUT 编译和独立公式 benchmark 已通过，但真�
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
 |`COV-001`|P1|待实现|跨组件|ut_shm 尚未建立 functional coverage 模型|
-|`DBANK-001`|P0|待验证|共享地址/shmins|group-relative BLK 公式 benchmark 已通过；两层映射、16-bit `creq_vaddr` 和 M2V byte-overlap 待新版 RTL 边界验证|
+|`DBANK-001`|P0|待验证|共享地址/shmins|group-relative BLK 的公式与 RTL regression 已通过；LOC/WRP、16-bit `creq_vaddr` 和 M2V byte-overlap 边界待验证|
 |`DBANK-002`|P0|待验证|reference/expected model|gid-aware wmap、reference memory 和派生地址已通过 RTL 集成 smoke，待数据隔离定向验证|
 |`DBANK-003`|P0|待验证|interface/environment|统一 interface/agent 和 top 新端口已通过 RTL 集成 smoke，待协议定向验证|
 |`DBANK-004`|P0|待验证|VLM agent/scoreboard|gid resolver、read response 和 actual memory 已通过 RTL 集成 smoke，待冲突/失败路径定向验证|
 |`DBANK-005`|P1|待实现|test/coverage|双 gid 地址、数据隔离、reservation ownership 和 M2V hazard 缺少定向证据|
 |`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 数据通路和 reference mask 已通过 RTL 集成 smoke，待 mask 边界定向验证|
 |`SHMINS-002`|P0|待验证|shmins transaction|topology 基类已完整复制公共和生成字段，reference consumer 交叉测试通过|
-|`SHMINS-003`|P0|待验证|shmins transaction|group-relative BLK 生成、validator 和独立公式 benchmark 已通过，待真实 RTL BLK 定向验证|
 |`SHMINS-004`|P1|待验证|unit sequence|ATYPE_S/G allowed-value domain 已接入 item inline constraint，待 testcase 验证|
 |`SHMINS-005`|P2|待实现|shmins agent|部分循环和位宽硬编码为当前 16-thread/4-bit 配置|
 |`SHMINS-006`|P1|待实现|shmins monitor|active creq payload 缺少系统性的 X/Z 检查|
@@ -84,7 +83,6 @@ MADDR；该版本的空 DUT 编译和独立公式 benchmark 已通过，但真�
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
-|`REF-001`|P0|待验证|reference|WPID-derived absolute-warp 公式 benchmark 已通过，待真实 RTL 非零 group 定向验证|
 |`SCB-002`|P1|待实现|scoreboard|128-cycle timeout 固定，可能把合法长延迟误报为失败|
 |`RSV-002`|P1|待实现|reservation coverage|coverage 组件目前为空实现|
 |`RSV-003`|P1|待验证|reservation example|external busy 定向测试已迁移到统一 VLM interface，待远端运行|
@@ -135,8 +133,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   `examples/shmins_random_benchmark/build/split/cross_matrix.log` 和
   `unconstrained.log`。
 - 当前 Ubuntu EDA 工作区中的 `RpuShmTop.sv` 是 66 行无行为 stub，仓库也没有真实 RTL
-  regression 命令，因此以上证据不包含新版 SPACE_BLK 的 RTL 功能回归。旧版真实 RTL
-  smoke 不能作为新公式的关闭证据。
+  regression 命令，因此上述仓库内命令本身不包含 RTL 功能回归。随后用户在实际 BLK
+  regression 环境中完成新版 SPACE_BLK 回归并确认通过；该系统证据与独立公式 benchmark
+  共同关闭 `SHMINS-003` 和 `REF-001`。
 
 ### `DBANK-001` 两层地址模型与合法激励
 
@@ -234,19 +233,6 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 影响：现有 benchmark 未发现 copy 丢失，但在独立定向覆盖完成前仍不能关闭该问题。
 - 目标：所有影响驱动、reference 和 scoreboard 的字段必须从 rhs 完整复制。
 - 验收：构造非默认字段 transaction，copy 后逐字段一致，并覆盖 VTRANS transaction。
-
-### `SHMINS-003` 地址合法性约束
-
-- 现状：正式 sequence item 已通过 `fast_legal_space_range()` 和
-  `legal_space_maddr_check()` 表达 LOC 12 KiB、WRP/BLK interleave 编码及地址空洞；
-  SPACE_BLK 已采用 `[0,C*BANK_N*creq_wpnum)` 的 group-relative MADDR，并由
-  `creq_wpid/creq_wpnum` 派生 absolute WARP group。交叉 benchmark 已覆盖三种 space，
-  独立公式覆盖 WPNUM 1/2/4、WPID 0/3/4/7、全部 13 个 interleave size 和编码边界；
-  尚未与新版真实 DUT 行为闭环。
-- 影响：生成路径已有独立合法性复查，剩余风险集中在未覆盖的边界值和 DUT 集成行为。
-- 目标依据：[地址模型](spec/address-model.md)。
-- 验收：三种 space、全部支持 interleave size 和边界值的约束定向测试；随机请求不得
-  落入地址空洞。
 
 ### `SHMINS-004` Unit sequence 配置丢失
 
@@ -349,18 +335,6 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 目标：删除无意义结构，或补齐可验证的用途，避免保留会静默返回错误结果的 API。
 - 验收：组件公开结构与实际数据流一致，所有保留 compare API 有定向单元测试。
 
-### `REF-001` SPACE_BLK `warp_group`
-
-- 现状：`shm_wtrans_item.generate_wdata()` 已改用 sequence item 的公共两层地址映射，
-  SPACE_BLK 由 `creq_wpid/creq_wpnum` 派生 `warp_group`，再与 MADDR 中的
-  `warp_offs` 合成 absolute WARP。独立公式 benchmark 已覆盖非零 group；新版公式尚无
-  真实 RTL 定向证据。
-- 影响：若错误地从 MADDR 高位恢复 `warp_group`，非零 WPID group 的 BADDR、gid 和 WARP
-  选择都会错误。
-- 目标依据：[地址模型的 SPACE_BLK 映射](spec/address-model.md#7-space_blk)。
-- 验收：使用 WPID 派生的非零 `warp_group`、`creq_wpnum` 为 1/2/4 的定向 reference 和
-  真实 RTL 测试。
-
 ### `SCB-002` 可配置 timeout
 
 - 现状：scoreboard 固定在 128 cycles 后把未完成 reference record 报为 expired。
@@ -409,6 +383,24 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   为 X/Z 时不启动业务 X/Z 检查，也不产生正常 transaction。
 
 ## 5. 已解决记录
+
+### `SHMINS-003` / `REF-001` SPACE_BLK group-relative 地址生成与映射
+
+- 关闭日期：2026-08-13。
+- 修改：SPACE_BLK MADDR 合法范围改为 `[0,C*BANK_N*creq_wpnum)`；MADDR 只编码当前
+  group 内的 `bank_id/warp_offs/inv_index/inv_offs`，absolute `warp_group` 由
+  `creq_wpid/creq_wpnum` 派生。Sequence generator、validator、公共两层地址 helper 和
+  reference consumer 使用同一稳定 contract。
+- 公式验证：执行
+  `BENCH_ITERATIONS=100 BENCH_WARMUP=5 scripts/ubuntu/run_shmins_random_cross_benchmark.sh all`，
+  432 个交叉组合和三个无 inline constraint topology 全部通过；matrix 与 unconstrained
+  各完成 1248 个独立 BLK 公式检查，覆盖 WPNUM 1/2/4、WPID 0/3/4/7、全部 13 个
+  interleave size、编码上界和地址空洞，error 均为 0。
+- 系统验证：用户确认新版代码在实际 RTL BLK regression 中通过。问题分析期间明确了
+  `creq_inv_size=9`、`creq_wpnum=2`、`creq_wpid=3` 时 MADDR 必须小于 `0x60000`，
+  旧 group base 不再属于 MADDR 编码。
+- 结论：激励、公共 helper、reference 和实际 RTL 已对齐到 group-relative BLK contract。
+  功能覆盖率统计仍由 `TP-ADDR-006` 和 `COV-001` 独立跟踪。
 
 ### `SHMINS-012` Sequence item 随机化性能与结构拆分
 

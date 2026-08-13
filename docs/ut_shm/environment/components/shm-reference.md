@@ -54,7 +54,7 @@ Reference 按 `shmins_monitor` 发布 creq 的顺序立即更新 `ref_banks`。D
 
 这些计算通过公共 helper 落实地址 spec 的 LOC/WRP/BLK、interleave 和地址空洞规则。
 SPACE_BLK 由 `creq_wpid/creq_wpnum` 选择非零 `warp_group`，MADDR 只提供 group 内的
-`warp_offs`；该规则仍按 `REF-001` 管理其定向验证。
+`warp_offs`；独立公式检查和实际 RTL BLK regression 已验证该规则。
 
 ## 5. V2M 和 VTRANS
 
@@ -104,10 +104,10 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 ## 9. 相关测试
 
 `ut_shm/tests/shm_unit_test.svh` 是当前 reference 的集成使用入口。现阶段没有把地址
-映射、VTRANS 转置、M2V 读写回或跨 creq 重叠拆成独立 reference 单元测试；尤其需要
-按 `REF-001` 增加 WPID 派生非零 `warp_group` 的定向场景，并按 `SHMINS-002` 增加 copy 后字段完整性的
-独立正反例。2026-08-13 当前 reference 主路径已随新 sequence item 在真实 RTL 集成
-testcase 中跑通。
+映射、VTRANS 转置、M2V 读写回或跨 creq 重叠拆成独立 reference 单元测试。BLK 的
+WPID-derived 非零 `warp_group` 已由独立公式检查和实际 RTL regression 覆盖；仍需按
+`SHMINS-002` 增加 copy 后字段完整性的独立正反例。2026-08-13 当前 reference 主路径已随
+新 sequence item 在真实 RTL 集成 testcase 中跑通。
 
 ## 10. 开发 contract
 
@@ -124,12 +124,12 @@ testcase 中跑通。
 ## 11. 当前实现状态
 
 - `REF-001`：SPACE_BLK 公共映射已改为 WPID/WPNUM 派生 group，两轮各 1248 个独立
-  公式检查已通过，真实 RTL BLK 回归待执行。
+  公式检查和实际 RTL BLK regression 已通过，2026-08-13 关闭。
 - `SHMINS-001`：reference mask 已实现并通过系统 smoke，等待 mask 边界定向验证。
 - `SHMINS-002`：输入 transaction copy 已修复并通过 consumer 交叉测试，等待独立 copy 验证。
 - `SHMINS-003`：正式生成器和 validator 已按 group-relative BLK 公式更新；基础
-  interleave/space benchmark 和全部 interleave size 的扩展检查已通过，真实 RTL BLK
-  回归待执行。
+  interleave/space benchmark、全部 interleave size 的扩展检查和实际 RTL BLK regression
+  已通过，2026-08-13 关闭。
 - `ENV-001`：运行中 reset 未重建 `ref_banks` 或取消旧期望。
 - 双 gid reference memory、wmap 和 M2V 写回主路径已通过真实 RTL 集成 smoke，尚缺
   wpid 3/4 和 gid 数据隔离定向证据。

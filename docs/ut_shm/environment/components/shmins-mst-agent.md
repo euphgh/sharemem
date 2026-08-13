@@ -162,8 +162,8 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 - `SHMINS-002`：transaction copy 已完整实现并通过 reference consumer 交叉测试，等待
   独立逐字段/VTRANS 定向验证。
 - `SHMINS-003`：过程式 MADDR 生成、12 KiB/空洞检查和两层映射已按 group-relative BLK
-  公式更新；432 组合和无 inline constraint benchmark 已通过，两轮各 1248 个独立 BLK
-  公式检查覆盖全部 13 个 interleave size，等待真实 RTL BLK 回归。
+  公式更新；432 组合、无 inline constraint benchmark、两轮各 1248 个独立 BLK 公式检查
+  和实际 RTL BLK regression 均已通过，2026-08-13 关闭。
 - `SHMINS-004`：ATYPE_S/G 等 allowed-value domain 已作用到 item，等待 testcase 配置到
   monitor 的端到端定向验证。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。

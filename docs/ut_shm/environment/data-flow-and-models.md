@@ -225,7 +225,7 @@ Reservation 到实际 MEM 的匹配键和 busy 规则由
   相等；下游 SRAM 支持非对齐 32-Byte beat，scoreboard 也不需要来源相关 alignment；
 - SPACE_BLK 的 MADDR 已改为 group-relative 编码；公共映射用
   `creq_wpid/creq_wpnum` 选择 `warp_group`；全部 13 个 interleave size 的独立公式测试
-  已通过，真实 RTL BLK 回归待执行。
+  和实际 RTL BLK regression 已通过。
 - memory/reservation 已合并为统一 VLM interface/agent，memory model 已包含 gid；剩余
   定向验证顺序见[开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。
 
