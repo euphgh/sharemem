@@ -12,10 +12,10 @@
 |---|---|---|
 |[Environment](shm-environment.md)|`shm_environment` 及其配置、创建和连接|已发布|
 |[SHMINS master agent](shmins-mst-agent.md)|creq 激励、ack 观察和 shmins transaction|已发布|
-|[VLM memory agent](vlm-memory-agent.md)|统一 VLM agent 内的 MEM monitor/driver 与可信数据边界|已发布，定向验证待补|
+|[VLM memory agent](vlm-memory-agent.md)|统一 VLM agent 内的 MEM monitor/driver 与可信数据边界|正向主路径已通过 85-case 真实 RTL 回归，定向验证待补|
 |[Reference](shm-reference.md)|期望事务和 reference memory 的生成|已发布|
 |[Scoreboard](shm-scoreboard.md)|outstanding 新算法、实际 memory 和 timeout 调试|已发布|
-|[统一 VLM agent 的 reservation 路径](vlm-reservation-agent.md)|统一 monitor、resolver、checker、coverage、scheduler、busy 和 read driver|主路径已接入并通过系统 smoke|
+|[统一 VLM agent 的 reservation 路径](vlm-reservation-agent.md)|统一 monitor、resolver、checker、coverage、scheduler、busy 和 read driver|正向主路径已通过 85-case 真实 RTL 回归|
 
 ## 阅读顺序
 

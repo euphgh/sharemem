@@ -158,14 +158,14 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 
 - `SHMINS-012`：topology-based 正式 sequence item、benchmark、consumer 和真实 RTL 集成
   已于 2026-08-13 验证完成并关闭。
-- `SHMINS-001`：`creq_tmsk` 数据链已实现并通过系统 smoke，等待 mask 边界定向验证。
+- `SHMINS-001`：`creq_tmsk` 正向数据链已通过 85-case 真实 RTL 回归，等待 mask 边界定向验证。
 - `SHMINS-002`：transaction copy 已完整实现并通过 reference consumer 交叉测试，等待
   独立逐字段/VTRANS 定向验证。
 - `SHMINS-003`：过程式 MADDR 生成、12 KiB/空洞检查和两层映射已按 group-relative BLK
   公式更新；432 组合、无 inline constraint benchmark、两轮各 1248 个独立 BLK 公式检查
   和实际 RTL BLK regression 均已通过，2026-08-13 关闭。
-- `SHMINS-004`：ATYPE_S/G 等 allowed-value domain 已作用到 item，等待 testcase 配置到
-  monitor 的端到端定向验证。
+- `SHMINS-004`：RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 85-case 真实 RTL 回归；
+  ATYPE_S/G 仍等待 testcase 配置到 monitor 的端到端定向验证。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。
 - `SHMINS-006`：缺少 active payload X/Z 检查。
 - `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 已实现，等待 DUT 定向验证。
@@ -173,7 +173,7 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 - `SHMINS-009`：credit/release 和 ack 完备性检查不足。
 - `SHMINS-010`：复位期间 release/ack 静默没有检查。
 - `ENV-001`：运行中 reset 未取消 driver/monitor pending 状态。
-- 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 已接入并通过真实 RTL 集成 smoke；
+- 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 正向主路径已通过 85-case 真实 RTL 回归；
   gid 边界、数据隔离和冲突/失败路径仍由 verification status 中的双 gid 迁移项跟踪。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

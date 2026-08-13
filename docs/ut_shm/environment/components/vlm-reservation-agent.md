@@ -324,7 +324,8 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 `examples/vlm_reservation_compile/` 提供联合 elaboration、alignment 和 external busy
 定向入口，`ut_shm/tests/shm_unit_test.svh` 则在完整环境中使用该 agent。Alignment case
 验证非对齐 read/write reservation 的地址保留和完整地址兑现；external-busy case 的历史
-字段问题仍见 `RSV-003`。Coverage 为空也意味着集成 smoke 不能替代功能覆盖闭环。
+字段问题仍见 `RSV-003`。Coverage 为空也意味着 85-case 真实 RTL 回归不能替代功能
+覆盖闭环。
 
 ## 13. 调试观察点
 
@@ -352,7 +353,8 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 ## 15. 当前实现状态
 
 - `RSV-002`：coverage 是空实现。
-- `RSV-003`：external-busy 示例已迁移到统一 interface，等待独立远端运行。
+- `RSV-003`：85-case 回归以 `EXTERNAL_BUSY_PERCENT=10` 运行并通过；external-busy 示例
+  已迁移到统一 interface，仍等待独立远端运行。
 - `RSV-004`：全局 `input_error` 会屏蔽无关 slot 的检查。
 - `RSV-005`：复位期间没有检查 DUT request/valid 必须为 0。
 - `ENV-001`：运行中 reset 未清理 scheduler record 和 busy 状态。

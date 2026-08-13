@@ -220,12 +220,15 @@ case_name : RUN=1 SEED=num
 两份列表都没有 `es + WRP/BLK`。对 V2M，这是前述未定义重叠写限制；对 M2V，spec
 支持且 TC 已存在，因此当前 regression 仍未覆盖这 12 个 case。
 
-所有条目当前都是 `RUN=1`，没有固定 `SEED`。这些文件描述目标运行集合，不记录近期
-服务器运行结果，也不能作为 case 已通过或功能已覆盖的证据。
+所有条目当前都是 `RUN=1`，没有固定 `SEED`。当前里程碑中，用户已确认 `shm.lst`
+的全部 85 个 case 在真实 design 上通过：V2M/VTRANS 43 个、M2V 42 个。该结果可以作为
+所列正向组合通过的证据；但由于没有固定 seed 和 functional coverage，不能证明随机
+字段命中特定边界或 coverage bin。
 
 ## 8. 双 gid 迁移新增 case 组
 
-现有 85 个 case 不能证明新的物理 BANK 组织。完成双 gid 实现后，至少增加以下定向组：
+现有 85 个 case 已通过真实 RTL 回归，证明新的物理 BANK 组织可以承载当前正向矩阵；
+但仍不能证明以下双 gid 边界和失败路径，至少需要增加这些定向组：
 
 |Case 组|主要 testpoint|
 |---|---|

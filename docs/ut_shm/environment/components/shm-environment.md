@@ -96,7 +96,7 @@ interface 的 `rst_n` 处理 reset。
 
 ## 8. 相关测试
 
-`ut_shm/tests/shm_unit_test.svh` 是当前完整 environment 的集成 smoke：启动
+`ut_shm/tests/shm_unit_test.svh` 是当前完整 environment 的集成入口：启动
 `shmins_mst_unit_sequence`，并依赖两个 agent、reference 和 scoreboard 共同工作。当前没有
 针对 Config DB 缺失、unsupported passive 组合或运行中 reset 清理的 environment 定向
 测试；这些场景分别由 `ENV-002` 和 `ENV-001` 的验收项追踪。
@@ -112,8 +112,8 @@ interface 的 `rst_n` 处理 reset。
 
 ## 10. 当前实现状态
 
-- 统一 VLM environment 和 shmins/reference/scoreboard 主路径已于 2026-08-13 在真实 RTL
-  集成 testcase 中跑通。
+- 统一 VLM environment 和 shmins/reference/scoreboard 正向主路径已于 2026-08-13 在
+  真实 design 上通过 `shm.lst` 全部 85 个 case；`DBANK-003` 已关闭。
 - `ENV-001`：运行中 reset 尚未统一清理。
 - `ENV-002`：公开配置仍能表达当前不支持的 passive 组合。
 

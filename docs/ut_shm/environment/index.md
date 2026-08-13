@@ -4,8 +4,9 @@
 之间如何流动。总体架构、数据模型和组件文档已经完成迁移；组件内部状态机和算法放在
 [组件文档](components/index.md)，DUT 的协议规则由 [DUT 规范](../spec/index.md)维护。
 
-双 gid BANK 接口的目标环境使用统一 VLM interface/agent，并将地址模型拆成逻辑地址与
-物理地址两层。现有源码迁移顺序见
+双 gid BANK 环境使用统一 VLM interface/agent，并将地址模型拆成逻辑地址与物理地址
+两层。该主路径已经接入，并于 2026-08-13 通过 `shm.lst` 全部 85 个真实 RTL case；
+历史迁移步骤和仍需补充的定向验证见
 [开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。
 
 ## 文档状态
