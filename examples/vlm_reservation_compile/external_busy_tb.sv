@@ -17,18 +17,62 @@ package vlm_reservation_external_busy_test_pkg;
   `include "vlm_agent.svh"
 
   //----------------------------------------------------------------------------
+  // @brief Provides the mandatory read-data transport endpoint for the agent.
+  //----------------------------------------------------------------------------
+  class vlm_reservation_memory_sink extends uvm_component;
+    uvm_tlm_b_transport_imp #(vlm_memory_sequence_item, vlm_reservation_memory_sink) mem_imp;
+
+    //----------------------------------------------------------------------------
+    // @brief Constructs the component and its blocking transport implementation.
+    //
+    // @param name   UVM component instance name.
+    // @param parent Parent component that owns this sink.
+    //----------------------------------------------------------------------------
+    function new(string name = "vlm_reservation_memory_sink", uvm_component parent = null);
+      super.new(name, parent);
+      mem_imp = new("mem_imp", this);
+    endfunction : new
+
+    //----------------------------------------------------------------------------
+    // @brief Accepts a read-data request when a future extension drives MEM read.
+    //
+    // The external-busy test does not issue MEM requests, so the implementation
+    // intentionally leaves the transaction unchanged.
+    //
+    // @param trans VLM memory transaction supplied by the reservation agent.
+    // @param delay TLM delay associated with the transaction.
+    //----------------------------------------------------------------------------
+    virtual task b_transport(vlm_memory_sequence_item trans, uvm_tlm_time delay);
+    endtask : b_transport
+
+    `uvm_component_utils(vlm_reservation_memory_sink)
+  endclass : vlm_reservation_memory_sink
+
+  //----------------------------------------------------------------------------
   // @brief Verifies plusarg propagation and active external busy driving.
   //----------------------------------------------------------------------------
   class vlm_reservation_external_busy_test extends uvm_test;
     vlm_reservation_agent_config reservation_cfg;
+    vlm_reservation_memory_sink  memory_sink;
     vlm_agent                    agent;
 
     virtual vlm_interface vif;
 
+    //----------------------------------------------------------------------------
+    // @brief Constructs the external-busy component test.
+    //
+    // @param name   UVM component instance name.
+    // @param parent Parent component that owns this test.
+    //----------------------------------------------------------------------------
     function new(string name = "vlm_reservation_external_busy_test", uvm_component parent = null);
       super.new(name, parent);
     endfunction : new
 
+    //----------------------------------------------------------------------------
+    // @brief Creates the unified VLM agent and its required configuration.
+    //
+    // @param phase UVM build phase used to construct the test hierarchy.
+    //----------------------------------------------------------------------------
     virtual function void build_phase(uvm_phase phase);
       super.build_phase(phase);
 
@@ -42,9 +86,25 @@ package vlm_reservation_external_busy_test_pkg;
 
       uvm_config_db#(vlm_reservation_agent_config)::set(
           this, "agent", "cfg", reservation_cfg);
-      agent = vlm_agent::type_id::create("agent", this);
+      agent       = vlm_agent::type_id::create("agent", this);
+      memory_sink = vlm_reservation_memory_sink::type_id::create("memory_sink", this);
     endfunction : build_phase
 
+    //----------------------------------------------------------------------------
+    // @brief Connects the mandatory read-data transport path to the local sink.
+    //
+    // @param phase UVM connect phase used to establish TLM connections.
+    //----------------------------------------------------------------------------
+    virtual function void connect_phase(uvm_phase phase);
+      super.connect_phase(phase);
+      agent.mem_port.connect(memory_sink.mem_imp);
+    endfunction : connect_phase
+
+    //----------------------------------------------------------------------------
+    // @brief Checks plusarg precedence and externally generated busy outputs.
+    //
+    // @param phase UVM main phase controlling the test objection.
+    //----------------------------------------------------------------------------
     virtual task main_phase(uvm_phase phase);
       phase.raise_objection(this);
 

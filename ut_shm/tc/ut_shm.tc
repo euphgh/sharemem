@@ -21,10 +21,10 @@ INCLUDE: v2m/vec_loc.tc
 INCLUDE: v2m/es_loc.tc
 INCLUDE: v2m/ev_loc.tc
 INCLUDE: v2m/vec_warp.tc
-# not support for must addr conflict INCLUDE: v2m/es_warp.tc
+INCLUDE: v2m/es_warp.tc
 INCLUDE: v2m/ev_warp.tc
 INCLUDE: v2m/vec_blk.tc
-# not support for must addr conflict INCLUDE: v2m/es_blk.tc
+INCLUDE: v2m/es_blk.tc
 INCLUDE: v2m/ev_blk.tc
 
 INCLUDE: m2v/vec_loc.tc

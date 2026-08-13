@@ -256,7 +256,7 @@ MEM port record: [direction][delay][bank_id]
 ## 6. 文档与状态维护
 
 2026-08-13 集成里程碑：统一 VLM 环境、双 gid 主数据路径和 topology-based shmins
-sequence item 已在真实 design 上通过 `shm.lst` 全部 85 个 case。该结果关闭统一接口和
+sequence item 已在真实 design 上通过当时 `shm.lst` 的全部 85 个 case。该结果关闭统一接口和
 静态连接项 `DBANK-003`；阶段 7 要求的 gid 边界、数据隔离、busy ownership、reservation
 冲突/失败路径和 coverage 未由随机正向列表覆盖，因此其他 `DBANK` 项保持当前状态。
 

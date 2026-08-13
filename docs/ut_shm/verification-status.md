@@ -18,6 +18,11 @@ MADDR；空 DUT 编译、独立公式 benchmark 和真实 RTL BLK regression 均
 85 个 case。该结果关闭统一接口静态接入项 `DBANK-003`，并作为其余地址、数据和
 reservation 正向主路径的系统回归证据；随机 `RUN=1` 列表未覆盖的定向边界、负例、
 运行中 reset 和 functional coverage 仍独立跟踪。
+随后主列表加入 V2M/M2V `LDSTE_S + WRP/BLK` 共 24 个 case，当前规模为 109；新增项
+尚未运行真实 RTL，不改变此前 85-case 基线的通过结论，也不能提前关闭 `SHMINS-007`。
+同日远端 VCS `W-2024.09-SP1_Full64` 组件测试通过四 topology transaction copy/compare
+以及 reservation external-busy plusarg/drive 检查，`SHMINS-002`、`SHMINS-011` 和
+`RSV-003` 已关闭。
 
 ## 1. 状态和优先级
 
@@ -72,23 +77,20 @@ reservation 正向主路径的系统回归证据；随机 `RUN=1` 列表未覆�
 |`DBANK-001`|P0|待验证|共享地址/shmins|85-case RTL 回归覆盖 LOC/WRP/BLK、V2M/M2V 主路径；地址/gid/vaddr/hazard 边界待验证|
 |`DBANK-002`|P0|待验证|reference/expected model|gid-aware reference 已通过 85-case RTL 回归，待相同 BADDR 跨 gid 数据隔离定向验证|
 |`DBANK-004`|P0|待验证|VLM agent/scoreboard|resolver、read response 和 actual memory 已通过 85-case RTL 回归，待冲突/失败路径定向验证|
-|`DBANK-005`|P1|待实现|test/coverage|主列表 85 case 已通过；双 gid 边界、ownership、M2V hazard 定向 case 与 coverage 仍缺|
+|`DBANK-005`|P1|待实现|test/coverage|扩容前 85 case 已通过、新增 24 case 待运行；双 gid 边界、ownership、M2V hazard 与 coverage 仍缺|
 |`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 正向数据通路已通过 85-case RTL 回归，待 mask 边界与 X/Z 定向验证|
-|`SHMINS-002`|P0|待验证|shmins transaction|copy/reference consumer 已通过 benchmark 和 85-case RTL 回归，待逐字段/VTRANS 正反例|
 |`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 85-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
 |`SHMINS-005`|P2|待实现|shmins agent|部分循环和位宽硬编码为当前 16-thread/4-bit 配置|
 |`SHMINS-006`|P1|待实现|shmins monitor|active creq payload 缺少系统性的 X/Z 检查|
-|`SHMINS-007`|P1|待验证|unit sequence/TC|strided item 已约束 V2M WRP/BLK element 0 mask，待 DUT 定向验证|
+|`SHMINS-007`|P1|待验证|unit sequence/TC|V2M/M2V WRP/BLK 共 24 个 strided case 已进入主列表，待真实 RTL 回归|
 |`SHMINS-008`|P1|待实现|shmins monitor|固定 200-cycle ack timeout 与协议无最大延迟冲突|
 |`SHMINS-009`|P1|待实现|shmins monitor|credit/release 和 unexpected/duplicate ack 缺少完备检查|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
-|`SHMINS-011`|P2|待验证|shmins transaction|`compare_item()` 已使用注册字段比较且不再 fatal，待正反例验证|
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
 |`SCB-002`|P1|待实现|scoreboard|128-cycle timeout 固定，可能把合法长延迟误报为失败|
 |`RSV-002`|P1|待实现|reservation coverage|coverage 组件目前为空实现|
-|`RSV-003`|P1|待验证|reservation example|external busy 定向测试已迁移到统一 VLM interface，待远端运行|
 |`RSV-004`|P1|待实现|reservation checker|全局 `input_error` 会屏蔽无关 slot 的检查|
 |`RSV-005`|P1|待实现|reservation monitor|复位期间没有检查 DUT request/valid 必须为 0|
 
@@ -227,16 +229,6 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 目标依据：[creq/ack 接口](spec/creq-ack-interface.md)。
 - 验收：覆盖非全零普通 mask、inactive thread X/Z、全零非法请求和 VTRANS 全 1。
 
-### `SHMINS-002` Transaction copy 完整性
-
-- 现状：正式 `shmins_sequence_item.do_copy()` 已复制所有公共 creq 字段、生成统计、
-  decoded offset、element MADDR 和两层映射结果；增强 benchmark 已通过真实
-  `shm_wtrans_item.init_from()` 消费复制结果，85-case 真实 RTL 回归进一步覆盖普通请求和
-  VTRANS 系统消费路径。尚缺独立的逐字段 copy 正反例，特别是 VTRANS 非默认字段场景。
-- 影响：现有 benchmark 未发现 copy 丢失，但在独立定向覆盖完成前仍不能关闭该问题。
-- 目标：所有影响驱动、reference 和 scoreboard 的字段必须从 rhs 完整复制。
-- 验收：构造非默认字段 transaction，copy 后逐字段一致，并覆盖 VTRANS transaction。
-
 ### `SHMINS-004` Unit sequence 配置丢失
 
 - 现状：`shmins_mst_unit_sequence` 已用 allowed-value domain 统一约束 ATYPE_W/S/G、
@@ -266,8 +258,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 ### `SHMINS-007` V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
 
 - 现状：strided item 已在 V2M，或开启 uniqueness 的 M2V，且 space 为 WRP/BLK 时
-  约束所有 active thread 的 element 0 masked；交叉 benchmark 已覆盖这些组合，但原有
-  testcase 尚未恢复，也没有真实 DUT 定向证据。
+  约束所有 active thread 的 element 0 masked；交叉 benchmark 已覆盖这些组合。V2M 根
+  TC 已恢复 WRP/BLK include，V2M/M2V 共 24 个叶子 case 已加入主列表，但扩容后的真实
+  RTL regression 尚未运行。
 - 影响：生成路径已避免 element 0 的确定性重叠；其余 element 的 reference/scoreboard
   行为仍需在真实 DUT 场景确认。
 - 目标：V2M 定向激励至少约束所有 thread 的 `creq_vmsk[*][0]==0`，同时保证其余有效
@@ -304,16 +297,6 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 目标依据：[creq/ack 接口的复位规则](spec/creq-ack-interface.md#8-复位与检查规则)。
 - 验收：reset 已知为 0 时分别拉高 release、vack 和 mack，均得到明确错误；reset X/Z
   不启动正常 payload 检查，done 为 0 时不检查 ID。
-
-### `SHMINS-011` 无效 transaction compare API
-
-- 现状：`compare_item()` 已委托 UVM `compare()`，不再无条件 fatal；正式 transaction
-  的已注册字段可参与比较，但尚无独立 positive/negative 定向测试来固定比较 contract。
-- 影响：调用 compare 不再终止仿真，但未注册的生成中间状态不属于当前比较语义。
-- 目标：明确稳定的比较字段、四态和返回值语义，并用正反例锁定 contract；若没有调用者，
-  也可删除该包装 API。
-- 验收：无用 API 被删除且现有编译通过，或保留的 compare 有正反例定向测试且不使用
-  无条件 fatal。
 
 ### `VMEM-001` `FFD_CYC` read snapshot
 
@@ -353,15 +336,6 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 目标：阶段 5 定义 testpoint 后实现对应 coverpoint/cross，且不改变 scheduler 状态。
 - 验收：覆盖报告能追踪主要合法场景和错误注入场景。
 
-### `RSV-003` Reservation example 失效
-
-- 现状：`alignment_tb.sv` 已验证非对齐 reservation 的完整地址匹配；
-  `external_busy_tb.sv` 仍访问 scheduler 中不存在的 `EXTERNAL_BUSY_PERCENT` 大写字段。
-- 影响：`external-busy` 目标无法作为当前 external busy 配置的可靠回归证据。
-- 目标：external busy 示例改用 scheduler 的实际字段，并验证 plusarg 覆盖。
-- 验收：Ubuntu 脚本的 `external-busy` 目标编译并通过；`alignment` 已由 `RSV-001`
-  关闭证据覆盖。
-
 ### `RSV-004` `input_error` 抑制粒度
 
 - 现状：cycle transaction 只有一个全局 `input_error`。任意 busy、reservation 或 MEM
@@ -387,6 +361,30 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   为 X/Z 时不启动业务 X/Z 检查，也不产生正常 transaction。
 
 ## 5. 已解决记录
+
+### `SHMINS-002` / `SHMINS-011` Transaction copy 与 compare
+
+- 关闭日期：2026-08-13。
+- 修改：公共 transaction `do_copy()` 保留 creq、生成统计、decoded offset、element MADDR
+  和两层映射结果；contiguous override 额外复制 `start_maddr`。`compare_item()` 使用 UVM
+  注册字段比较，不再无条件 fatal。
+- 验证：远端 VCS `W-2024.09-SP1_Full64` 执行
+  `scripts/ubuntu/check_shmins_sequence_vcs.sh all` 和带结果门禁的 `copy` 复跑；contiguous、
+  strided、indexed、VTRANS 均完成非默认字段 copy、未注册生成态逐字段检查、相等正例、
+  `creq_id` 差异负例及恢复正例，报告为 `UVM_ERROR: 0`、`UVM_FATAL: 0`。
+- 结论：影响行为的 copy 状态完整，保留的 compare API 已有稳定正反例组件测试。
+
+### `RSV-003` Reservation external-busy example
+
+- 关闭日期：2026-08-13。
+- 修改：external-busy testbench 连接 agent 必需的 read-data transport endpoint；Ubuntu
+  组件脚本增加 PASS marker、`UVM_ERROR: 0` 和 `UVM_FATAL: 0` 结果门禁，避免 UVM fatal
+  仍被 shell 当作成功。
+- 验证：远端 VCS `W-2024.09-SP1_Full64` 执行
+  `scripts/ubuntu/check_vlm_reservation_vcs.sh external-busy`；config 默认值为 7，plusarg
+  覆盖 scheduler 为 100，所有 external read/write busy slot 实际拉高，最终 0 error、
+  0 fatal 并输出 `EXTERNAL_BUSY_TEST ... PASS`。
+- 结论：当前 example 可独立验证 external-busy 配置优先级和基本 drive 行为。
 
 ### `DBANK-003` 统一 VLM interface 与静态连接
 
@@ -437,10 +435,11 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   `LDST_S × LOC/WRP/BLK × V2M/M2V` 共 600 次全部通过。
 - 编译与集成：远端 VCS `W-2024.09-SP1_Full64` 已完成正式 sequence 最小 top 和空
   `RpuShmTop` 的 parse、elaboration、link；2026-08-13 用户确认修改后的验证环境和 sequence
-  item 已在真实 design 上通过 `shm.lst` 全部 85 个 case，不再出现 inactive element
+  item 已在真实 design 上通过当时 `shm.lst` 的全部 85 个 case，不再出现 inactive element
   MADDR mapping error。
 - 结论：随机化性能重构、正式 API 迁移和系统消费边界均已完成。`SHMINS-003` 已单独
-  关闭；`SHMINS-002/004/007` 仍按 copy、配置和 strided 定向验收条件独立跟踪。
+  关闭；`SHMINS-002/011` 已由独立 copy/compare 组件测试关闭，`SHMINS-004/007` 仍按
+  配置和 strided RTL 定向验收条件独立跟踪。
 
 ### `RSV-001` Reservation alignment policy
 

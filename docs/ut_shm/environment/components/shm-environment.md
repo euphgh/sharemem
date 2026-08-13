@@ -113,7 +113,8 @@ interface 的 `rst_n` 处理 reset。
 ## 10. 当前实现状态
 
 - 统一 VLM environment 和 shmins/reference/scoreboard 正向主路径已于 2026-08-13 在
-  真实 design 上通过 `shm.lst` 全部 85 个 case；`DBANK-003` 已关闭。
+  真实 design 上通过扩容前 `shm.lst` 的 85 个 case；`DBANK-003` 已关闭。当前列表新增
+  24 个 strided case，尚待真实 RTL regression。
 - `ENV-001`：运行中 reset 尚未统一清理。
 - `ENV-002`：公开配置仍能表达当前不支持的 passive 组合。
 

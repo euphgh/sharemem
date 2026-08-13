@@ -72,7 +72,7 @@ spec 要求的激励、观察和 coverage，再记录当前 sequence、checker �
 |`TP-ADDR-005`|[SPACE_WRP](../spec/address-model.md#6-space_wrp)：bank/laddr 来自 MADDR，absolute warp=`wpid`，再统一拆 gid/BADDR；12～16 KiB local 空洞禁止访问|wpid 0/3/4/7、所有 G、每个 bank、MADDR 范围和空洞边界|第一层 interleave 结果与第二层物理映射分别检查|direction × G × bank × wpid × gid × local boundary/hole|WRP 正向矩阵已通过 85-case RTL 回归；没有双 gid 边界定向|双层地址正向主路径已通过全列表；coverage 和空洞/边界 case 缺失|
 |`TP-ADDR-006`|[SPACE_BLK](../spec/address-model.md#7-space_blk)：MADDR 编码当前 group 内的 bank/warp_offs/inv_index，`wpid/wpnum` 选择 absolute group，再统一拆 gid/BADDR|wpnum 1/2/4、wpid 0/3/4/7、MADDR 0 与 `C*B*P-1/C*B*P`、absolute warp 0～7、空洞边界|独立公式与公共 helper 比对 group-relative range、逻辑 bank/warp/laddr、物理 gid/BADDR 和实际 MEM|wpnum × wpid-derived group × warp_offs × absolute warp × gid × G × bank × hole|两轮各 1248 个独立公式边界检查覆盖全部 13 个 interleave size；实际 RTL BLK regression 通过|激励、helper、reference 和 RTL 回归已完成；functional coverage 待实现|
 |`TP-ADDR-007`|[MEM beat 地址与 byte lane](../spec/address-model.md#9-mem-beat-地址与-byte-lane)：read/write beat 均允许非对齐，lane `k` 对应 `beat_addr+k`|两个 gid、低 5 bit、跨传统 32-Byte 边界、vaddr WARP首尾和 sparse strobe|memory model 按 `<bank,gid,BADDR>` 返回；scoreboard 展开逐 byte；reservation 完整地址兑现|direction × gid × address-low-bits × boundary crossing × strobe|正向随机地址已通过 85-case RTL 回归；没有 gid/跨界定向|激励和模型正向主路径已通过全列表；coverage、gid 和跨边界定向 case 缺失|
-|`TP-ADDR-008`|V2M `LDSTE_S + SPACE_WRP/BLK` 仅在排除 element 0 跨 thread 重叠写后可定义；M2V 同组合受支持|V2M 必须令每个 thread `creq_vmsk[*][0]==0` 并保证其余写地址无冲突；M2V 覆盖正常 element 0 读取|reference 单笔 overlap 检查、scoreboard 数据结果和 M2V read/writeback|direction × SPACE_WRP/BLK × element0 mask × overlap outcome|Strided item 已自动 mask V2M element 0；原 V2M 子 TC 和 M2V LST 仍未形成定向回归|激励已通过 benchmark；该组合不在 85-case 主列表中，DUT 定向、M2V case 和 coverage 缺失|
+|`TP-ADDR-008`|V2M `LDSTE_S + SPACE_WRP/BLK` 仅在排除 element 0 跨 thread 重叠写后可定义；M2V 同组合受支持|V2M 必须令每个 thread `creq_vmsk[*][0]==0` 并保证其余写地址无冲突；M2V 覆盖正常 element 0 读取|reference 单笔 overlap 检查、scoreboard 数据结果和 M2V read/writeback|direction × SPACE_WRP/BLK × element0 mask × overlap outcome|Strided item 已自动 mask V2M element 0；V2M/M2V 共 24 个叶子 case 已进入扩容后的主列表，尚未运行真实 RTL|激励和 case 已实现；真实 DUT regression 与 coverage 缺失，尚不能关闭|
 |`TP-ADDR-009`|[逻辑到物理映射](../spec/address-model.md#8-逻辑地址到物理地址)：三种 space 共用 `gid=warp/4`、`BADDR=(warp%4)*WARP_STEP+laddr`|公式级遍历关键 bank/warp/laddr；故意构造 warp0/4 同 BADDR|独立 helper 单元测试和 reference 诊断字段|space × warp 0/3/4/7 × gid × laddr boundary|正式 helper 已由 benchmark consumer 和 85-case RTL 回归使用|helper 正向主路径已验证；独立公式测试、关键边界 case 和 coverage 缺失|
 
 ## 6. MEM 接口
@@ -113,7 +113,8 @@ spec 要求的激励、观察和 coverage，再记录当前 sequence、checker �
   coverage，无法证明随机的 length、mask、inv_size、wpnum、ack、priority、地址边界和
   reservation 场景已经出现。
 - VTRANS 只有一个 case，虽然 `creq_tmsk` 已约束全 1，DTYPE 与 ITYPE 组合仍由 seed 决定。
-- M2V `LDSTE_S + SPACE_WRP/BLK` 的 TC 已存在，但未进入当前 regression。
+- V2M/M2V `LDSTE_S + SPACE_WRP/BLK` 的 24 个 case 已进入 regression，但尚未完成
+  扩容后的真实 RTL 运行。
 
 ### 9.2 Spec 有要求，但当前没有定向 case
 

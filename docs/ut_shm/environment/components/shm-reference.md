@@ -105,9 +105,9 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 
 `ut_shm/tests/shm_unit_test.svh` 是当前 reference 的集成使用入口。现阶段没有把地址
 映射、VTRANS 转置、M2V 读写回或跨 creq 重叠拆成独立 reference 单元测试。BLK 的
-WPID-derived 非零 `warp_group` 已由独立公式检查和实际 RTL regression 覆盖；仍需按
-`SHMINS-002` 增加 copy 后字段完整性的独立正反例。2026-08-13 当前 reference 主路径已随
-新 sequence item 在真实 design 上通过 `shm.lst` 全部 85 个 case。
+WPID-derived 非零 `warp_group` 已由独立公式检查和实际 RTL regression 覆盖；transaction
+copy 后字段完整性已由四 topology 独立正反例覆盖。2026-08-13 当前 reference 主路径已随
+新 sequence item 在真实 design 上通过当时 `shm.lst` 的全部 85 个 case。
 
 ## 10. 开发 contract
 
@@ -126,7 +126,8 @@ WPID-derived 非零 `warp_group` 已由独立公式检查和实际 RTL regressio
 - `REF-001`：SPACE_BLK 公共映射已改为 WPID/WPNUM 派生 group，两轮各 1248 个独立
   公式检查和实际 RTL BLK regression 已通过，2026-08-13 关闭。
 - `SHMINS-001`：reference mask 正向主路径已通过 85-case 真实 RTL 回归，等待 mask 边界定向验证。
-- `SHMINS-002`：输入 transaction copy 已通过 consumer 交叉测试和 85-case RTL 回归，等待独立 copy 验证。
+- `SHMINS-002`：输入 transaction copy 已通过 consumer 交叉测试、85-case RTL 回归和
+  四 topology 独立 copy/compare 组件测试，2026-08-13 关闭。
 - `SHMINS-003`：正式生成器和 validator 已按 group-relative BLK 公式更新；基础
   interleave/space benchmark、全部 interleave size 的扩展检查和实际 RTL BLK regression
   已通过，2026-08-13 关闭。

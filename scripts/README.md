@@ -21,6 +21,11 @@ The `shmins_sequence_item` randomization benchmark uses:
 Its source, profiles, constraint-isolation modes, and result fields are
 documented in `examples/shmins_random_benchmark/README.md`.
 
+The empty-design SHMINS component checks use
+`ubuntu/check_shmins_sequence_vcs.sh`. Its `compile` target checks elaboration,
+and its `copy` target runs the transaction copy/compare test under
+`examples/shmins_sequence_compile/`.
+
 CentOS has no repository-owned execution scripts. It receives only `ut_shm/`
 and `ver_common/` through `local/upload_centos.py` and uses its own build and
 regression framework.

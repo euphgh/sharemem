@@ -75,9 +75,9 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh external-busy
 scripts/ubuntu/check_vlm_reservation_vcs.sh all
 ```
 
-`external-busy` testbench 的历史字段问题仍由
-[`RSV-003`](../verification-status.md#rsv-003-reservation-example-失效)跟踪；`alignment`
-目标已不再编码旧的 port-based alignment 规则。
+`external-busy` testbench 的 config 和 scheduler 字段已对齐，且当前版本已在远端通过；
+`alignment` 目标已不再编码旧的 port-based alignment 规则。两个 UVM 组件运行脚本都会
+检查 PASS marker、`UVM_ERROR: 0` 和 `UVM_FATAL: 0`，避免只依赖 simv 退出码。
 
 ## 4. 从 macOS 发起相同检查
 
@@ -110,8 +110,8 @@ Ubuntu 可以证明测试环境与 VCS/UVM/VIP 以及伪 design 接口能够共�
 - 组件脚本的 `compile` 目标通过；
 - `alignment` 目标运行通过，但它仍编码旧 port-based alignment 规则，不是最新
   spec 的验收证据；
-- `external-busy` 目标因 testbench 访问已不存在的
-  `scheduler.EXTERNAL_BUSY_PERCENT` 而编译失败，对应 [`RSV-003`](../verification-status.md#rsv-003-reservation-example-失效)。
+- 当时的 `external-busy` 目标因字段名不一致而编译失败；当前源码已修复，并在
+  2026-08-13 使用 VCS `W-2024.09-SP1_Full64` 复跑通过，`RSV-003` 已关闭。
 
 这份快照只记录当时的伪 design 环境，后续代码变更后应重新执行，不能替代
 CentOS 真实 RTL 的最终结果。

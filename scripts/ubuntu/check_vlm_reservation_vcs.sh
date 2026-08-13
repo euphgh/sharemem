@@ -86,6 +86,19 @@ require_file() {
     fi
 }
 
+check_uvm_test_log() {
+    local log_file="$1"
+    local pass_marker="$2"
+
+    if ! grep -Eq 'UVM_ERROR[[:space:]]*:[[:space:]]*0' "$log_file" ||
+       ! grep -Eq 'UVM_FATAL[[:space:]]*:[[:space:]]*0' "$log_file" ||
+       ! grep -Fq -- "$pass_marker" "$log_file"; then
+        printf '错误：UVM 组件测试未通过：%s\n' "$log_file" >&2
+        tail -n 80 -- "$log_file" >&2
+        return 1
+    fi
+}
+
 prepare_build() {
     if ! command -v -- "$vcs_bin" >/dev/null 2>&1; then
         printf '错误：找不到 VCS 可执行文件：%s\n' "$vcs_bin" >&2
@@ -162,6 +175,8 @@ run_external_busy() {
             -o "$simv" \
             -l external_busy_compile.log
         "$simv" +EXTERNAL_BUSY_PERCENT=100 -l external_busy_test.log
+        check_uvm_test_log external_busy_test.log \
+            '[EXTERNAL_BUSY_TEST] external busy plusarg regression: PASS'
     )
 }
 

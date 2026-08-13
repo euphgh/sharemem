@@ -119,9 +119,10 @@ Agent/driver 缺少 config 或 vif 时分别使用 `SHMINS_NO_CFG`、`SHMINS_NO_
 Monitor 当前只严格判断 `creq_vld`，没有按 active/inactive thread 规则检查 payload
 四态，见 `SHMINS-006`。
 
-Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计字段；`compare_item()`
-使用 UVM 注册字段比较，不再无条件 fatal。两者仍由 `SHMINS-002/011` 跟踪独立正反例
-验证，不能仅以空设计编译作为完整 API 关闭证据。
+Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计字段；contiguous override
+额外复制 `start_maddr`。`compare_item()` 使用 UVM 注册字段比较，不再无条件 fatal。
+四 topology 独立 copy/compare 正反例已于 2026-08-13 在远端 VCS 通过，
+`SHMINS-002/011` 已关闭。
 
 ## 8. 调试观察点
 
@@ -135,10 +136,11 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 ## 9. 相关测试
 
 `ut_shm/tests/shm_unit_test.svh` 通过 `shmins_mst_unit_sequence` 覆盖当前集成激励入口，
-可用 plusarg 改变 transaction 数量、normal domain 和 VTRANS 比例。当前没有独立的 credit/release、ack
-完整性、四态输入、transaction copy 或 reset 静默单元测试。Strided item 已为 V2M
-`LDSTE_S + SPACE_WRP/SPACE_BLK` 生成 element-0 mask，但仍缺少独立 DUT 定向 case。相关缺口由
-`SHMINS-001`～`SHMINS-010` 的验收项追踪。
+可用 plusarg 改变 transaction 数量、normal domain 和 VTRANS 比例。当前没有独立的
+credit/release、ack 完整性、四态输入或 reset 静默测试；transaction copy 组件测试位于
+`examples/shmins_sequence_compile/`。Strided item 已为 V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
+生成 element-0 mask，V2M/M2V 共 24 个叶子 case 已进入扩容后的主列表，仍待真实 DUT
+regression。相关缺口由 `SHMINS-001`～`SHMINS-010` 的验收项追踪。
 
 ## 10. 开发 contract
 
@@ -159,8 +161,8 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 - `SHMINS-012`：topology-based 正式 sequence item、benchmark、consumer 和真实 RTL 集成
   已于 2026-08-13 验证完成并关闭。
 - `SHMINS-001`：`creq_tmsk` 正向数据链已通过 85-case 真实 RTL 回归，等待 mask 边界定向验证。
-- `SHMINS-002`：transaction copy 已完整实现并通过 reference consumer 交叉测试，等待
-  独立逐字段/VTRANS 定向验证。
+- `SHMINS-002/011`：transaction copy/compare 已通过 reference consumer 交叉测试及
+  `examples/shmins_sequence_compile/copy_tb.sv` 的四 topology 正反例，2026-08-13 关闭。
 - `SHMINS-003`：过程式 MADDR 生成、12 KiB/空洞检查和两层映射已按 group-relative BLK
   公式更新；432 组合、无 inline constraint benchmark、两轮各 1248 个独立 BLK 公式检查
   和实际 RTL BLK regression 均已通过，2026-08-13 关闭。
@@ -168,7 +170,8 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
   ATYPE_S/G 仍等待 testcase 配置到 monitor 的端到端定向验证。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。
 - `SHMINS-006`：缺少 active payload X/Z 检查。
-- `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 已实现，等待 DUT 定向验证。
+- `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 已实现，V2M/M2V 24 个 case
+  已进入主列表，等待扩容后的真实 RTL regression。
 - `SHMINS-008`：固定 ack timeout 与协议无最大延迟冲突。
 - `SHMINS-009`：credit/release 和 ack 完备性检查不足。
 - `SHMINS-010`：复位期间 release/ack 静默没有检查。

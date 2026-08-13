@@ -33,6 +33,13 @@ m2v_ev_warp_dtyp16_atyp16  : RUN=1
 m2v_ev_warp_dtyp8_atyp32   : RUN=1
 m2v_ev_warp_dtyp8_atyp16   : RUN=1
 
+m2v_es_warp_dtyp32_atyp32  : RUN=1
+m2v_es_warp_dtyp32_atyp16  : RUN=1
+m2v_es_warp_dtyp16_atyp32  : RUN=1
+m2v_es_warp_dtyp16_atyp16  : RUN=1
+m2v_es_warp_dtyp8_atyp32   : RUN=1
+m2v_es_warp_dtyp8_atyp16   : RUN=1
+
 m2v_vec_blk_dtyp32_atyp32  : RUN=1
 m2v_vec_blk_dtyp32_atyp16  : RUN=1
 m2v_vec_blk_dtyp16_atyp32  : RUN=1
@@ -46,3 +53,10 @@ m2v_ev_blk_dtyp16_atyp32   : RUN=1
 m2v_ev_blk_dtyp16_atyp16   : RUN=1
 m2v_ev_blk_dtyp8_atyp32    : RUN=1
 m2v_ev_blk_dtyp8_atyp16    : RUN=1
+
+m2v_es_blk_dtyp32_atyp32   : RUN=1
+m2v_es_blk_dtyp32_atyp16   : RUN=1
+m2v_es_blk_dtyp16_atyp32   : RUN=1
+m2v_es_blk_dtyp16_atyp16   : RUN=1
+m2v_es_blk_dtyp8_atyp32    : RUN=1
+m2v_es_blk_dtyp8_atyp16    : RUN=1

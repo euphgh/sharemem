@@ -30,6 +30,13 @@ class shmins_contiguous_sequence_item extends shmins_sequence_item;
   extern function new(string name = "shmins_contiguous_sequence_item");
 
   //----------------------------------------------------------------------------
+  // @brief Copies common transaction state and contiguous start MADDR values.
+  //
+  // @param rhs Source object, which must be a contiguous sequence item.
+  //----------------------------------------------------------------------------
+  extern function void do_copy(uvm_object rhs);
+
+  //----------------------------------------------------------------------------
   // @brief Generates start MADDR values, a shared base, and per-thread offsets.
   //
   // @post elem_maddr contains every active contiguous MADDR and offs_elem[t][0]
@@ -94,6 +101,19 @@ endclass : shmins_contiguous_sequence_item
 function shmins_contiguous_sequence_item::new(string name = "shmins_contiguous_sequence_item");
   super.new(name);
 endfunction : new
+
+function void shmins_contiguous_sequence_item::do_copy(uvm_object rhs);
+  shmins_contiguous_sequence_item rhs_item;
+
+  super.do_copy(rhs);
+  if (!$cast(rhs_item, rhs)) begin
+    `uvm_fatal(get_type_name(), "Cast of rhs object to shmins_contiguous_sequence_item failed")
+  end
+
+  foreach (start_maddr[thread_idx]) begin
+    start_maddr[thread_idx] = rhs_item.start_maddr[thread_idx];
+  end
+endfunction : do_copy
 
 function void shmins_contiguous_sequence_item::generate_address_fields();
   longint signed space_lower;

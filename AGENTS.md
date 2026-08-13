@@ -23,3 +23,7 @@ and resolve the contract instead of inferring a new DUT rule from legacy code.
 Preserve unrelated user changes. After source changes, run a syntax-oriented
 check that covers the changed files, and keep generated artifacts outside
 source and documentation directories.
+
+Place only tests that require the real design under `ut_shm/tests/`. Place
+component tests that compile and run without the real design under `examples/`;
+do not use an empty or stub design result as evidence of DUT behavior.

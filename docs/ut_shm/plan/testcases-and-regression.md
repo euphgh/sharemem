@@ -17,6 +17,10 @@ run  = case + seed
 中的派生 case，不是 `uvm_test` class。它们通过继承公共参数并追加方向参数，减少每个
 叶子 case 的重复配置。
 
+测试源码按是否依赖真实 design 分目录：只有必须实例化并检查真实 DUT 行为的 UVM test
+放在 `ut_shm/tests/`；sequence item、agent、checker 或 memory model 等不依赖真实 design
+的组件测试放在 `examples/`。组件测试不进入 TC/LST，也不能作为 DUT 功能通过证据。
+
 同一个 case 用不同 seed 执行仍是同一个 case。Seed 只改变未被 plusarg 或 sequence
 constraint 固定的随机字段；因此 case 被列入 regression 不表示某个概率场景必然发生，
 必须用 functional coverage 证明实际命中。
@@ -93,7 +97,7 @@ shm_unit_test
 |`EXTERNAL_BUSY_PERCENT`|10|reservation scheduler 注入 external busy 的概率|
 
 `v2m_unit_test` 追加 `CREQ_RW=SHM_V2M`，`m2v_unit_test` 追加
-`CREQ_RW=SHM_M2V`。`v2m_vtrans_test` 只追加 `VTRANS_EN=1`；VTRANS sequence 自身再约束
+`CREQ_RW=SHM_M2V`。`v2m_vtrans_test` 追加 `VTRANS_EN=100`；VTRANS sequence 自身再约束
 方向、space、dtype、itype、length 和 mask。
 
 ## 4. 普通 case 命名与矩阵
@@ -175,14 +179,14 @@ ITYPE 由 seed 随机选择；没有 coverage 时，不能确认四个合法组�
 
 ### 5.4 `LDSTE_S + SPACE_WRP/SPACE_BLK`
 
-该组合在 M2V 中受支持。当前 M2V 子 TC 已定义并由根 TC include，但 12 个对应叶子
-case 尚未列入 `m2v.lst`。
+该组合在 M2V 中受支持。M2V 子 TC 已定义并由根 TC include，12 个对应叶子 case 已加入
+`m2v.lst`，等待扩容后的真实 RTL regression 验证。
 
 V2M 中不同 thread 的 element 0 会按 `base + 0*offset` 访问相同 MADDR；多个写对同一
-地址的结果未定义。因此根 TC 注释了 V2M 的 `es_warp.tc` 和 `es_blk.tc` include，
-`v2m.lst` 也没有这些 case。若要定向验证其余 element，激励至少必须令所有 thread 的
-`creq_vmsk[*][0]==0`，并保持其他有效 element 的写地址无冲突。当前 sequence/case 尚
-不支持该约束，见 `SHMINS-007`。
+地址的结果未定义。因此 V2M 激励必须令所有 active thread 的 `creq_vmsk[*][0]==0`，并
+保持其他有效 element 的写地址无冲突。当前 strided item 已实现该约束；根 TC 已恢复
+`es_warp.tc` 和 `es_blk.tc` include，12 个对应叶子 case 已加入 `v2m.lst`，等待真实 RTL
+regression 验证，见 `SHMINS-007`。
 
 ## 6. LST 文件格式
 
@@ -207,28 +211,25 @@ case_name : RUN=1 SEED=num
 
 |文件|内容|Case 数|
 |---|---|---:|
-|[`v2m.lst`](../../../ut_shm/regression/v2m.lst)|普通 V2M 矩阵，加 VTRANS|43|
-|[`m2v.lst`](../../../ut_shm/regression/m2v.lst)|普通 M2V 矩阵|42|
-|[`shm.lst`](../../../ut_shm/regression/shm.lst)|include 前两份列表|85|
+|[`v2m.lst`](../../../ut_shm/regression/v2m.lst)|普通 V2M 矩阵，加 VTRANS|55|
+|[`m2v.lst`](../../../ut_shm/regression/m2v.lst)|普通 M2V 矩阵|54|
+|[`shm.lst`](../../../ut_shm/regression/shm.lst)|include 前两份列表|109|
 
 普通 V2M 和 M2V regression 都包含：
 
 - `vec` 的 LOC、WRP、BLK；
 - `ev` 的 LOC、WRP、BLK；
-- `es` 的 LOC。
+- `es` 的 LOC、WRP、BLK。
 
-两份列表都没有 `es + WRP/BLK`。对 V2M，这是前述未定义重叠写限制；对 M2V，spec
-支持且 TC 已存在，因此当前 regression 仍未覆盖这 12 个 case。
-
-所有条目当前都是 `RUN=1`，没有固定 `SEED`。当前里程碑中，用户已确认 `shm.lst`
-的全部 85 个 case 在真实 design 上通过：V2M/VTRANS 43 个、M2V 42 个。该结果可以作为
-所列正向组合通过的证据；但由于没有固定 seed 和 functional coverage，不能证明随机
-字段命中特定边界或 coverage bin。
+所有条目当前都是 `RUN=1`，没有固定 `SEED`。扩容前的 85-case 基线已在真实 design 上
+通过：V2M/VTRANS 43 个、M2V 42 个。新增的 24 个 `LDSTE_S + WRP/BLK` case 尚未运行
+真实 RTL regression，因此当前不能宣称 109 个 case 全部通过。即使扩容后全部通过，
+没有固定 seed 和 functional coverage 仍不能证明随机字段命中特定边界或 coverage bin。
 
 ## 8. 双 gid 迁移新增 case 组
 
-现有 85 个 case 已通过真实 RTL 回归，证明新的物理 BANK 组织可以承载当前正向矩阵；
-但仍不能证明以下双 gid 边界和失败路径，至少需要增加这些定向组：
+扩容前 85 个 case 已通过真实 RTL 回归，证明新的物理 BANK 组织可以承载原正向矩阵；
+新增 24 个 strided case 不覆盖以下双 gid 边界和失败路径，仍需增加这些定向组：
 
 |Case 组|主要 testpoint|
 |---|---|
@@ -249,6 +250,8 @@ case_name : RUN=1 SEED=num
 ## 9. 维护规则
 
 - 新 case 必须先关联至少一个 testpoint，不能只扩充名称矩阵。
+- 真实 design UVM test 放在 `ut_shm/tests/`；不依赖真实 design 的组件测试放在
+  `examples/`，并由独立脚本运行。
 - TC 继承或公共 plusarg 改动后，应检查所有叶子 case 的 effective configuration。
 - LST 不得引用根 TC 无法解析的 case；定义、include 和 regression 选择是三个不同状态。
 - Case 改名时同步更新 LST 和 testpoint 映射。
