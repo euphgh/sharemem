@@ -39,7 +39,11 @@ class vlm2aa;
                     byte unsigned byte_data = vlm.vlm_data[bk_id][by_id * 8 +: 8];
                     if (res[physical_bank].exists(byte_addr)) begin
                         has_overlap = 1'b1;
-                        `uvm_info(vlm.get_type_name(), $sformatf("Write Overlap at bank[%0d][0x%x], %0x -> %0x", bk_id, byte_addr, res[bk_id][byte_addr], byte_data), UVM_HIGH);
+                        `uvm_info(vlm.get_type_name(),
+                                  $sformatf("Write Overlap at BANK[%0d].GID[%0d].BADDR[0x%x], %0x -> %0x",
+                                            bk_id, vlm.vlm_gid[bk_id], byte_addr,
+                                            res[physical_bank][byte_addr], byte_data),
+                                  UVM_HIGH);
                     end
                     res[physical_bank][byte_addr] = byte_data;
                 end

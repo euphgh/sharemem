@@ -28,6 +28,7 @@ package shm_env_package;
   `include "vlm_agent.svh"
 
   `include "shm_environment_config.svh"
+  `include "shm_physical_map_util.svh"
   `include "shm_reference.svh"
   `include "shm_scoreboard.svh"
   `include "shm_environment.svh"

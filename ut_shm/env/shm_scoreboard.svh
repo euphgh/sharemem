@@ -27,8 +27,8 @@ class shm_scoreboard extends uvm_scoreboard;
     typedef tmap_util::aa_array_t tmap_t;
 
     // write aa of q array
-    typedef aa_of_q_array_util#(PHYSICAL_BANK_N, baddr_t, byte) wmmap_util;
-    typedef wmmap_util::aa_of_q_array_t wmmap_t;
+    typedef shm_physical_map_util::wmmap_util wmmap_util;
+    typedef shm_physical_map_util::wmmap_t wmmap_t;
     typedef set_util#(byte) byte_set_util;
     typedef byte_set_util::set_t byte_set_t;
 
@@ -175,7 +175,8 @@ task shm_scoreboard::scan_timeout_creq();
                 error_msg = {$sformatf("shmins require expired after %0d cycles:\n", time_out_cycle), tr.sprint()};
                 error_msg = {error_msg, "expired table: \n", tmap_util::sprint(ref_record_q[id].expired), "\n"};
                 error_msg = {error_msg, "matched table: \n", tmap_util::sprint(ref_record_q[id].matched), "\n"};
-                error_msg = {error_msg, "unmatched table: \n", wmap_util::sprint(unmatched_wmap), "\n"};
+                error_msg = {error_msg, "unmatched table: \n",
+                             shm_physical_map_util::sprint_wmap(unmatched_wmap, "unmatched wmap"), "\n"};
                 `uvm_error(get_type_name(), error_msg);
             end
             else begin // only not finish and not expired records should be saved
@@ -222,9 +223,10 @@ task shm_scoreboard::compare_dut_with_ref();
             if (!waddr_util::contains(hited_addrs, vlm_waddrs)) begin: addr_check
                 waddr_set_t error_waddr = waddr_util::get_diff(vlm_waddrs, hited_addrs);
                 string err_msg = {"rtl write address is not expected:\n", waddr_util::sprint(error_waddr, "error address")};
-                err_msg = {err_msg, "\n", wmap_util::sprint(vlm_wmap, "vlm table")};
-                err_msg = {err_msg, "\n", wmap_util::sprint(wmap_final, "final wmap table")};
-                err_msg = {err_msg, "\n", wmmap_util::sprint(wmap_expired, "expired wmmap table")};
+                err_msg = {err_msg, "\n", shm_physical_map_util::sprint_wmap(vlm_wmap, "vlm table")};
+                err_msg = {err_msg, "\n", shm_physical_map_util::sprint_wmap(wmap_final, "final wmap table")};
+                err_msg = {err_msg, "\n",
+                           shm_physical_map_util::sprint_wmmap(wmap_expired, "expired wmmap table")};
                 `uvm_error(get_type_name(), err_msg);
             end: addr_check
             else begin: value_check
@@ -240,8 +242,13 @@ task shm_scoreboard::compare_dut_with_ref();
                     end
                     else begin
                         value_error = 1;
-                        err_msg = {err_msg, $sformatf("vlm[%0d][0x%x](%x) != final val(%x), also not in expired(%s)\n",
-                            bidx, baddr, rtl_wdata, matched_final_wmap[bidx][baddr], byte_set_util::sprint(matched_expired_wmmap[bidx][baddr]))};
+                        err_msg = {err_msg,
+                                   $sformatf({"BANK[%0d].GID[%0d].BADDR[0x%04x]: actual=0x%02x ",
+                                              "final=0x%02x expired=%s\n"},
+                                             bidx / GID_N, bidx % GID_N, baddr, rtl_wdata,
+                                             matched_final_wmap[bidx][baddr],
+                                             shm_physical_map_util::sprint_byte_values(
+                                                 matched_expired_wmmap[bidx][baddr]))};
                     end
                 end
 
@@ -265,13 +272,17 @@ task shm_scoreboard::compare_dut_with_ref();
                 end
 
                 if (value_error) begin
-                    err_msg = {err_msg, "\n", wmap_util::sprint(vlm_wmap, "vlm table")};
-                    err_msg = {err_msg, "\n", wmap_util::sprint(wmap_final, "final wmap table")};
-                    err_msg = {err_msg, "\n", wmmap_util::sprint(wmap_expired, "expired wmmap table")};
+                    err_msg = {err_msg, "\n", shm_physical_map_util::sprint_wmap(vlm_wmap, "vlm table")};
+                    err_msg = {err_msg, "\n", shm_physical_map_util::sprint_wmap(wmap_final, "final wmap table")};
+                    err_msg = {err_msg, "\n",
+                               shm_physical_map_util::sprint_wmmap(wmap_expired, "expired wmmap table")};
                     `uvm_error(get_type_name(), err_msg);
                 end
                 else begin: value_full_match
-                    `uvm_info(get_type_name(), {"rtl write fully matched with wmap_final and wmmap_expired:\n", wmap_util::sprint(vlm_wmap)}, UVM_FULL);
+                    `uvm_info(get_type_name(),
+                              {"rtl write fully matched with wmap_final and wmmap_expired:\n",
+                               shm_physical_map_util::sprint_wmap(vlm_wmap, "vlm table")},
+                              UVM_FULL);
                     foreach(ref_record_q[i]) begin
                         shm_wtrans_item curr_trans = ref_record_q[i].tr;
                         wmap_t trans_pair_matched = wmap_util::get_intersect(vlm_wmap, curr_trans.wmap);
@@ -368,7 +379,9 @@ function void shm_scoreboard::check_phase(uvm_phase phase);
     end
 
     if (has_not_matched_data) begin
-        `uvm_error(get_type_name(), {"wmap_final is not empty after test:\n", wmap_util::sprint(wmap_final, "final wmap table"), "\n"});
+        `uvm_error(get_type_name(),
+                   {"wmap_final is not empty after test:\n",
+                    shm_physical_map_util::sprint_wmap(wmap_final, "final wmap table"), "\n"});
     end
 
 endfunction: check_phase

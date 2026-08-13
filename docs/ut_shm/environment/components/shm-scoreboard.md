@@ -21,6 +21,12 @@
 - `wmap_expired`：被后续 creq 覆盖、但 DUT 乱序执行时仍可合法出现的旧值队列；
 - `ref_record_q`：每笔 creq 的原始 `wmap`，以及逐地址 `matched/expired` 时间。
 
+`wmap/wmmap` 的底层 collection 仍使用
+`physical_bank_index=bank_id*GID_N+gid` 的一维索引，以保持集合运算接口不变。日志通过
+`shm_physical_map_util` 恢复为稀疏的 `BANK → GID → BADDR` 层次，只显示非空 group，
+并在表头给出 group 和地址条目数量。单地址 mismatch 也使用显式 BANK/GID/BADDR，
+不再暴露容易误读的 flattened index。
+
 ## 2. 三条并行主路径
 
 `main_phase` 启动三个常驻任务：
@@ -124,6 +130,7 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 |`ut_shm/env/shm_scoreboard.svh`|期望/实际 FIFO、outstanding 算法、read service 和结束检查|
 |`ut_shm/env/shm_wtrans_item.svh`|保留原始 creq 上下文的期望 byte map|
 |`ut_shm/env/vlm2aa.svh`|实际 MEM transaction 到 byte map 的转换|
+|`ut_shm/env/shm_physical_map_util.svh`|把 flattened wmap/wmmap 格式化为 BANK/GID/BADDR 层次|
 |`ut_shm/util/sv-collection/`|set、associative array 和 queue 的集合运算工具|
 
 `ut_shm/tests/shm_unit_test.svh` 提供完整数据路径 smoke。当前没有针对交叠 creq 乱序

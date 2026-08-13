@@ -176,7 +176,8 @@ class shm_wtrans_item extends shmins_sequence_item;
     virtual function void do_print(uvm_printer printer);
         super.do_print(printer);
         printer.print_time("issue_time", issue_time);
-        printer.print_generic("wmap", "byte [bit[19:0]][16]", 0, wmap_util::sprint(wmap));
+        printer.print_generic("wmap", "physical_byte_map[BANK_N][GID_N]", 0,
+                              shm_physical_map_util::sprint_wmap(wmap, ""));
     endfunction : do_print
 endclass : shm_wtrans_item
 
