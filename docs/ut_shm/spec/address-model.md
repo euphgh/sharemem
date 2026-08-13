@@ -139,10 +139,10 @@ MADDR [16G, 17G)     -> BANK 0，local block 1
 
 因此，较小的 interleave size 会把相邻地址更快地分散到多个 BANK，较大的
 interleave size 则让更多连续 byte 留在同一 BANK。SPACE_BLK 在遍历完全部 BANK
-后还会依次遍历 `warp_offs`，随后才增加 `inv_index` 和 `warp_group`：
+后还会依次遍历当前 WARP group 内的 `warp_offs`，随后才增加 `inv_index`：
 
 ```text
-inv_offs -> bank_id -> warp_offs -> inv_index -> warp_group
+inv_offs -> bank_id -> warp_offs -> inv_index
 ```
 
 这里的箭头表示 MADDR 从低位到高位、从变化最快到变化最慢的字段顺序。
@@ -266,8 +266,11 @@ K = C / G                       // 每个编码空间中的 interleave block 数
 MADDR 的合法编码范围为：
 
 ```text
-0 <= MADDR < C * B * N
+0 <= MADDR < C * B * P
 ```
+
+该范围只编码 `creq_wpid` 所属 WARP group 内的相对地址，不编码绝对 `warp_group`。
+`creq_wpid` 和 `creq_wpnum` 共同选择最终绝对 WARP group。
 
 地址字段使用以下算术关系解释：
 
@@ -276,7 +279,7 @@ inv_offs   = MADDR % G
 bank_id    = (MADDR / G) % B
 warp_offs  = (MADDR / (G * B)) % P
 inv_index  = (MADDR / (G * B * P)) % K
-warp_group = MADDR / (C * B * P)
+warp_group = creq_wpid / P
 
 warp_base  = warp_group * P
 warp_index = warp_base + warp_offs
@@ -286,22 +289,21 @@ warp_id = warp_index
 laddr = local_offs
 ```
 
-硬件位域形式需要先区分 WARP group。定义：
+硬件位域形式定义：
 
 ```text
 Q = $clog2(P)
 J = L - I
-group_span = C * B * P
+blk_span = C * B * P
 ```
 
-先把 MADDR 分成 group 编号和 group 内地址，再对 `group_maddr` 做拼接：
+MADDR 本身就是当前 WARP group 内的地址，可以直接按以下字段解释：
 
 ```systemverilog
-warp_group = MADDR / group_span;
-group_maddr = MADDR % group_span;
+assert (MADDR < blk_span);
+{inv_index, warp_offs, bank_id, inv_offs} = MADDR;
 
-{inv_index, warp_offs, bank_id, inv_offs} = group_maddr;
-
+warp_group = creq_wpid / P;
 warp_base  = warp_group * P;
 warp_index = warp_base + warp_offs;
 local_offs = {inv_index, inv_offs};
@@ -318,37 +320,29 @@ laddr      = local_offs;
 |`warp_offs`|`Q`|
 |`inv_index`|`J`|
 
-当 `P==1` 时省略零宽的 `warp_offs`。`group_maddr < group_span` 保证
-`inv_index < C/G`，因此这组拼接与前面的除法、取模公式完全等价。
+当 `P==1` 时省略零宽的 `warp_offs`。`MADDR < blk_span` 保证
+`inv_index < C/G`，因此公式中的 `% K` 不改变结果，这组拼接与前面的除法、取模公式
+完全等价。
 
-当 `C==16 KiB` 时，`group_span` 是 2 的幂，可以把 group 分解和组内拼接合并为：
-
-```systemverilog
-{warp_group, inv_index, warp_offs, bank_id, inv_offs} = MADDR;
-```
-
-此时 `warp_group` 的位宽为 `$clog2(N/P)`，五个字段的总宽度正好是当前
-`MADDR_W=21`。
-
-当 `C==12 KiB` 时，`group_span` 不是 2 的幂，必须保留
-`warp_group/group_maddr` 的预分解；直接把原始 MADDR 固定切成五个字段并不等价。
+当 `C==12 KiB` 时，`blk_span` 不是 2 的幂，但 MADDR 不再包含 `warp_group`，因此不需要
+旧算法中的 `warp_group/group_maddr` 预分解。仍必须先检查 `MADDR < blk_span`；不能只按
+字段宽度接受落在 12～16 KiB 编码尾部的值。
 
 合法 creq 必须同时满足：
 
 ```text
 local_offs < W
 warp_index < N
-creq_wpid / P == warp_index / P
 ```
 
-`creq_wpid` 只用于最后一条同组 assertion，不参与 `bank_id`、`warp_index` 或 laddr
-计算。真正的 WARP 基地址来自 MADDR：`warp_group` 先乘以 `creq_wpnum` 得到组基址，
-再加 `warp_offs` 得到最终绝对 `warp_index`。MADDR 仍编码 warp 0～7；物理 gid 只在
-后续统一物理映射中拆分。
+`creq_wpid` 不改变 `bank_id` 或 `laddr`，但它不再只是 assertion 输入。DUT 使用
+`creq_wpid/P` 计算 `warp_group`，再用 `warp_group*P+warp_offs` 得到最终绝对
+`warp_index`。因此相同 MADDR 在不同 aligned WARP group 中具有相同 BANK/laddr、不同
+绝对 WARP。物理 gid 仍只在后续统一物理映射中拆分。
 
-当 `G <= 4 KiB` 时，MADDR 范围是 `0 .. 12 KiB*BANK_N*WARP_N`，范围内没有地址
+当 `G <= 4 KiB` 时，MADDR 范围是 `0 .. 12 KiB*BANK_N*P`，范围内没有地址
 空洞。当 `G` 为 8 KiB 或 16 KiB 时，范围扩展为
-`0 .. 16 KiB*BANK_N*WARP_N`，但每个 WARP 中满足
+`0 .. 16 KiB*BANK_N*P`，但每个 WARP 中满足
 `12 KiB <= local_offs < 16 KiB` 的编码均为地址空洞。
 
 ## 8. 逻辑地址到物理地址
@@ -473,13 +467,14 @@ VTRANS 使用与普通 V2M 相同的 MADDR 映射和通用非对齐 MEM beat 地
 |项目|SPACE_LOC|SPACE_WRP|SPACE_BLK|
 |---|---|---|---|
 |逻辑 bank 来源|线程索引|MADDR|MADDR|
-|绝对 WARP 来源|`creq_wpid`|`creq_wpid`|MADDR 中的 `warp_group/warp_offs`|
-|`creq_wpid` 作用|选择绝对 WARP|选择绝对 WARP|只做同组 assertion|
-|`creq_wpnum` 作用|无|无|决定 WARP 组宽度和 `warp_offs`|
-|`G <= 4 KiB` MADDR 上界|`12 KiB`|`12 KiB*B`|`12 KiB*B*N`|
-|`G=8/16 KiB` MADDR 上界|仍为 `12 KiB`|`16 KiB*B`|`16 KiB*B*N`|
+|绝对 WARP 来源|`creq_wpid`|`creq_wpid`|`creq_wpid/P` 选择 group，MADDR 选择 `warp_offs`|
+|`creq_wpid` 作用|选择绝对 WARP|选择绝对 WARP|选择 aligned WARP group|
+|`creq_wpnum` 作用|无|无|决定 group 大小、MADDR 上界和 `warp_offs`|
+|`G <= 4 KiB` MADDR 上界|`12 KiB`|`12 KiB*B`|`12 KiB*B*P`|
+|`G=8/16 KiB` MADDR 上界|仍为 `12 KiB`|`16 KiB*B`|`16 KiB*B*P`|
 |地址空洞|不允许超出 12 KiB|8/16 KiB interleave 时存在|8/16 KiB interleave 时存在|
 
 所有上界均为 exclusive。验证激励必须对每个有效元素执行范围和空洞检查，不能只
 约束 `creq_base` 而忽略 offset 生成的最终 MADDR。三种 space 得到逻辑地址后均使用
-第 8 节的统一物理映射；SPACE_BLK 的 MADDR 范围仍覆盖绝对 warp 0～7。
+第 8 节的统一物理映射；SPACE_BLK 的 MADDR 只覆盖 `creq_wpid` 所属 group，绝对 WARP
+由 `creq_wpid/creq_wpnum` 与 MADDR 中的 `warp_offs` 共同决定。

@@ -97,9 +97,10 @@ SPACE_WRP/SPACE_BLK 在 8 KiB、16 KiB interleave size 下的地址空洞。不�
 `creq_base`。完整公式见[地址模型](address-model.md)。
 
 `creq_wpid` 的合法范围是 `0 .. WARP_N-1`。`creq_wpnum` 当前只能取 1、2、4；在
-SPACE_BLK 中，最终 `warp_index` 必须与 `creq_wpid` 位于同一个 `creq_wpnum` 对齐
-分组中。SPACE_BLK 的 MADDR 仍编码绝对 warp 0～7；物理 gid 和 BADDR 在逻辑地址
-映射完成后统一生成。
+SPACE_BLK 中，MADDR 只编码当前 WARP group 内的 `warp_offs`，合法范围是
+`[0, C*BANK_N*creq_wpnum)`。DUT 使用 `creq_wpid/creq_wpnum` 选择 aligned WARP group，
+最终 `warp_index` 为 group base 加 MADDR 中的 `warp_offs`。因此 `creq_wpid` 是 BLK 地址
+计算输入，不只是同组 assertion 输入。物理 gid 和 BADDR 在逻辑地址映射完成后统一生成。
 
 M2V 中 `creq_vaddr` 的编码为：
 

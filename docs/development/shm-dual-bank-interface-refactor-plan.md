@@ -39,9 +39,10 @@ gid   = absolute_warp_id / 4
 BADDR = (absolute_warp_id % 4) * WARP_STEP + warp_laddr
 ```
 
-SPACE_BLK 的 MADDR 继续编码绝对 warp 0～7。M2V read/write hazard 按有效 byte 判断，
-要求两个物理 byte 集合不相交。MEM 接口不携带 gid，gid 只能由唯一到期 reservation
-record 恢复。
+SPACE_BLK 的 MADDR 只编码当前 `creq_wpid` 所属 group 内的相对地址；
+`creq_wpid/creq_wpnum` 提供绝对 group base。M2V read/write hazard 按有效 byte判断，要求
+两个物理 byte 集合不相交。MEM 接口不携带 gid，gid 只能由唯一到期 reservation record
+恢复。
 
 ## 2. 目标环境架构
 
@@ -117,7 +118,7 @@ scoreboard 而让它猜测尚未建立的 gid。
 - 公式级测试覆盖 LOC/WRP/BLK；
 - 覆盖绝对 warp 0、3、4、7 和 laddr `0/WARP_STEP-1`；
 - warp 0/4 得到相同 BADDR、不同 gid；
-- SPACE_BLK 非零 warp_group 仍能得到绝对 warp 4～7；
+- SPACE_BLK 使用非零 `creq_wpid/creq_wpnum` group 得到绝对 warp 4～7；
 - syntax/elaboration check 覆盖公共 package 和 sequence item。
 
 ### 阶段 2：shmins 生成和 transaction validation
@@ -228,7 +229,7 @@ MEM port record: [direction][delay][bank_id]
 - reservation gid/busy/port-conflict 定向测试；
 - MEM/reservation gid 关联和失败路径测试；
 - V2M/M2V/VTRANS 的 wpid 3/4 边界数据测试；
-- SPACE_BLK absolute warp 0～7 和 wpnum 1/2/4；
+- SPACE_BLK group-relative MADDR、WPID 派生 absolute warp 0～7 和 wpnum 1/2/4；
 - M2V byte-overlap generator 测试；
 - functional coverage：direction × gid × subbank × delay × busy source × match outcome。
 
@@ -258,6 +259,12 @@ MEM port record: [direction][delay][bank_id]
 sequence item 已在真实 RTL testcase 中跑通。该结果解除“尚未接入真实设计”的集成风险，
 但阶段 7 要求的 gid 边界、数据隔离、busy ownership、reservation 冲突/失败路径和 coverage
 仍未由一次系统 smoke 覆盖，因此 `DBANK-001`～`DBANK-005` 保持各自当前状态。
+
+2026-08-13 SPACE_BLK contract 后续改为 group-relative MADDR。Spec、正式地址 helper 和
+benchmark 已同步更新；空 design 全环境 VCS 编译通过，432 组合与三 topology 无 inline
+constraint benchmark 通过，两轮各 1248 个独立公式检查覆盖全部 13 个 interleave size。
+当前 Ubuntu EDA 工作区只有空 `RpuShmTop`，新版公式的真实 RTL BLK regression 仍需在
+具备真实 design 和 regression framework 的环境执行。
 
 每完成一个阶段：
 

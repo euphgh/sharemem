@@ -64,7 +64,7 @@ Phase 5 规划的基础维度包括：
 - direction × ITYPE × SPACE × DTYPE × ATYPE_W；
 - ATYPE_W × signedness × granularity × DTYPE；
 - SPACE × interleave size × MADDR boundary class；
-- SPACE_BLK 的 wpnum × warp_group × interleave size；
+- SPACE_BLK 的 wpnum × wpid-derived warp_group × warp_offs × interleave size；
 - address space × absolute warp boundary × gid × laddr boundary；
 - MEM/VLM direction × address-low-bits × boundary crossing；
 - MEM direction × gid × reservation match result；

@@ -52,7 +52,8 @@ active(t, k) = creq_tmsk[t]
 - 按 ITYPE 公式计算的最终 MADDR 禁止截断回绕；
 - 最终 MADDR 按 dtype byte width 自然对齐；
 - MADDR 满足 LOC、WRP 或 BLK 的编码范围、12 KiB 实际容量和地址空洞规则；
-- SPACE_BLK 的 `warp_index` 合法，并与 `creq_wpid` 位于同一个 `creq_wpnum` 对齐组。
+- SPACE_BLK 的 MADDR 位于 `[0, C*BANK_N*creq_wpnum)`，最终 `warp_index` 由
+  `creq_wpid/creq_wpnum` 选择的 group base 与 MADDR 中的 `warp_offs` 共同生成。
 
 协议只要求最终 MADDR 自然对齐，不要求 `creq_base` 和 decoded offset 各自自然对齐。
 本阶段为了简化候选构造，允许使用更强的激励限制：分别约束 base 和 decoded offset 按
@@ -119,7 +120,7 @@ MADDR 确定后通过基类 helper 生成。
 
 基类只保留低成本 solver 约束：合法 enum、interleave、WARP、thread mask、
 length/element capacity 和 M2V vaddr。`creq_wpid` 和 `creq_wpnum` 仍为低成本随机
-控制字段，并在 SPACE_BLK 中决定 MADDR 候选 group。base 范围与对齐不再由
+控制字段，并在 SPACE_BLK 中决定 WARP group base 和 MADDR group-relative 上界。base 范围与对齐不再由
 solver constraint 表达。
 
 基类提供下列公共或 protected helper；具体命名可在实现 review 中调整，但职责不能重新
@@ -151,12 +152,12 @@ validate_transaction();
 ```text
 SPACE_LOC: [0, WARP_STEP)
 SPACE_WRP: [0, coded_warp_bytes * BANK_N)
-SPACE_BLK: [selected_group * group_span, (selected_group + 1) * group_span)
+SPACE_BLK: [0, coded_warp_bytes * BANK_N * creq_wpnum)
 ```
 
 该范围不排除 8/16 KiB interleave 下的地址空洞。候选 MADDR 随机后必须通过
 `legal_space_maddr_check()` 复查数值范围、dtype 自然对齐、空洞、BANK 和
-SPACE_BLK WARP group。
+SPACE_BLK 的 WPID/WPNUM 和 WARP group-relative 映射。
 
 地址映射结果至少包含 `valid`、`bank_id`、完整 `baddr`、`local_offset` 和 `warp_index`。
 `check_active_maddr_byte_uniqueness()` 对 V2M 和显式开启 uniqueness 的 M2V 使用最终
@@ -427,7 +428,7 @@ Linux 6.17 kernel 不在支持列表，该环境 warning 未阻止编译。
 - DTYP_8/16/32；
 - ATYP_16/32、signed/unsigned、GAUTO_1B/GAUTO_DW；
 - `creq_inv_size` 的 4 KiB、8 KiB、16 KiB 分界及代表性小粒度；
-- WARP group 0 和非零 group，`creq_wpnum` 为 1/2/4；
+- 由 `creq_wpid/creq_wpnum` 选择的 group 0 和非零 group，`creq_wpnum` 为 1/2/4；
 - 稀疏 tmsk/vmsk、最小/最大 length；
 - VTRANS 支持的 dtype/itype 组合。
 
@@ -451,7 +452,7 @@ Linux 6.17 kernel 不在支持列表，该环境 warning 未阻止编译。
 以下工作不阻塞本重构关闭，继续由其他问题或优化任务跟踪：
 
 - 除 active-element 消费边界修复外，修改 driver、monitor、reference 或 scoreboard；
-- 修复 `REF-001` 或以现有 reference 验证非零 SPACE_BLK group；
+- 以独立公式验证 `creq_wpid` 派生的非零 SPACE_BLK group；
 - 扩展完整 TC/LST regression 和 functional coverage；
 - 提取 address-space policy class；
 - 放宽 base 和 decoded offset 分别自然对齐的临时激励限制；

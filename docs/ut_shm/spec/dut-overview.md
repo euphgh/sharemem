@@ -58,6 +58,8 @@ creq 没有 ready 握手。请求由 credit 控制，每个 `creq_vld==1` 的采
 MADDR 到逻辑地址的转换受 `creq_space`、`creq_wpid`、`creq_wpnum` 和
 `creq_inv_size` 控制。逻辑地址再通过统一规则转换为 gid 和 BADDR。`creq_vaddr` 的
 宽度为 `BADDR_W`，已经携带当前 gid 内的 WARP 基址，用于 M2V 读数据写回。
+SPACE_BLK 的 MADDR 是当前 `creq_wpid` 所属 aligned WARP group 内的相对编码；
+`creq_wpid/creq_wpnum` 决定 group base，MADDR 中的 `warp_offs` 决定 group 内 WARP。
 
 ## 4. 当前参数
 

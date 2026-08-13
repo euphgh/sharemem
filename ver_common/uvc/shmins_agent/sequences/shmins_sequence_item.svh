@@ -218,9 +218,9 @@ class shmins_sequence_item extends uvm_sequence_item;
   extern function int unsigned align_mask();
 
   //----------------------------------------------------------------------------
-  // @brief Returns the legacy encoded address upper bound for the selected space.
+  // @brief Returns an encoded address upper bound for the selected space.
   //
-  // @return One past the legacy LOC, WRP, or BLK encoded address range.
+  // @return One past the LOC, legacy WRP, or current group-relative BLK encoded range.
   //----------------------------------------------------------------------------
   extern function int unsigned addr_max();
 
@@ -302,8 +302,9 @@ class shmins_sequence_item extends uvm_sequence_item;
   //----------------------------------------------------------------------------
   // @brief Computes a fast left-closed, right-open MADDR encoding range.
   //
-  // The range excludes impossible space and BLK group values but can include
-  // 8/16 KiB interleave holes. Call legal_space_maddr_check() after sampling.
+  // The range excludes impossible space configuration values but can include
+  // 8/16 KiB interleave holes. BLK always starts at zero and spans only the
+  // creq_wpid-selected WARP group. Call legal_space_maddr_check() after sampling.
   //
   // @param space_lower Inclusive MADDR lower bound.
   // @param space_upper Exclusive MADDR upper bound.
@@ -317,7 +318,7 @@ class shmins_sequence_item extends uvm_sequence_item;
   //
   // @param thread_idx Source thread, used as BANK in SPACE_LOC.
   // @param maddr Unified byte address to map.
-  // @return Mapping result with valid cleared for range, hole, alignment, or group failures.
+  // @return Mapping result with valid cleared for range, hole, alignment, or WARP-control failures.
   //----------------------------------------------------------------------------
   extern function shmins_address_result_t map_maddr(int thread_idx, longint signed maddr);
 
@@ -590,7 +591,7 @@ function int unsigned shmins_sequence_item::addr_max();
   case (creq_space)
     SPACE_LOC: return WARP_STEP;
     SPACE_WRP: return 1 << BADDR_W;
-    SPACE_BLK: return 1 << MADDR_W;
+    SPACE_BLK: return int'(coded_warp_bytes() * BANK_N * int'(creq_wpnum));
     default:   return WARP_STEP;
   endcase
 endfunction : addr_max
@@ -730,16 +731,11 @@ function bit shmins_sequence_item::fast_legal_space_range(output longint signed 
     SPACE_LOC: space_upper = WARP_STEP;
     SPACE_WRP: space_upper = coded_bytes * BANK_N;
     SPACE_BLK: begin
-      longint signed group_span;
-      longint signed selected_group;
-
-      if (!(creq_wpnum inside {1, 2, 4}) || int'(creq_wpid) >= WARP_N) begin
+      if ($isunknown({creq_wpnum, creq_wpid}) || !(creq_wpnum inside {1, 2, 4}) ||
+          int'(creq_wpid) >= WARP_N) begin
         return 1'b0;
       end
-      group_span = coded_bytes * BANK_N * int'(creq_wpnum);
-      selected_group = int'(creq_wpid) / int'(creq_wpnum);
-      space_lower = selected_group * group_span;
-      space_upper = space_lower + group_span;
+      space_upper = coded_bytes * BANK_N * int'(creq_wpnum);
     end
     default: return 1'b0;
   endcase
@@ -786,29 +782,27 @@ function shmins_sequence_item::shmins_address_result_t shmins_sequence_item::map
     end
 
     SPACE_BLK: begin
-      longint unsigned group_address;
-      longint unsigned group_span;
+      longint unsigned blk_span;
       longint unsigned warp_group;
-      longint unsigned warp_offset;
+      longint unsigned warp_offs;
       int unsigned warps_per_group;
 
-      if (creq_wpnum == 0 || address >= coded_bytes * BANK_N * WARP_N) begin
+      if ($isunknown({creq_wpnum, creq_wpid}) || !(creq_wpnum inside {1, 2, 4}) ||
+          int'(creq_wpid) >= WARP_N) begin
         return result;
       end
       warps_per_group = int'(creq_wpnum);
-      group_span = coded_bytes * BANK_N * warps_per_group;
-      warp_group = address / group_span;
-      group_address = address % group_span;
-      result.logical_addr.bank_id = shm_bank_id_t'((group_address / interleave_bytes) % BANK_N);
-      warp_offset = (group_address / (interleave_bytes * BANK_N)) % warps_per_group;
-      interleave_index = (group_address / (interleave_bytes * BANK_N * warps_per_group)) %
+      blk_span = coded_bytes * BANK_N * warps_per_group;
+      if (address >= blk_span) begin
+        return result;
+      end
+      warp_group = int'(creq_wpid) / warps_per_group;
+      result.logical_addr.bank_id = shm_bank_id_t'((address / interleave_bytes) % BANK_N);
+      warp_offs = (address / (interleave_bytes * BANK_N)) % warps_per_group;
+      interleave_index = (address / (interleave_bytes * BANK_N * warps_per_group)) %
                          (coded_bytes / interleave_bytes);
       result.logical_addr.laddr = shm_warp_laddr_t'(interleave_index * interleave_bytes + interleave_offset);
-      result.logical_addr.warp_id = shm_warp_id_t'(warp_group * warps_per_group + warp_offset);
-      if (int'(result.logical_addr.warp_id) >= WARP_N ||
-          int'(creq_wpid) / warps_per_group != int'(result.logical_addr.warp_id) / warps_per_group) begin
-        return '{default:'0};
-      end
+      result.logical_addr.warp_id = shm_warp_id_t'(warp_group * warps_per_group + warp_offs);
     end
 
     default: return result;

@@ -30,7 +30,10 @@ scripts/local/check_shmins_random_benchmark_slang.sh
 `matrix` 在一次仿真中遍历 topology、space、RW、dtype、ATYPE width、signedness 和
 granularity，共 432 种组合。Contiguous 固定使用地址算法相同的 `LDST_V`，strided
 使用 `LDSTE_S`，indexed 使用 `LDSTE_V`。每个成功 item 还会从公开的 packed offset
-重新计算 active element MADDR 并调用公共映射函数，检查生成模型与 reference 消费边界。
+重新计算 active element MADDR 并检查生成模型与 reference 消费边界。Matrix 和
+unconstrained 测试启动时还会用独立公式检查 SPACE_BLK 的 WPID-derived group、WPNUM
+1/2/4、4 Byte～16 KiB 的全部 interleave size、编码上下界和地址空洞；随机 BLK item 也逐元素与该独立
+公式比较，避免 generator 与 reference 共用错误 helper 时一起通过。
 
 `unconstrained` 分别创建三个 topology 子类并直接调用 `randomize()`，不添加 inline
 constraint：

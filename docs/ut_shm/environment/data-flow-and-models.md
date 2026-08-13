@@ -223,10 +223,11 @@ Reservation 到实际 MEM 的匹配键和 busy 规则由
   outstanding、memory read response 和 reservation scheduler state 的清理尚未统一；
 - reservation agent 不执行 alignment policy，并继续检查 reservation 与 MEM 完整地址
   相等；下游 SRAM 支持非对齐 32-Byte beat，scoreboard 也不需要来源相关 alignment；
-- `shm_wtrans_item` 的 SPACE_BLK 计算尚未正确处理非零 `warp_group`。
-- 当前源码仍使用分离的 memory/reservation interface 和 agent，且 memory model 没有 gid
-  维度；双 gid 目标架构的实施顺序见
-  [开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。
+- SPACE_BLK 的 MADDR 已改为 group-relative 编码；公共映射用
+  `creq_wpid/creq_wpnum` 选择 `warp_group`；全部 13 个 interleave size 的独立公式测试
+  已通过，真实 RTL BLK 回归待执行。
+- memory/reservation 已合并为统一 VLM interface/agent，memory model 已包含 gid；剩余
+  定向验证顺序见[开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。
 
 这些条目是实现状态，不会覆盖 DUT spec。唯一问题 ID、优先级和验收方法见
 [验证实现状态](../verification-status.md)，组件算法见[组件文档](components/index.md)。

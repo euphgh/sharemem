@@ -79,6 +79,24 @@ class shmins_split_benchmark_base_test extends uvm_test;
                                                               ref longint unsigned validation_errors);
 
   //------------------------------------------------------------------------
+  // @brief Calculates the new group-relative BLK mapping without DUT helpers.
+  //
+  // @param item Transaction providing dtype, interleave, WPID, and WPNUM.
+  // @param maddr Group-relative BLK MADDR to interpret.
+  // @return Expected logical/physical mapping, with valid clear for illegal values.
+  //------------------------------------------------------------------------
+  extern protected function shmins_sequence_item::shmins_address_result_t expected_blk_mapping(
+      shmins_sequence_item item,
+      longint signed maddr);
+
+  //------------------------------------------------------------------------
+  // @brief Checks BLK range, holes, and WPID-derived group boundary vectors.
+  //
+  // @return Number of mismatches between the independent formula and map_maddr().
+  //------------------------------------------------------------------------
+  extern protected function longint unsigned validate_blk_mapping_contract();
+
+  //------------------------------------------------------------------------
   // @brief Returns the stable result label for one topology.
   //
   // @param topology Address-generation topology.
@@ -139,6 +157,21 @@ function void shmins_split_benchmark_base_test::sample_item(
                    $sformatf("thread=%0d elem=%0d generated=0x%0h reconstructed=0x%0h valid=%0b",
                              thread_idx, elem_idx, item.elem_maddr[thread_idx][elem_idx],
                              reconstructed_maddr, mapped.valid))
+      end
+      if (item.creq_space == SPACE_BLK) begin
+        shmins_sequence_item::shmins_address_result_t expected;
+
+        expected = expected_blk_mapping(item, reconstructed_maddr);
+        if (mapped.valid != expected.valid ||
+            (expected.valid && (mapped.logical_addr != expected.logical_addr ||
+                                mapped.physical_addr != expected.physical_addr))) begin
+          validation_errors++;
+          `uvm_error("SHMINS_BLK_FORMULA",
+                     $sformatf({"thread=%0d elem=%0d maddr=0x%0h actual_valid=%0b expected_valid=%0b ",
+                                "actual_logical=0x%0h expected_logical=0x%0h"},
+                               thread_idx, elem_idx, reconstructed_maddr, mapped.valid, expected.valid,
+                               mapped.logical_addr, expected.logical_addr))
+        end
       end
     end
   end
@@ -240,6 +273,126 @@ function void shmins_split_benchmark_base_test::validate_reference_consumer(
     item.elem_num[zero_length_thread] = saved_elem_num;
   end
 endfunction : validate_reference_consumer
+
+function shmins_sequence_item::shmins_address_result_t
+    shmins_split_benchmark_base_test::expected_blk_mapping(shmins_sequence_item item,
+                                                           longint signed maddr);
+  shmins_sequence_item::shmins_address_result_t result;
+  longint unsigned address;
+  longint unsigned blk_span;
+  longint unsigned coded_bytes;
+  longint unsigned interleave_bytes;
+  longint unsigned inv_index;
+  longint unsigned inv_offs;
+  longint unsigned warp_group;
+  longint unsigned warp_offs;
+  longint unsigned warp_index;
+  longint unsigned laddr;
+  int unsigned warps_per_group;
+
+  result = '{default:'0};
+  if (item.creq_space != SPACE_BLK || maddr < 0 || item.data_byte_w() == 0 ||
+      maddr % longint'(item.data_byte_w()) != 0 || $isunknown({item.creq_wpnum, item.creq_wpid}) ||
+      !(item.creq_wpnum inside {1, 2, 4}) || int'(item.creq_wpid) >= WARP_N) begin
+    return result;
+  end
+
+  address = longint'(maddr);
+  interleave_bytes = longint'(1) << (int'(item.creq_inv_size) + 2);
+  coded_bytes = interleave_bytes <= 4096 ? WARP_STEP : 16 * 1024;
+  warps_per_group = int'(item.creq_wpnum);
+  blk_span = coded_bytes * BANK_N * warps_per_group;
+  if (address >= blk_span) begin
+    return result;
+  end
+
+  inv_offs = address % interleave_bytes;
+  result.logical_addr.bank_id = shm_bank_id_t'((address / interleave_bytes) % BANK_N);
+  warp_offs = (address / (interleave_bytes * BANK_N)) % warps_per_group;
+  inv_index = (address / (interleave_bytes * BANK_N * warps_per_group)) %
+              (coded_bytes / interleave_bytes);
+  warp_group = int'(item.creq_wpid) / warps_per_group;
+  warp_index = warp_group * warps_per_group + warp_offs;
+  laddr = inv_index * interleave_bytes + inv_offs;
+  if (warp_index >= WARP_N || laddr >= WARP_STEP) begin
+    return result;
+  end
+
+  result.logical_addr.warp_id = shm_warp_id_t'(warp_index);
+  result.logical_addr.laddr = shm_warp_laddr_t'(laddr);
+  result.physical_addr.bank_id = result.logical_addr.bank_id;
+  result.physical_addr.gid = shm_gid_t'(warp_index / WARP_PER_GID);
+  result.physical_addr.baddr = shm_baddr_t'((warp_index % WARP_PER_GID) * WARP_STEP + laddr);
+  result.valid = 1'b1;
+  return result;
+endfunction : expected_blk_mapping
+
+function longint unsigned shmins_split_benchmark_base_test::validate_blk_mapping_contract();
+  shmins_contiguous_sequence_item item;
+  int unsigned wpnum_values[3] = '{1, 2, 4};
+  int unsigned wpid_values[4] = '{0, 3, 4, 7};
+  int unsigned inv_size_values[13] = '{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+  longint unsigned check_count;
+  longint unsigned error_count;
+
+  item = shmins_contiguous_sequence_item::type_id::create("blk_contract_item");
+  item.creq_space = SPACE_BLK;
+  item.creq_dtype = DTYP_8;
+  check_count = 0;
+  error_count = 0;
+
+  foreach (wpnum_values[wpnum_idx]) begin
+    foreach (wpid_values[wpid_idx]) begin
+      foreach (inv_size_values[inv_idx]) begin
+        longint unsigned blk_span;
+        longint unsigned coded_bytes;
+        longint unsigned interleave_bytes;
+        longint unsigned last_legal;
+        longint unsigned points[8];
+        longint unsigned local_inv_index;
+        longint unsigned local_inv_offs;
+
+        item.creq_wpnum = wpnum_values[wpnum_idx];
+        item.creq_wpid = wpid_values[wpid_idx];
+        item.creq_inv_size = inv_size_values[inv_idx];
+        interleave_bytes = longint'(1) << (inv_size_values[inv_idx] + 2);
+        coded_bytes = interleave_bytes <= 4096 ? WARP_STEP : 16 * 1024;
+        blk_span = coded_bytes * BANK_N * wpnum_values[wpnum_idx];
+        local_inv_index = (WARP_STEP - 1) / interleave_bytes;
+        local_inv_offs = (WARP_STEP - 1) % interleave_bytes;
+        last_legal = (((local_inv_index * wpnum_values[wpnum_idx] + wpnum_values[wpnum_idx] - 1) * BANK_N +
+                       BANK_N - 1) * interleave_bytes) + local_inv_offs;
+        points = '{0, interleave_bytes - 1, interleave_bytes,
+                   interleave_bytes * BANK_N - 1, interleave_bytes * BANK_N,
+                   last_legal, blk_span - 1, blk_span};
+
+        foreach (points[point_idx]) begin
+          shmins_sequence_item::shmins_address_result_t actual;
+          shmins_sequence_item::shmins_address_result_t expected;
+
+          actual = item.map_maddr(0, longint'(points[point_idx]));
+          expected = expected_blk_mapping(item, longint'(points[point_idx]));
+          check_count++;
+          if (actual.valid != expected.valid ||
+              (expected.valid && (actual.logical_addr != expected.logical_addr ||
+                                  actual.physical_addr != expected.physical_addr))) begin
+            error_count++;
+            `uvm_error("SHMINS_BLK_CONTRACT",
+                       $sformatf({"wpnum=%0d wpid=%0d inv_size=%0d maddr=0x%0h ",
+                                  "actual_valid=%0b expected_valid=%0b actual_logical=0x%0h ",
+                                  "expected_logical=0x%0h"},
+                                 item.creq_wpnum, item.creq_wpid, item.creq_inv_size, points[point_idx],
+                                 actual.valid, expected.valid, actual.logical_addr, expected.logical_addr))
+          end
+        end
+      end
+    end
+  end
+
+  `uvm_info("SHMINS_BLK_CONTRACT_RESULT",
+            $sformatf("checks=%0d errors=%0d", check_count, error_count), UVM_NONE)
+  return error_count;
+endfunction : validate_blk_mapping_contract
 
 function string shmins_split_benchmark_base_test::topology_name(shmins_benchmark_topology_e topology);
   case (topology)
@@ -385,6 +538,9 @@ task shmins_random_cross_benchmark_test::run_phase(uvm_phase phase);
   phase.raise_objection(this);
   combination_count = 0;
   combination_failure_count = 0;
+  if (validate_blk_mapping_contract() != 0) begin
+    `uvm_fatal("SHMINS_BLK_CONTRACT_FAILED", "independent SPACE_BLK mapping contract check failed")
+  end
 
   `uvm_info("SHMINS_CROSS_START",
             $sformatf("combinations=432 iterations=%0d warmup=%0d", iterations, warmup_iterations),
@@ -604,6 +760,9 @@ endfunction : new
 task shmins_random_unconstrained_benchmark_test::run_phase(uvm_phase phase);
   phase.raise_objection(this);
   topology_failure_count = 0;
+  if (validate_blk_mapping_contract() != 0) begin
+    `uvm_fatal("SHMINS_BLK_CONTRACT_FAILED", "independent SPACE_BLK mapping contract check failed")
+  end
   `uvm_info("SHMINS_UNCONSTRAINED_START",
             $sformatf("topologies=3 iterations=%0d warmup=%0d inline_constraints=0", iterations, warmup_iterations),
             UVM_NONE)

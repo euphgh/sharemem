@@ -231,7 +231,7 @@ case_name : RUN=1 SEED=num
 |---|---|
 |逻辑/物理地址 helper，warp 0/3/4/7|`TP-ADDR-009`|
 |LOC/WRP/BLK 的 wpid 3/4 数据边界|`TP-ADDR-004`～`006`|
-|SPACE_BLK absolute warp 0～7、wpnum 1/2/4|`TP-ADDR-006`|
+|SPACE_BLK group-relative MADDR、wpid-derived absolute warp 0～7、wpnum 1/2/4|`TP-ADDR-006`|
 |M2V `creq_vaddr` 不重复加 WARP 基址|`TP-DATA-002`|
 |M2V byte overlap 允许/拒绝边界|`TP-DATA-002`|
 |target/other gid external busy|`TP-RSV-002`、`TP-RSV-007`|
