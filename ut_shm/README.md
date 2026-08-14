@@ -86,6 +86,8 @@ transaction，以及约 50% 独立合法的 VTRANS：
 两个 scoreboard timeout 和 ack grace 都是 hang 诊断，不是 DUT protocol 最大延迟：
 
 - Scoreboard timeout 触发后只报告一次，不删除 pending record，后续正确数据仍可匹配；
+  no-progress 和 record-age 报告会列出每笔 pending transaction 的 UID、creq ID、方向、
+  issue cycle、年龄、byte 匹配进度和完整 unresolved byte 地址表；
 - V2M/mack 和 M2V/vack 分别维护接收顺序，两个方向互不阻塞；
 - `ACK_POST_COMPLETE_GRACE_CYCLES` 只有在 scoreboard 报告 `OBSERVED`，并且同方向所有
   前序事务都已退休后才开始，不从 creq accepted cycle 或本事务提前完成的 cycle 开始；

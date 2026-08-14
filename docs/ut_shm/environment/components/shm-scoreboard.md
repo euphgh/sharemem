@@ -89,6 +89,12 @@ simulation time 推导 cycle。每个 record 只发布一次 completion event：
 打开并触发，scoreboard 也只报告一次，不删除 record、不把 unmatched byte 改成 expired，
 后续正确结果仍可继续匹配。它们是 case 可调的 hang 诊断，不是 DUT 最大延迟协议。
 
+完成 UVM info、`SHM_SCB_RECORD_AGE_TIMEOUT` 和 `SHM_SCB_NO_PROGRESS_TIMEOUT` 使用相同
+的首行格式，打印 transaction UID、creq ID、方向、issue cycle、年龄，以及
+expected/matched/expired/unresolved byte 数。两个 timeout 紧接着按 BANK/GID/BADDR/data
+展开该 record 的全部 unresolved byte；drain 诊断的 `pending_state_sprint()` 还会继续打印
+`wmap_final`。
+
 ## 6. MEM read service
 
 `b_transport()` 对 transaction 中每个 active bank，要求 `gid_valid` 和
@@ -125,6 +131,7 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 
 - 新 reference 到达前后的 `wmap_final/wmap_expired`；
 - 每个 `ref_record` 的 `issue_cycle`、matched、expired 和 unmatched table；
+- timeout 摘要中的 UID、creq ID、方向、byte 计数和 unresolved byte 地址表；
 - 实际 MEM write 转换后的 byte map 与 bank strobe；
 - MEM transaction 的 gid、gid_valid、reservation match status 及对应到期 record；
 - 命中 final 还是 expired，以及相应条目是否只被消费一次；

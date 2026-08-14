@@ -146,6 +146,29 @@ class shm_scoreboard extends uvm_scoreboard;
     // @return Multi-line reference, FIFO, cycle, and expected-map summary.
     //-------------------------------------------------------------------------
     extern function string pending_state_sprint();
+
+    //-------------------------------------------------------------------------
+    // @brief Formats each pending record and expands its unresolved byte map.
+    //
+    // @return Multi-line transaction identity, byte progress, and unresolved addresses.
+    //-------------------------------------------------------------------------
+    extern function string pending_records_sprint();
+
+    //-------------------------------------------------------------------------
+    // @brief Formats the common first line for one reference record diagnostic.
+    //
+    // @param index Queue index of the reference record to format.
+    // @return Transaction UID, ID, direction, issue cycle, age, and byte counts.
+    //-------------------------------------------------------------------------
+    extern protected function string ref_record_summary_sprint(int index);
+
+    //-------------------------------------------------------------------------
+    // @brief Expands every unresolved expected byte for one reference record.
+    //
+    // @param index Queue index of the reference record to format.
+    // @return BANK/GID/BADDR/data hierarchy containing only unresolved bytes.
+    //-------------------------------------------------------------------------
+    extern protected function string unresolved_bytes_sprint(int index);
     extern virtual task b_transport(vlm_memory_sequence_item trans, uvm_tlm_time delay);
 
     `uvm_component_utils_begin(shm_scoreboard)
@@ -265,13 +288,60 @@ function bit shm_scoreboard::is_idle();
 endfunction : is_idle
 
 function string shm_scoreboard::pending_state_sprint();
-    return $sformatf({"scoreboard pending records=%0d rtl_fifo_empty=%0d ref_fifo_empty=%0d ",
-                      "last_progress_cycle=%0d current_cycle=%0d\n%s"},
-                     ref_record_q.size(), rtl_wrvlm_analysis_fifo.is_empty(),
-                     ref_wrvlm_analysis_fifo.is_empty(), last_progress_cycle,
-                     clk_vif.cycle_count,
-                     shm_physical_map_util::sprint_wmap(wmap_final, "final wmap table"));
+    return {$sformatf({"scoreboard pending records=%0d rtl_fifo_empty=%0d ref_fifo_empty=%0d ",
+                       "last_progress_cycle=%0d current_cycle=%0d\n"},
+                      ref_record_q.size(), rtl_wrvlm_analysis_fifo.is_empty(),
+                      ref_wrvlm_analysis_fifo.is_empty(), last_progress_cycle,
+                      clk_vif.cycle_count),
+            pending_records_sprint(),
+            shm_physical_map_util::sprint_wmap(wmap_final, "final wmap table")};
 endfunction : pending_state_sprint
+
+function string shm_scoreboard::pending_records_sprint();
+    string result;
+
+    foreach (ref_record_q[index]) begin
+        result = {result, ref_record_summary_sprint(index), unresolved_bytes_sprint(index), "\n"};
+    end
+    return result;
+endfunction : pending_records_sprint
+
+function string shm_scoreboard::ref_record_summary_sprint(int index);
+    shm_wtrans_item tr = ref_record_q[index].tr;
+    int unsigned expected_bytes = 0;
+    int unsigned matched_bytes = 0;
+    int unsigned expired_bytes = 0;
+    int unsigned unresolved_bytes = 0;
+
+    foreach (tr.wmap[bank, addr]) begin
+        bit matched = ref_record_q[index].matched[bank].exists(addr);
+        bit expired = ref_record_q[index].expired[bank].exists(addr);
+
+        expected_bytes++;
+        matched_bytes += matched;
+        expired_bytes += expired;
+        unresolved_bytes += !matched && !expired;
+    end
+
+    return $sformatf({"SHM transaction uid=%0d id=%0d direction=%s issue_cycle=%0d age=%0d ",
+                      "bytes(expected/matched/expired/unresolved)=%0d/%0d/%0d/%0d\n"},
+                     tr.transaction_uid, tr.creq_id, tr.creq_rw.name(), tr.issue_cycle,
+                     clk_vif.cycle_count - tr.issue_cycle, expected_bytes, matched_bytes,
+                     expired_bytes, unresolved_bytes);
+endfunction : ref_record_summary_sprint
+
+function string shm_scoreboard::unresolved_bytes_sprint(int index);
+    shm_wtrans_item tr = ref_record_q[index].tr;
+    wmap_t unresolved_wmap;
+
+    foreach (tr.wmap[bank, addr]) begin
+        if (!ref_record_q[index].expired[bank].exists(addr) &&
+            !ref_record_q[index].matched[bank].exists(addr)) begin
+            unresolved_wmap[bank][addr] = tr.wmap[bank][addr];
+        end
+    end
+    return shm_physical_map_util::sprint_wmap(unresolved_wmap, "unresolved byte table");
+endfunction : unresolved_bytes_sprint
 
 // Scan completion and optional cycle-based timeout diagnostics.
 task shm_scoreboard::scan_timeout_creq();
@@ -287,40 +357,25 @@ task shm_scoreboard::scan_timeout_creq();
         foreach (ref_record_q[id]) begin: foreach_ref
             shm_wtrans_item tr = ref_record_q[id].tr;
             if (is_finished_ref_trans(id)) begin
-                string info_msg = $sformatf(
-                    "ref_record_q(id = %0d) all data is matched or expired: \n",
-                    ref_record_q[id].tr.creq_id);
-                info_msg = {info_msg, tr.sprint(), tmap_util::sprint(ref_record_q[id].expired),
-                            tmap_util::sprint(ref_record_q[id].matched)};
-                info_msg = {info_msg, "expired table: \n", tmap_util::sprint(ref_record_q[id].expired), "\n"};
-                info_msg = {info_msg, "matched table: \n", tmap_util::sprint(ref_record_q[id].matched), "\n"};
+                string info_msg = {
+                    ref_record_summary_sprint(id),
+                    "status=finished; all expected bytes are matched or expired\n",
+                    "expired table:\n", tmap_util::sprint(ref_record_q[id].expired), "\n",
+                    "matched table:\n", tmap_util::sprint(ref_record_q[id].matched), "\n"
+                };
                 `uvm_info(get_type_name(), info_msg, UVM_FULL);
             end
             else begin
-                wmap_t unmatched_wmap;
                 rebuild_refs.push_back(ref_record_q[id]);
 
                 if (shm_environment_cfg.scb_record_age_timeout_cycles != 0 &&
                     current_cycle - tr.issue_cycle > shm_environment_cfg.scb_record_age_timeout_cycles &&
                     !ref_record_q[id].age_timeout_reported) begin
-                    string error_msg;
-
-                    foreach (tr.wmap[bank, addr]) begin
-                        if (!ref_record_q[id].expired[bank].exists(addr) &&
-                            !ref_record_q[id].matched[bank].exists(addr)) begin
-                            unmatched_wmap[bank][addr] = tr.wmap[bank][addr];
-                        end
-                    end
-
-                    error_msg = {
-                        $sformatf("SHM transaction uid=%0d id=%0d exceeded record age %0d cycles:\n",
-                                  tr.transaction_uid, tr.creq_id,
+                    string error_msg = {
+                        ref_record_summary_sprint(id),
+                        $sformatf("record_age_timeout_cycles=%0d\n",
                                   shm_environment_cfg.scb_record_age_timeout_cycles),
-                        tr.sprint(),
-                        "expired table: \n", tmap_util::sprint(ref_record_q[id].expired), "\n",
-                        "matched table: \n", tmap_util::sprint(ref_record_q[id].matched), "\n",
-                        "unmatched table: \n",
-                        shm_physical_map_util::sprint_wmap(unmatched_wmap, "unmatched wmap"), "\n"
+                        unresolved_bytes_sprint(id), "\n"
                     };
                     `uvm_error("SHM_SCB_RECORD_AGE_TIMEOUT", error_msg)
                     ref_record_q[id].age_timeout_reported = 1'b1;
@@ -335,9 +390,21 @@ task shm_scoreboard::scan_timeout_creq();
         else if (shm_environment_cfg.scb_no_progress_timeout_cycles != 0 &&
                  current_cycle - last_progress_cycle > shm_environment_cfg.scb_no_progress_timeout_cycles &&
                  !no_progress_timeout_reported) begin
-            `uvm_error("SHM_SCB_NO_PROGRESS_TIMEOUT",
-                       $sformatf("%0d pending SHM records made no scoreboard progress for more than %0d cycles",
-                                 ref_record_q.size(), shm_environment_cfg.scb_no_progress_timeout_cycles))
+            string error_msg;
+
+            foreach (ref_record_q[index]) begin
+                error_msg = {
+                    error_msg,
+                    ref_record_summary_sprint(index),
+                    $sformatf({"no_progress_timeout_cycles=%0d last_progress_cycle=%0d ",
+                               "current_cycle=%0d stalled_cycles=%0d\n"},
+                              shm_environment_cfg.scb_no_progress_timeout_cycles,
+                              last_progress_cycle, current_cycle, current_cycle - last_progress_cycle),
+                    unresolved_bytes_sprint(index), "\n"
+                };
+            end
+
+            `uvm_error("SHM_SCB_NO_PROGRESS_TIMEOUT", error_msg)
             no_progress_timeout_reported = 1'b1;
         end
     end: forever_wrap
