@@ -180,13 +180,13 @@ ITYPE 由 seed 随机选择；没有 coverage 时，不能确认四个合法组�
 ### 5.4 `LDSTE_S + SPACE_WRP/SPACE_BLK`
 
 该组合在 M2V 中受支持。M2V 子 TC 已定义并由根 TC include，12 个对应叶子 case 已加入
-`m2v.lst`，等待扩容后的真实 RTL regression 验证。
+`m2v.lst`，并已包含在扩容后的真实 RTL regression 中。
 
 V2M 中不同 thread 的 element 0 会按 `base + 0*offset` 访问相同 MADDR；多个写对同一
 地址的结果未定义。因此 V2M 激励必须令所有 active thread 的 `creq_vmsk[*][0]==0`，并
 保持其他有效 element 的写地址无冲突。当前 strided item 已实现该约束；根 TC 已恢复
-`es_warp.tc` 和 `es_blk.tc` include，12 个对应叶子 case 已加入 `v2m.lst`，等待真实 RTL
-regression 验证，见 `SHMINS-007`。
+`es_warp.tc` 和 `es_blk.tc` include，12 个对应叶子 case 已加入 `v2m.lst` 并通过真实 RTL
+regression；`SHMINS-007` 已关闭。
 
 ## 6. LST 文件格式
 
@@ -221,15 +221,15 @@ case_name : RUN=1 SEED=num
 - `ev` 的 LOC、WRP、BLK；
 - `es` 的 LOC、WRP、BLK。
 
-所有条目当前都是 `RUN=1`，没有固定 `SEED`。扩容前的 85-case 基线已在真实 design 上
-通过：V2M/VTRANS 43 个、M2V 42 个。新增的 24 个 `LDSTE_S + WRP/BLK` case 尚未运行
-真实 RTL regression，因此当前不能宣称 109 个 case 全部通过。即使扩容后全部通过，
-没有固定 seed 和 functional coverage 仍不能证明随机字段命中特定边界或 coverage bin。
+所有条目当前都是 `RUN=1`，没有固定 `SEED`。用户确认当前 109 个 case 已在
+`VEC_W=256`、`VEC_BYTE_N=32` 的真实 design 上全部通过，包括新增的 24 个
+`LDSTE_S + WRP/BLK` case。没有固定 seed 和 functional coverage 仍不能证明随机字段
+命中特定边界或 coverage bin。
 
 ## 8. 双 gid 迁移新增 case 组
 
-扩容前 85 个 case 已通过真实 RTL 回归，证明新的物理 BANK 组织可以承载原正向矩阵；
-新增 24 个 strided case 不覆盖以下双 gid 边界和失败路径，仍需增加这些定向组：
+当前 109 个 case 已通过真实 RTL 回归，证明新的物理 BANK 组织和缩减后的 creq 向量
+带宽可以承载完整正向矩阵。该列表仍不覆盖以下双 gid 边界和失败路径，需要增加定向组：
 
 |Case 组|主要 testpoint|
 |---|---|

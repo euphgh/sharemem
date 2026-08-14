@@ -5,8 +5,8 @@
 [组件文档](components/index.md)，DUT 的协议规则由 [DUT 规范](../spec/index.md)维护。
 
 双 gid BANK 环境使用统一 VLM interface/agent，并将地址模型拆成逻辑地址与物理地址
-两层。该主路径已经接入，并于 2026-08-13 通过扩容前 `shm.lst` 的 85 个真实 RTL case；
-当前列表新增 24 个 strided case，尚待运行。历史迁移步骤和仍需补充的定向验证见
+两层。该主路径已经接入，并在 `VEC_W=256` 的当前接口上通过 `shm.lst` 的 109 个真实 RTL case；
+其中包含新增的 24 个 strided case。历史迁移步骤和仍需补充的定向验证见
 [开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。
 
 ## 文档状态

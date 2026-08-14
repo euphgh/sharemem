@@ -77,7 +77,8 @@ creq payload
 |`DTYP_8`|1|
 
 `creq_len[t]` 是线程 `t` 的有效数据字节数。有效元素数为
-`creq_len[t]/D`，并受 512-bit 数据向量和 offset 向量容量限制。
+`creq_len[t]/D`，并受 256-bit 数据向量和 offset 向量容量限制。当前每个 thread 最多
+携带 `VEC_BYTE_N=32` Byte 数据。
 
 ### 3.2 Offset 解码
 

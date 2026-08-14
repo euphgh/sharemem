@@ -128,9 +128,9 @@ Environment 只配置一个 `vlm_vif`；实际 write 和 read service transactio
 
 ## 10. 当前实现状态
 
-- 统一 VLM environment 和 shmins/reference/scoreboard 正向主路径已于 2026-08-13 在
-  真实 design 上通过扩容前 `shm.lst` 的 85 个 case；`DBANK-003` 已关闭。当前列表新增
-  24 个 strided case，尚待真实 RTL regression。
+- 统一 VLM environment 和 shmins/reference/scoreboard 正向主路径已在真实 design 上通过
+  `shm.lst` 全部 109 个 case；当前接口为 `VEC_W=256`、`VEC_BYTE_N=32`，列表包含
+  新增的 24 个 strided case。`DBANK-003` 和 `SHMINS-007` 已关闭。
 - `ENV-001`：运行中 reset 尚未统一清理。
 - `ENV-002`：公开配置仍能表达当前不支持的 passive 组合。
 

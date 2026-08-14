@@ -47,6 +47,9 @@ Agent 从 Config DB 获取 `shmins_mst_agent_config` 和 `shmins_vif`。默认�
 Driver 在驱动前调用 `item_to_rtl()`；monitor 采样后调用 `rtl_to_item()`。地址相关
 helper 从 dtype、atype 和 itype 计算 element 数、offset 宽度和 MADDR，详细地址规则
 应引用[地址模型](../../spec/address-model.md)，不能以当前 constraint 反向定义 spec。
+当前每个 thread 的 `creq_offs` 和 `creq_vdat` 均为 256 bit，`creq_vmsk` 为
+32 bit；sequence item、interface、driver 和 monitor 均以 `VEC_W=256`、`VEC_BYTE_N=32`
+解释这些字段。
 
 双 gid 地址迁移后，transaction helper 必须分成两层：各 itype/space 算法只生成
 `shm_logical_addr_t{bank_id, absolute_warp_id, laddr}`，公共 helper 再生成
@@ -149,8 +152,9 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 可用 plusarg 改变 transaction 数量、normal domain 和 VTRANS 比例。当前没有独立的
 credit/release、ack 完整性、四态输入或 reset 静默测试；transaction copy 组件测试位于
 `examples/shmins_sequence_compile/`。Strided item 已为 V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
-生成 element-0 mask，V2M/M2V 共 24 个叶子 case 已进入扩容后的主列表，仍待真实 DUT
-regression。相关缺口由 `SHMINS-001`～`SHMINS-010` 的验收项追踪。
+生成 element-0 mask，V2M/M2V 共 24 个叶子 case 已随扩容后的 109-case 主列表
+通过真实 DUT regression，`SHMINS-007` 已关闭。其余缺口由验证实现状态中的
+开放项追踪。
 
 ## 10. 开发 contract
 
@@ -171,25 +175,25 @@ regression。相关缺口由 `SHMINS-001`～`SHMINS-010` 的验收项追踪。
 
 - `SHMINS-012`：topology-based 正式 sequence item、benchmark、consumer 和真实 RTL 集成
   已于 2026-08-13 验证完成并关闭。
-- `SHMINS-001`：`creq_tmsk` 正向数据链已通过 85-case 真实 RTL 回归，等待 mask 边界定向验证。
+- `SHMINS-001`：`creq_tmsk` 正向数据链已通过 109-case 真实 RTL 回归，等待 mask 边界定向验证。
 - `SHMINS-002/011`：transaction copy/compare 已通过 reference consumer 交叉测试及
   `examples/shmins_sequence_compile/copy_tb.sv` 的四 topology 正反例，2026-08-13 关闭。
 - `SHMINS-003`：过程式 MADDR 生成、12 KiB/空洞检查和两层映射已按 group-relative BLK
   公式更新；432 组合、无 inline constraint benchmark、两轮各 1248 个独立 BLK 公式检查
   和实际 RTL BLK regression 均已通过，2026-08-13 关闭。
-- `SHMINS-004`：RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 85-case 真实 RTL 回归；
+- `SHMINS-004`：RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case 真实 RTL 回归；
   ATYPE_S/G 仍等待 testcase 配置到 monitor 的端到端定向验证。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。
 - `SHMINS-006`：缺少 active payload X/Z 检查。
-- `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 已实现，V2M/M2V 24 个 case
-  已进入主列表，等待扩容后的真实 RTL regression。
+- `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 和 V2M/M2V 24 个 case
+  已随 109-case 主列表通过真实 RTL regression，2026-08-14 关闭。
 - `SHMINS-008`：固定 ack timeout 已移除，改为 scoreboard observed 后可配置 grace；
   2026-08-14 空 design VCS 编译通过，待长延迟 ack 定向验证。
 - `SHMINS-009`：ack enable、unexpected、duplicate、wrong-direction、wrong-ID 的 lifecycle
   checker 已实现但待定向验证；credit/release 上溢检查仍未实现。
 - `SHMINS-010`：复位期间 release/ack 静默没有检查。
 - `ENV-001`：运行中 reset 未取消 driver/monitor pending 状态。
-- 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 正向主路径已通过 85-case 真实 RTL 回归；
+- 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 正向主路径已通过 109-case 真实 RTL 回归；
   gid 边界、数据隔离和冲突/失败路径仍由 verification status 中的双 gid 迁移项跟踪。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

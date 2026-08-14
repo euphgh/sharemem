@@ -19,7 +19,7 @@ MADDR；空 DUT 编译、独立公式 benchmark 和真实 RTL BLK regression 均
 reservation 正向主路径的系统回归证据；随机 `RUN=1` 列表未覆盖的定向边界、负例、
 运行中 reset 和 functional coverage 仍独立跟踪。
 随后主列表加入 V2M/M2V `LDSTE_S + WRP/BLK` 共 24 个 case，当前规模为 109；新增项
-尚未运行真实 RTL，不改变此前 85-case 基线的通过结论，也不能提前关闭 `SHMINS-007`。
+最初不改变此前 85-case 基线的通过结论。
 同日远端 VCS `W-2024.09-SP1_Full64` 组件测试通过四 topology transaction copy/compare
 以及 reservation external-busy plusarg/drive 检查，`SHMINS-002`、`SHMINS-011` 和
 `RSV-003` 已关闭。
@@ -30,6 +30,10 @@ reservation 正向主路径的系统回归证据；随机 `RUN=1` 列表未覆�
 独立 ordered lifecycle 队头的周期；年轻事务提前完成或提前 ack 不报告乱序。远端 VCS
 组件测试已覆盖慢前序/快后序、无需 ack 的前序、方向独立及年轻事务提前 ack，并完成空
 design 全量编译和 0-transaction smoke；clocked grace timeout 触发边界仍待定向验证。
+同日 RTL 将每个 thread 的 `creq_offs`、`creq_vdat` 缩为 256 bit，并将 `creq_vmsk` 缩为
+32 bit；验证环境同步改为 `VEC_W=256`、`VEC_BYTE_N=32`。用户确认适配后真实 design 的
+`shm.lst` 全部 109 个 case 再次通过。该证据关闭 `SHMINS-007`，并把其余正向主路径证据
+更新为 109-case 基线；它仍不替代双 gid 边界、负例、运行中 reset 或 functional coverage。
 
 ## 1. 状态和优先级
 
@@ -81,15 +85,14 @@ design 全量编译和 0-transaction smoke；clocked grace timeout 触发边界�
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
 |`COV-001`|P1|待实现|跨组件|ut_shm 尚未建立 functional coverage 模型|
-|`DBANK-001`|P0|待验证|共享地址/shmins|85-case RTL 回归覆盖 LOC/WRP/BLK、V2M/M2V 主路径；地址/gid/vaddr/hazard 边界待验证|
-|`DBANK-002`|P0|待验证|reference/expected model|gid-aware reference 已通过 85-case RTL 回归，待相同 BADDR 跨 gid 数据隔离定向验证|
-|`DBANK-004`|P0|待验证|VLM agent/scoreboard|resolver、read response 和 actual memory 已通过 85-case RTL 回归，待冲突/失败路径定向验证|
-|`DBANK-005`|P1|待实现|test/coverage|扩容前 85 case 已通过、新增 24 case 待运行；双 gid 边界、ownership、M2V hazard 与 coverage 仍缺|
-|`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 正向数据通路已通过 85-case RTL 回归，待 mask 边界与 X/Z 定向验证|
-|`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 85-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
-|`SHMINS-005`|P2|待实现|shmins agent|部分循环和位宽硬编码为当前 16-thread/4-bit 配置|
+|`DBANK-001`|P0|待验证|共享地址/shmins|109-case RTL 回归覆盖 LOC/WRP/BLK、V2M/M2V 主路径；地址/gid/vaddr/hazard 边界待验证|
+|`DBANK-002`|P0|待验证|reference/expected model|gid-aware reference 已通过 109-case RTL 回归，待相同 BADDR 跨 gid 数据隔离定向验证|
+|`DBANK-004`|P0|待验证|VLM agent/scoreboard|resolver、read response 和 actual memory 已通过 109-case RTL 回归，待冲突/失败路径定向验证|
+|`DBANK-005`|P1|待实现|test/coverage|109-case 主列表已通过；双 gid 边界、ownership、M2V hazard 与 coverage 仍缺|
+|`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 正向数据通路已通过 109-case RTL 回归，待 mask 边界与 X/Z 定向验证|
+|`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
+|`SHMINS-005`|P2|待实现|shmins agent|256-bit 向量参数适配已通过；16-thread/4-bit 等硬编码仍在|
 |`SHMINS-006`|P1|待实现|shmins monitor|active creq payload 缺少系统性的 X/Z 检查|
-|`SHMINS-007`|P1|待验证|unit sequence/TC|V2M/M2V WRP/BLK 共 24 个 strided case 已进入主列表，待真实 RTL 回归|
 |`SHMINS-008`|P1|待验证|shmins monitor/lifecycle|有序 grace 组件测试已通过，待 clocked timeout 触发边界验证|
 |`SHMINS-009`|P1|实现中|shmins/lifecycle|ack 完备 checker 已实现待验证；credit/release 上溢仍缺|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
@@ -148,8 +151,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   regression 命令，因此上述仓库内命令本身不包含 RTL 功能回归。随后用户在实际 BLK
   regression 环境中完成新版 SPACE_BLK 回归并确认通过；该系统证据与独立公式 benchmark
   共同关闭 `SHMINS-003` 和 `REF-001`。
-- 用户随后确认当前代码在真实 design 上完成 `ut_shm/regression/shm.lst` 全量回归，
-  `v2m.lst` 43 个 case 与 `m2v.lst` 42 个 case 全部通过。每个条目当前为 `RUN=1`；
+- 用户随后确认当前代码在真实 design 上完成 `ut_shm/regression/shm.lst` 全量回归；当前
+  `v2m.lst` 有 55 个 case（54 个普通 V2M 和 1 个 VTRANS），`m2v.lst` 有 54 个 case，
+  共 109 个且全部通过。每个条目当前为 `RUN=1`；
   该结果证明列表所含 V2M/M2V/VTRANS、LOC/WRP/BLK、DTYPE 8/16/32、ATYPE_W 16/32
   正向组合的系统主路径无新增错误，但不证明随机字段命中特定 bin，也不覆盖未列入
   LST 的定向或负向场景。
@@ -158,7 +162,7 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 - 现状：共享参数已删除 `VADDR_W` 并定义双 gid 物理地址；正式 topology item 已回填
   逻辑/物理 element 地址、使用 gid-aware byte key，并为 M2V 生成 byte-disjoint writeback
-  BADDR；LOC/WRP/BLK、V2M/M2V 的正向主路径已通过 85-case 真实 RTL 回归。
+  BADDR；LOC/WRP/BLK、V2M/M2V 的正向主路径已通过 109-case 真实 RTL 回归。
 - 目标：三种 space 输出 `<bank,absolute warp,laddr>`，公共 helper 统一生成 gid/BADDR；
   `creq_vaddr` 改为 16 bit 并携带 gid 内 WARP 基址；M2V 排除有效 read/write byte overlap。
 - 验收：地址公式测试覆盖 warp 0/3/4/7、SPACE_BLK 非零 group 和 WARP 首尾；三类
@@ -168,7 +172,7 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 - 现状：`wmap` 已用 flattened `<bank,gid>` storage index，`ref_banks` 已扩展为
   `[BANK_N][GID_N]`；reference M2V 直接使用 `creq_vaddr` 并从 wpid 取得 write gid；
-  V2M/M2V/VTRANS 正向数据检查已通过 85-case 真实 RTL 回归。
+  V2M/M2V/VTRANS 正向数据检查已通过 109-case 真实 RTL 回归。
 - 目标：全部 expected physical byte key 改为 `<bank,gid,BADDR>`；reference M2V 直接使用
   `creq_vaddr`，只从 wpid 得到 write gid。
 - 验收：相同 bank/BADDR、不同 gid 的数据隔离；V2M/VTRANS/M2V 的 wpid 3/4 定向
@@ -179,7 +183,7 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 现状：scheduler busy 和 record 已携带 gid；checker 从唯一到期 record 生成 per-BANK
   match metadata，统一 agent 固定 metadata 后驱动 read response/发布 write，scoreboard
   只对 matched transaction 访问对应 gid memory；正常 reservation/MEM 兑现路径已通过
-  85-case 真实 RTL 回归。
+  109-case 真实 RTL 回归。
 - 目标：busy ownership 使用 `[direction][delay][gid][subbank]`，MEM port record 保持
   `[direction][delay][bank]`；resolver 从唯一到期 record 恢复 gid，read driver复用同一
   match result，scoreboard actual memory增加gid，未匹配 MEM 不更新可信模型。
@@ -188,7 +192,7 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `DBANK-005` 双 gid testcase 与覆盖
 
-- 现状：现有 85 个 case 已在真实 design 上全部通过，证明统一双 gid 环境可以承载当前
+- 现状：现有 109 个 case 已在真实 design 上全部通过，证明统一双 gid 环境可以承载当前
   正向矩阵；但其随机 `RUN=1` 组织和空 reservation coverage 不能证明双 gid 边界、
   ownership、失败路径或 coverage closure。
 - 目标：实现 `TP-ADDR-009`、`TP-MEM-005`、`TP-RSV-007/008` 以及更新后的 M2V、LOC、
@@ -230,7 +234,7 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   `THD_N` bit `creq_tmsk`。普通请求约束非全零，VTRANS 约束全 1；monitor 报告 X/Z 和
   全零值，reference 为非 active thread 创建空的地址/BANK/strobe 数组，不解释 inactive
   payload，也不生成对应读写期望。正向主路径已通过 benchmark consumer 检查和
-  85-case 真实 RTL 回归，尚未执行稀疏 mask、inactive payload X/Z 等独立定向场景。
+  109-case 真实 RTL 回归，尚未执行稀疏 mask、inactive payload X/Z 等独立定向场景。
 - 影响：代码路径已具备 mask 行为，但在稀疏 mask、inactive payload X/Z 和 DUT 意外
   输出场景验证完成前，不能确认功能关闭。
 - 目标依据：[creq/ack 接口](spec/creq-ack-interface.md)。
@@ -239,7 +243,7 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 ### `SHMINS-004` Unit sequence 配置丢失
 
 - 现状：`shmins_mst_unit_sequence` 已用 allowed-value domain 统一约束 ATYPE_W/S/G、
-  dtype、RW、itype 和 space，并支持 `set_fixed_*()` 把对应 domain 缩为单值。85-case
+  dtype、RW、itype 和 space，并支持 `set_fixed_*()` 把对应 domain 缩为单值。109-case
   真实 RTL 回归已验证 RW、DTYPE、ATYPE_W、ITYPE 和 SPACE 的 TC/plusarg 正向路径；
   ATYPE_S/G 尚缺从 testcase 配置入口到 monitor transaction 的端到端定向证据。
 - 影响：item 生成侧配置已经贯通，但 testcase/plusarg 集成路径仍可能发生配置遗漏。
@@ -249,7 +253,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 ### `SHMINS-005` 参数硬编码
 
 - 现状：driver/monitor 使用固定 16-thread 循环，interface priority 宽度固定为 4 bit，
-  部分辅助函数也使用固定 BANK 数。
+  部分辅助函数也使用固定 BANK 数。`VEC_W` 从 512 改为 256 后，interface、transaction、
+  driver、monitor 和 reference 已通过参数同步适配并完成 109-case RTL 回归；该证据只覆盖
+  向量宽度，不覆盖本 ID 的 `THD_N/PRIO_W` 参数化目标。
 - 影响：修改 `THD_N` 或 `PRIO_W` 时环境不能可靠复用。
 - 目标：循环和位宽来自 `shm_util_package` 参数。
 - 验收：至少使用一个非默认 `THD_N/PRIO_W` 配置完成语法和 elaboration 检查。
@@ -261,20 +267,6 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 目标依据：`CREQ-002`。
 - 验收：为公共字段、active thread payload 和 inactive thread payload 分别注入 X/Z，
   只报告协议禁止的组合。
-
-### `SHMINS-007` V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
-
-- 现状：strided item 已在 V2M，或开启 uniqueness 的 M2V，且 space 为 WRP/BLK 时
-  约束所有 active thread 的 element 0 masked；交叉 benchmark 已覆盖这些组合。V2M 根
-  TC 已恢复 WRP/BLK include，V2M/M2V 共 24 个叶子 case 已加入主列表，但扩容后的真实
-  RTL regression 尚未运行。
-- 影响：生成路径已避免 element 0 的确定性重叠；其余 element 的 reference/scoreboard
-  行为仍需在真实 DUT 场景确认。
-- 目标：V2M 定向激励至少约束所有 thread 的 `creq_vmsk[*][0]==0`，同时保证其余有效
-  element 不产生未定义的同地址多写；M2V 不应用该限制。
-- 验收：新增合法 V2M WRP/BLK case，波形和 monitor transaction 中 element 0 全部
-  masked，其余 element 由 reference/scoreboard 正确检查；原始未 mask 组合不进入
-  正常正向 regression。
 
 ### `SHMINS-008` Ack timeout 不是协议时限
 
@@ -295,14 +287,16 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   的前序、V2M/M2V 独立推进及年轻事务提前 ack，输出
   `ordered ack grace regression: PASS`，且 `UVM_ERROR: 0`、`UVM_FATAL: 0`。随后执行
   `make compile` 和 `make smoke`，空 design 编译通过，0-transaction smoke 输出
-  `UVM_CASE_PASS`、`UVM_ERROR: 0`、`UVM_FATAL: 0`。
+  `UVM_CASE_PASS`、`UVM_ERROR: 0`、`UVM_FATAL: 0`。当前 109-case 真实 RTL 回归也通过
+  lifecycle 正向路径，但不包含 clocked grace timeout 触发/关闭边界。
 
 ### `SHMINS-009` Credit 与 ack 完备性检查
 
 - 现状：driver semaphore 限制环境自身发送并在每个 `creq_rls` 上 `put()`，但没有检查
   credit 是否超过 `OTF_N`。2026-08-14 lifecycle checker 已实现 ack-disabled、unexpected、
   duplicate、wrong-direction、wrong-ID/reset-epoch 关联和 exactly-once 状态，尚未完成
-  独立负例验收。
+  独立负例验收。109-case 真实 RTL 回归已通过合法 ack/release 正向路径，
+  但不会主动制造 credit 上溢或错误 ack。
 - 影响：DUT 的 release 上溢和部分 ack 协议违例可能漏报，或只表现为后续间接错误。
 - 目标依据：`CREQ-005`、`ACK-001` 和 `ACK-002`。
 - 验收：定向覆盖 credit 下溢/上溢、unexpected/duplicate/wrong-direction/wrong-ID ack，
@@ -345,7 +339,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 - 现状：2026-08-14 scoreboard 已统一使用 `clk_if.cycle_count`，固定 128-cycle 路径已替换
   为 `SCB_NO_PROGRESS_TIMEOUT_CYCLES` 和 `SCB_RECORD_AGE_TIMEOUT_CYCLES`。两者默认 0
-  关闭；触发只报告一次并保留 record，扫描周期单独配置。
+  关闭；触发只报告一次并保留 record，扫描周期单独配置。109-case 真实
+  RTL 回归已通过正常 scoreboard 生命周期，但没有定向覆盖两类 timeout 的边界。
 - 影响：协议时延不再被默认阈值限制，但尚缺关闭、触发后继续匹配和无进展恢复的定向证据。
 - 目标依据：[DUT 概览的协议边界](spec/dut-overview.md#7-协议边界)。
 - 验收：timeout 可配置或关闭；超过默认诊断阈值但最终正确的事务不会被强制判错。
@@ -382,6 +377,20 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   为 X/Z 时不启动业务 X/Z 检查，也不产生正常 transaction。
 
 ## 5. 已解决记录
+
+### `SHMINS-007` V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
+
+- 关闭日期：2026-08-14。
+- 修改：strided item 在 V2M，或开启 uniqueness 的 M2V，且 space 为 WRP/BLK 时，将每个
+  active thread 的 element 0 mask 为 0，并继续对其余有效 element 执行 byte-overlap
+  检查；V2M/M2V 对应的 WRP/BLK 叶子 case 共 24 个已加入主列表。
+- 生成验证：交叉 benchmark 已覆盖 V2M/M2V、WRP/BLK 和 strided 组合，transaction
+  validator 保证 V2M 不产生未定义的有效写 byte overlap。
+- 系统验证：用户确认真实 design 上扩容后的 `ut_shm/regression/shm.lst` 全部 109 个
+  case 通过，其中 `v2m.lst` 55 个、`m2v.lst` 54 个；新增 24 个 strided case 已纳入该次
+  回归。随后 `VEC_W` 缩为 256、`VEC_BYTE_N` 缩为 32 后，同一主列表再次全部通过。
+- 结论：element-0 激励限制、reference/scoreboard 消费和真实 RTL 系统路径已完成验收。
+  Functional coverage 仍由 `TP-ADDR-008` 和 `COV-001` 跟踪，不再作为本实现问题的阻塞。
 
 ### `SHMINS-002` / `SHMINS-011` Transaction copy 与 compare
 
@@ -459,8 +468,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   item 已在真实 design 上通过当时 `shm.lst` 的全部 85 个 case，不再出现 inactive element
   MADDR mapping error。
 - 结论：随机化性能重构、正式 API 迁移和系统消费边界均已完成。`SHMINS-003` 已单独
-  关闭；`SHMINS-002/011` 已由独立 copy/compare 组件测试关闭，`SHMINS-004/007` 仍按
-  配置和 strided RTL 定向验收条件独立跟踪。
+  关闭；`SHMINS-002/011` 已由独立 copy/compare 组件测试关闭，`SHMINS-004` 仍按配置
+  端到端验收条件独立跟踪；`SHMINS-007` 已由扩容后的 109-case RTL 回归关闭。
 
 ### `RSV-001` Reservation alignment policy
 

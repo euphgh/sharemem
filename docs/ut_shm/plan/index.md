@@ -49,8 +49,8 @@ scoreboard 和 topology-based sequence item 已完成主路径迁移。新增 te
 - 当前 testcase 最终都运行 `shm_unit_test`，通过 plusargs 选择 V2M、M2V、VTRANS、
   instruction、space、DTYPE 和 ATYPE。
 - `ut_shm/regression/shm.lst` 当前选择 109 个 case：54 个普通 V2M、54 个普通 M2V
-  和 1 个 VTRANS。扩容前 85 个 case 已在真实 design 上通过；新增 24 个
-  `LDSTE_S + WRP/BLK` case 待运行。
+  和 1 个 VTRANS。当前 109 个 case 已在 `VEC_W=256` 的真实 design 上全部通过；其中
+  新增的 24 个 `LDSTE_S + WRP/BLK` case 已完成系统验证。
 - 当前没有任何有效 functional covergroup 或 coverpoint。所有 testpoint 的 functional
   coverage 状态均为“未实现”，case 或 checker 不能替代 coverage。
 - 当前 sequence 已使用 topology-based 过程式地址生成，并完成地址空洞和 BLK

@@ -58,7 +58,7 @@ Write transaction 在请求周期发布。Read transaction 在请求周期固定
 - `VMEM-001`：read snapshot 尚未实现 `FFD_CYC` 写可见窗口；
 - `VMEM-002`：MEM strobe 和有效 write data 的 X/Z 检查仍不完整；
 - `ENV-001`：运行中 reset 尚未取消 pending read response 和重建 memory；
-- 双 gid 正向主路径已通过 VCS 编译和 2026-08-13 真实 design 的 85-case `shm.lst`
+- 双 gid 正向主路径已通过 VCS 编译和当前真实 design 的 109-case `shm.lst`
   回归；gid 0/1 数据隔离和 reservation 失败路径仍缺独立定向证据。
 
 问题状态和验收方法见[验证实现状态](../../verification-status.md)。

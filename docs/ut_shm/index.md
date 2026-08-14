@@ -9,10 +9,10 @@
 |分区|内容|状态|
 |---|---|---|
 |[DUT 规范](spec/index.md)|RpuShmTop 的双 gid BANK、地址模型、creq/ack、MEM 和 VLM reservation 接口|双 gid contract 已发布|
-|[验证环境](environment/index.md)|tb top、统一 VLM 架构、数据流和各组件实现|双 gid 主路径已通过扩容前 85-case 回归；新增 24 case 待运行|
+|[验证环境](environment/index.md)|tb top、统一 VLM 架构、数据流和各组件实现|256-bit creq 带宽下双 gid 主路径已通过 109-case 回归|
 |[验证计划](plan/index.md)|testpoint、testcase、regression 和覆盖闭环|Phase 5 三篇正文已发布|
 |[使用指南](guide/index.md)|三环境边界、代码流转、Slang/VCS 检查、配置和调试|Phase 6 正文已发布|
-|[当前状态](verification-status.md)|实现差异、优先级、处理状态和验收方法|持续维护；当前主列表 109 case，其中新增 24 case 待运行|
+|[当前状态](verification-status.md)|实现差异、优先级、处理状态和验收方法|持续维护；当前主列表 109 case 已通过真实 RTL 回归|
 
 ## 顺序阅读
 

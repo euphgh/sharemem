@@ -174,7 +174,7 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 - `VMEM-001`：read service 未实现 `FFD_CYC` snapshot。
 - `ENV-001`：运行中 reset 未清理 outstanding 和实际 memory 状态。
 - scoreboard memory、wmap 和 read service 已接入 reservation match metadata，并通过
-  2026-08-13 真实 design 的 85-case `shm.lst` 回归；仍缺 gid 数据隔离和 mismatch
+  当前真实 design 的 109-case `shm.lst` 回归；仍缺 gid 数据隔离和 mismatch
   失败路径定向证据。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

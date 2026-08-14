@@ -266,6 +266,11 @@ constraint benchmark 通过，两轮各 1248 个独立公式检查覆盖全部 1
 当前 Ubuntu EDA 工作区只有空 `RpuShmTop`，因此 RTL 功能回归由实际集成环境执行；
 用户已确认新版 SPACE_BLK RTL regression 通过，`SHMINS-003` 与 `REF-001` 于同日关闭。
 
+2026-08-14 接口带宽进一步收窄为每个 thread 256-bit `creq_offs/creq_vdat` 和
+32-bit `creq_vmsk`；验证环境使用 `VEC_W=256`、`VEC_BYTE_N=32` 同步适配。用户
+确认真实 design 的 109-case `shm.lst` 全部通过。该结果更新双 gid 正向主路径
+证据，但不替代本计划阶段 7 的边界、失败路径和 functional coverage。
+
 每完成一个阶段：
 
 1. 更新 [verification-status](../ut_shm/verification-status.md) 对应项的状态和证据；

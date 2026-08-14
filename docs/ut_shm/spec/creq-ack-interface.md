@@ -19,10 +19,10 @@
 |`creq_len[thread]`|输入|每个线程的有效数据 byte 数|
 |`creq_typ`|输入|方向、数据类型、地址类型和控制位的 20-bit packed 字段|
 |`creq_vaddr`|输入|M2V 写回的 gid 内 BADDR，宽度为 `BADDR_W`，已包含 gid 内 WARP 基址|
-|`creq_vmsk[thread]`|输入|每个线程的 element mask|
+|`creq_vmsk[thread]`|输入|每个线程的 32-bit element mask，宽度为 `VEC_BYTE_N`|
 |`creq_base`|输入|48-bit byte address 基址，普通 MADDR 使用低 `MADDR_W` bit|
-|`creq_offs[thread]`|输入|每个线程的 packed offset 向量|
-|`creq_vdat[thread]`|输入|V2M 写数据|
+|`creq_offs[thread]`|输入|每个线程的 256-bit packed offset 向量|
+|`creq_vdat[thread]`|输入|每个线程的 256-bit V2M 写数据|
 |`vack_done/vack_id`|输出|M2V 完成应答及请求 ID|
 |`mack_done/mack_id`|输出|V2M 完成应答及请求 ID|
 
@@ -88,8 +88,9 @@ creq_tmsk != '0
 
 `creq_len[t]` 的单位是 Byte，不是 element。元素宽度为 `D` Byte 时，线程 `t` 的
 有效元素数为 `creq_len[t]/D`；对 `creq_tmsk[t]==1` 的 thread，合法请求必须使
-byte length 与数据类型对齐。
-`creq_vmsk[t][k]` 决定元素 `k` 是否形成访问。
+byte length 与数据类型对齐，并且不得超过 `VEC_BYTE_N=32` Byte。
+`creq_vmsk[t][k]` 决定元素 `k` 是否形成访问；语义 element index 范围为
+`0 <= k < VEC_BYTE_N`，并进一步受 length 和 dtype 限制。
 
 `creq_base`、`creq_offs`、data type 和 address type 共同生成每个有效元素的 MADDR。
 请求源必须对最终 MADDR 做合法性检查，包括 SPACE_LOC 的 12 KiB 上限以及

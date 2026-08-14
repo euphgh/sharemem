@@ -27,7 +27,7 @@ module RpuShmTop
     input  logic [THD_N-1:0][7:0]     creq_len         ,
     input  logic [19:0]               creq_typ         ,
     input  logic [BADDR_W-1:0]        creq_vaddr       ,
-    input  logic [THD_N-1:0][32:0]    creq_vmsk        ,
+    input  logic [THD_N-1:0][31:0]    creq_vmsk        ,
     input  logic [THD_N-1:0]          creq_tmsk        ,       
     input  logic [47:0]               creq_base        ,
     input  logic [THD_N-1:0][255:0]   creq_offs        , 

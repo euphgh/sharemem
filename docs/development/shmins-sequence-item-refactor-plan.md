@@ -6,6 +6,8 @@ topology 实现现已接入 `ut_shm` 正式 sequence item package 和 master uni
 Driver、monitor、reference 和 scoreboard 继续通过公共 `shmins_sequence_item` handle
 工作，不按地址拓扑派生新的组件类型。2026-08-13 修改后的验证环境和正式 sequence item
 已在真实 design 上通过当时 `shm.lst` 的全部 85 个 case，本计划的实现与系统接入阶段已经完成。
+2026-08-14 向量输入缩为 `VEC_W=256`、`VEC_BYTE_N=32` 后，扩容为 109 个 case
+的主列表再次全部通过，并关闭 strided 系统验证项 `SHMINS-007`。
 
 DUT 地址与 creq 合法性仍以 [地址模型](../ut_shm/spec/address-model.md)和
 [creq/ack 接口](../ut_shm/spec/creq-ack-interface.md)为准。本文描述如何产生合法激励，
@@ -461,5 +463,6 @@ Linux 6.17 kernel 不在支持列表，该环境 warning 未阻止编译。
 - 恢复已删除的 original 或 monolithic benchmark 基线。
 
 `SHMINS-002/011` 已于 2026-08-13 由四 topology copy/compare 组件测试关闭；
-`SHMINS-004`～`SHMINS-007` 的独立验收条件没有因为 85-case 正向回归通过而自动关闭，
-其中 `SHMINS-003` 已由独立公式检查和 BLK RTL regression 单独关闭。
+`SHMINS-003` 已由独立公式检查和 BLK RTL regression 关闭；`SHMINS-007` 已由
+扩容后的 109-case RTL 回归关闭。`SHMINS-004`～`SHMINS-006` 仍按各自的独立验收
+条件跟踪，不因正向主列表通过而自动关闭。

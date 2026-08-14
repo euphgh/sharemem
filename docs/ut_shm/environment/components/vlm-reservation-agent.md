@@ -324,8 +324,8 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 `examples/vlm_reservation_compile/` 提供联合 elaboration、alignment 和 external busy
 定向入口，`ut_shm/tests/shm_unit_test.svh` 则在完整环境中使用该 agent。Alignment case
 验证非对齐 read/write reservation 的地址保留和完整地址兑现；external-busy 当前源码
-字段已经对齐，并于 2026-08-13 通过独立远端组件测试。Coverage 为空也意味着扩容前
-85-case 真实 RTL 回归不能替代功能覆盖闭环。
+字段已经对齐，并于 2026-08-13 通过独立远端组件测试。Coverage 为空也意味着乃至当前
+109-case 真实 RTL 回归都不能替代功能覆盖闭环。
 
 ## 13. 调试观察点
 

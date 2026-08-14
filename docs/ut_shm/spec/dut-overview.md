@@ -82,8 +82,8 @@ ut_shm 从 `shm_util_package` 取值，并在 `shm_tb_top` 实例化 DUT 时显�
 |`ID_W`|8|creq 和 ack ID 宽度|
 |`MADDR_W`|21|统一地址宽度|
 |`BADDR_W`|16|gid 内地址以及 `creq_vaddr` 的宽度，等于 `MADDR_W-$clog2(BANK_N)-1`|
-|`VEC_W`|512 bit|一条线程向量的数据位宽|
-|`VEC_BYTE_N`|64 Byte|一条线程向量包含的 byte 数|
+|`VEC_W`|256 bit|每个 thread 的 `creq_offs` 和 `creq_vdat` 位宽|
+|`VEC_BYTE_N`|32 Byte|一条线程向量包含的 byte 数和语义 element-mask 位数|
 |`VLM_DATA_BIT_W`|256 bit|一次 VLM/MEM beat 的数据位宽|
 |`VLM_DATA_BYTE_W`|32 Byte|一次 VLM/MEM beat 包含的 byte 数|
 |`VLM_SUB_BANK_N`|4|每个 BANK 的 reservation sub-bank 数量|
@@ -92,6 +92,10 @@ ut_shm 从 `shm_util_package` 取值，并在 `shm_tb_top` 实例化 DUT 时显�
 `GID_N` 和 `WARP_PER_GID` 是当前接口/验证模型使用的派生常量，不要求作为
 `RpuShmTop` 独立 parameter 暴露；RTL top 通过一位 `vlm_*gid` 和固定的四-WARP 分组
 表达同一契约。
+
+本轮接口缩减后，`creq_offs[thread]` 和 `creq_vdat[thread]` 均为 256 bit，验证环境按
+`VEC_BYTE_N=32` 生成和解释 `creq_vmsk[thread][31:0]`。RTL top、interface、transaction、
+driver、monitor 和 reference 使用同一组宽度。
 
 当前配置满足 `THD_N == BANK_N`。reference 的 SPACE_LOC 映射依赖这一关系，每个
 线程固定落到同编号 BANK。若要支持两者不相等，必须先重新定义映射契约。
