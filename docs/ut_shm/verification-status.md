@@ -26,8 +26,10 @@ reservation 正向主路径的系统回归证据；随机 `RUN=1` 列表未覆�
 2026-08-14 已把 scoreboard 时间戳统一为共享 `clk_if.cycle_count`，移除 monitor 的固定
 200-cycle ack process，新增 accepted creq/data completion/raw ack lifecycle checker，
 并将 scoreboard timeout、post-completion ack grace 和 test drain 改为 case plusarg。
-空 design VCS 编译通过；长延迟、timeout 触发和 ack 负例尚未完成定向验证，因此相关项
-只能进入待验证或部分实现状态，不能关闭。
+随后根据真实 RTL 的同方向顺序 ack 行为，把 grace 起点进一步改为本事务成为 V2M/M2V
+独立 ordered lifecycle 队头的周期；年轻事务提前完成或提前 ack 不报告乱序。远端 VCS
+组件测试已覆盖慢前序/快后序、无需 ack 的前序、方向独立及年轻事务提前 ack，并完成空
+design 全量编译和 0-transaction smoke；clocked grace timeout 触发边界仍待定向验证。
 
 ## 1. 状态和优先级
 
@@ -88,7 +90,7 @@ reservation 正向主路径的系统回归证据；随机 `RUN=1` 列表未覆�
 |`SHMINS-005`|P2|待实现|shmins agent|部分循环和位宽硬编码为当前 16-thread/4-bit 配置|
 |`SHMINS-006`|P1|待实现|shmins monitor|active creq payload 缺少系统性的 X/Z 检查|
 |`SHMINS-007`|P1|待验证|unit sequence/TC|V2M/M2V WRP/BLK 共 24 个 strided case 已进入主列表，待真实 RTL 回归|
-|`SHMINS-008`|P1|待验证|shmins monitor/lifecycle|固定 200-cycle timeout 已移除，待长延迟和 grace 定向验证|
+|`SHMINS-008`|P1|待验证|shmins monitor/lifecycle|有序 grace 组件测试已通过，待 clocked timeout 触发边界验证|
 |`SHMINS-009`|P1|实现中|shmins/lifecycle|ack 完备 checker 已实现待验证；credit/release 上溢仍缺|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
@@ -277,14 +279,23 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 ### `SHMINS-008` Ack timeout 不是协议时限
 
 - 现状：2026-08-14 已删除 monitor 的逐事务固定 200-cycle process。Monitor 只发布 raw
-  ack；lifecycle checker 只在 scoreboard 把全部期望 byte 实际匹配为 `OBSERVED` 后，
-  可选使用 `ACK_POST_COMPLETE_GRACE_CYCLES` 报告缺失 ack。0 可关闭中途诊断，最终
-  required ack 仍在 drain/check phase 检查。
-- 影响：实现不再限制 creq accepted 到数据完成的时延，但尚缺长延迟和 grace 边界证据。
+  ack；lifecycle checker 只在 scoreboard 把全部期望 byte 实际匹配为 `OBSERVED`，且
+  同方向所有前序事务都已退休后，可选使用 `ACK_POST_COMPLETE_GRACE_CYCLES` 报告缺失
+  ack。0 可关闭中途诊断，最终 required ack 仍在 drain/check phase 检查。独立 V2M/M2V
+  队列按 accepted 顺序退休：无需 ack 的事务在数据 resolved 后退休，需要 ack 的事务在
+  数据 resolved 且收到 ack 后退休；年轻事务提前收到 ack 只记录状态，不报告乱序。
+- 影响：实现不再限制 creq accepted 到数据完成的时延。有序队头切换已有组件证据，尚缺
+  运行 checker `main_phase` 的 clocked grace timeout 触发和关闭边界证据。
 - 目标：保持 timeout 可配置或关闭，并明确属于 hang 诊断；默认策略不得被解释成 DUT
   protocol checker。
 - 验收：关闭 timeout 时长延迟 ack 不报错；配置诊断阈值时日志能区分协议错误与
   hang 诊断；最终正确 ack 仍按方向和 ID 完成匹配。
+- 当前证据：远端 VCS `W-2024.09-SP1_Full64` 执行
+  `scripts/ubuntu/check_shmins_sequence_vcs.sh lifecycle`，覆盖慢前序/快后序完成、无需 ack
+  的前序、V2M/M2V 独立推进及年轻事务提前 ack，输出
+  `ordered ack grace regression: PASS`，且 `UVM_ERROR: 0`、`UVM_FATAL: 0`。随后执行
+  `make compile` 和 `make smoke`，空 design 编译通过，0-transaction smoke 输出
+  `UVM_CASE_PASS`、`UVM_ERROR: 0`、`UVM_FATAL: 0`。
 
 ### `SHMINS-009` Credit 与 ack 完备性检查
 

@@ -80,14 +80,17 @@ transaction，以及约 50% 独立合法的 VTRANS：
 |`+SCB_NO_PROGRESS_TIMEOUT_CYCLES=<n>`|非负整数|0|存在 pending record 但 scoreboard 没有任何进展的诊断阈值；0 关闭|
 |`+SCB_RECORD_AGE_TIMEOUT_CYCLES=<n>`|非负整数|0|单笔 reference record 总年龄诊断阈值；0 关闭|
 |`+SCB_TIMEOUT_SCAN_INTERVAL_CYCLES=<n>`|正整数|10|scoreboard completion/timeout 扫描间隔；0 会 fatal|
-|`+ACK_POST_COMPLETE_GRACE_CYCLES=<n>`|非负整数|20|全部期望 byte 实际匹配后等待 required ack 的 grace；0 关闭中途诊断|
+|`+ACK_POST_COMPLETE_GRACE_CYCLES=<n>`|非负整数|20|全部期望 byte 实际匹配且事务成为同方向有序队头后等待 required ack 的 grace；0 关闭中途诊断|
 |`+TEST_DRAIN_TIMEOUT_CYCLES=<n>`|正整数|10000|sequence 结束后等待整个环境 idle 的 watchdog；0 会 fatal|
 
 两个 scoreboard timeout 和 ack grace 都是 hang 诊断，不是 DUT protocol 最大延迟：
 
 - Scoreboard timeout 触发后只报告一次，不删除 pending record，后续正确数据仍可匹配；
-- `ACK_POST_COMPLETE_GRACE_CYCLES` 从 scoreboard 报告 `OBSERVED` 开始计算，不从 creq
-  accepted cycle 开始计算；
+- V2M/mack 和 M2V/vack 分别维护接收顺序，两个方向互不阻塞；
+- `ACK_POST_COMPLETE_GRACE_CYCLES` 只有在 scoreboard 报告 `OBSERVED`，并且同方向所有
+  前序事务都已退休后才开始，不从 creq accepted cycle 或本事务提前完成的 cycle 开始；
+- 前序 ack-disabled 事务在 data resolved 后退休；前序 ack-enabled 事务在 data resolved
+  且 ack received 后退休；
 - 关闭 ack grace 不会关闭 end-of-test required-ack 完整性检查；
 - `TEST_DRAIN_TIMEOUT_CYCLES` 是 testcase 结束保护，不是单笔 transaction timeout。
 

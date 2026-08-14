@@ -9,8 +9,9 @@
 // @brief Correlates accepted creq, scoreboard data completion, and ack events.
 //
 // The checker enforces ack direction, ID, enable, and exactly-once semantics.
-// It optionally diagnoses a missing ack after fully observed data completion.
-// It does not impose a maximum latency from creq acceptance to completion.
+// It preserves independent V2M and M2V acceptance order when deciding when a
+// fully observed transaction becomes eligible for an ack grace diagnostic. It
+// does not impose a maximum latency from creq acceptance to completion.
 //------------------------------------------------------------------------------
 class shm_transaction_lifecycle_checker extends uvm_component;
   class lifecycle_record;
@@ -25,12 +26,16 @@ class shm_transaction_lifecycle_checker extends uvm_component;
     bit                     data_resolved;
     bit                     data_observed;
     shm_cycle_t             completion_cycle;
+    bit                     grace_started;
+    shm_cycle_t             grace_start_cycle;
     bit                     missing_ack_reported;
 
     function new();
       ack_received = 1'b0;
       data_resolved = 1'b0;
       data_observed = 1'b0;
+      grace_started = 1'b0;
+      grace_start_cycle = 0;
       missing_ack_reported = 1'b0;
     endfunction : new
   endclass : lifecycle_record
@@ -49,6 +54,10 @@ class shm_transaction_lifecycle_checker extends uvm_component;
   lifecycle_record records[shm_transaction_uid_t];
   shm_transaction_uid_t uid_by_ack_key[longint unsigned];
   bit retired_ack_keys[longint unsigned];
+
+  // Accepted transaction order for the independent V2M and M2V ack channels.
+  shm_transaction_uid_t direction_order[2][$];
+
   bit in_reset;
 
   //----------------------------------------------------------------------------
@@ -67,7 +76,7 @@ class shm_transaction_lifecycle_checker extends uvm_component;
   extern virtual function void build_phase(uvm_phase phase);
 
   //----------------------------------------------------------------------------
-  // @brief Scans the optional post-completion ack grace and reset transitions.
+  // @brief Scans ordered-head ack grace and reset transitions.
   //
   // @param phase UVM main phase controlling the checker lifetime.
   //----------------------------------------------------------------------------
@@ -115,8 +124,39 @@ class shm_transaction_lifecycle_checker extends uvm_component;
   //----------------------------------------------------------------------------
   extern function string pending_state_sprint();
 
-  extern protected function longint unsigned ack_key(creq_rw_e direction, logic [ID_W-1:0] transaction_id);
-  extern protected function void complete_record(shm_transaction_uid_t transaction_uid);
+  //----------------------------------------------------------------------------
+  // @brief Builds the lookup key used to correlate a raw ack with one creq.
+  //
+  // @param direction      Ack channel direction.
+  // @param transaction_id Interface request ID carried by creq and ack.
+  // @return Stable key containing both direction and transaction ID.
+  //----------------------------------------------------------------------------
+  extern protected function longint unsigned ack_key(
+      creq_rw_e direction, logic [ID_W-1:0] transaction_id);
+
+  //----------------------------------------------------------------------------
+  // @brief Advances ordered retirement and arms the new channel head grace.
+  //
+  // @param direction     V2M or M2V acceptance-order queue to advance.
+  // @param current_cycle Shared clock cycle of the ack or completion event.
+  // @post Every consecutively retired head is deleted. A fully observed
+  //       ack-required new head starts grace exactly once.
+  //----------------------------------------------------------------------------
+  extern protected function void advance_direction(
+      creq_rw_e direction, shm_cycle_t current_cycle);
+
+  //----------------------------------------------------------------------------
+  // @brief Deletes one record that has retired from its ordered channel head.
+  //
+  // @param transaction_uid Monitor-owned identity of the record to delete.
+  // @pre The record is the current direction queue head and satisfies the
+  //      ordered retirement condition.
+  //----------------------------------------------------------------------------
+  extern protected function void retire_record(shm_transaction_uid_t transaction_uid);
+
+  //----------------------------------------------------------------------------
+  // @brief Clears all lifecycle, ordering, and ack-correlation state on reset.
+  //----------------------------------------------------------------------------
   extern protected function void clear_for_reset();
 
   `uvm_component_utils(shm_transaction_lifecycle_checker)
@@ -163,14 +203,14 @@ task shm_transaction_lifecycle_checker::main_phase(uvm_phase phase);
     end
     foreach (records[transaction_uid]) begin
       lifecycle_record record = records[transaction_uid];
-      if (record.ack_required && record.data_observed && !record.ack_received &&
+      if (record.ack_required && record.grace_started && !record.ack_received &&
           !record.missing_ack_reported &&
-          clk_vif.cycle_count > record.completion_cycle + cfg.ack_post_complete_grace_cycles) begin
+          clk_vif.cycle_count > record.grace_start_cycle + cfg.ack_post_complete_grace_cycles) begin
         `uvm_error("SHM_ACK_POST_COMPLETE_TIMEOUT",
                    $sformatf({"transaction uid=%0d direction=%s id=%0d has no ack %0d cycles after ",
-                              "observed data completion at cycle %0d"},
+                              "becoming the ordered ack-channel head at cycle %0d"},
                              record.transaction_uid, record.direction.name(), record.transaction_id,
-                             cfg.ack_post_complete_grace_cycles, record.completion_cycle))
+                             cfg.ack_post_complete_grace_cycles, record.grace_start_cycle))
         record.missing_ack_reported = 1'b1;
       end
     end
@@ -217,6 +257,7 @@ function void shm_transaction_lifecycle_checker::write_shm_lifecycle_accept(
   record.reset_epoch = transaction.reset_epoch;
   records[record.transaction_uid] = record;
   uid_by_ack_key[key] = record.transaction_uid;
+  direction_order[int'(record.direction)].push_back(record.transaction_uid);
 endfunction : write_shm_lifecycle_accept
 
 function void shm_transaction_lifecycle_checker::write_shm_lifecycle_ack(shmins_ack_event ack_event);
@@ -269,9 +310,12 @@ function void shm_transaction_lifecycle_checker::write_shm_lifecycle_ack(shmins_
 
   record.ack_received = 1'b1;
   record.ack_cycle = ack_event.cycle;
-  if (record.data_resolved) begin
-    complete_record(transaction_uid);
-  end
+
+  // Ack correlation ends at the ack event even if ordered data retirement is
+  // still blocked by an older transaction on this direction channel.
+  uid_by_ack_key.delete(key);
+  retired_ack_keys[key] = 1'b1;
+  advance_direction(record.direction, ack_event.cycle);
 endfunction : write_shm_lifecycle_ack
 
 function void shm_transaction_lifecycle_checker::write_shm_lifecycle_completion(
@@ -289,25 +333,41 @@ function void shm_transaction_lifecycle_checker::write_shm_lifecycle_completion(
   record.data_resolved = 1'b1;
   record.data_observed = completion_event.kind == SHM_COMPLETION_OBSERVED;
   record.completion_cycle = completion_event.cycle;
-  if (!record.ack_required || record.ack_received) begin
-    complete_record(completion_event.transaction_uid);
-  end
+  advance_direction(record.direction, completion_event.cycle);
 endfunction : write_shm_lifecycle_completion
 
 function bit shm_transaction_lifecycle_checker::is_idle();
-  return records.num() == 0;
+  return records.num() == 0 && direction_order[int'(SHM_V2M)].size() == 0 &&
+         direction_order[int'(SHM_M2V)].size() == 0;
 endfunction : is_idle
 
 function string shm_transaction_lifecycle_checker::pending_state_sprint();
   string result = $sformatf("lifecycle pending records=%0d\n", records.num());
-  foreach (records[transaction_uid]) begin
-    lifecycle_record record = records[transaction_uid];
+  for (int unsigned direction_index = 0; direction_index < 2; direction_index++) begin
+    creq_rw_e direction = creq_rw_e'(direction_index);
     result = {result,
-              $sformatf({"  uid=%0d direction=%s id=%0d ack_required=%0d ack_received=%0d ",
-                         "data_resolved=%0d data_observed=%0d accept_cycle=%0d\n"},
-                        record.transaction_uid, record.direction.name(), record.transaction_id,
-                        record.ack_required, record.ack_received, record.data_resolved,
-                        record.data_observed, record.accept_cycle)};
+              $sformatf("  %s order depth=%0d\n", direction.name(),
+                        direction_order[direction_index].size())};
+    foreach (direction_order[direction_index][position]) begin
+      shm_transaction_uid_t transaction_uid = direction_order[direction_index][position];
+      if (!records.exists(transaction_uid)) begin
+        result = {result,
+                  $sformatf("    position=%0d uid=%0d missing record\n", position,
+                            transaction_uid)};
+        continue;
+      end
+      begin
+        lifecycle_record record = records[transaction_uid];
+        result = {result,
+                  $sformatf({"    position=%0d uid=%0d id=%0d ack_required=%0d ack_received=%0d ",
+                             "data_resolved=%0d data_observed=%0d grace_started=%0d ",
+                             "grace_start_cycle=%0d accept_cycle=%0d\n"},
+                            position, record.transaction_uid, record.transaction_id,
+                            record.ack_required, record.ack_received, record.data_resolved,
+                            record.data_observed, record.grace_started,
+                            record.grace_start_cycle, record.accept_cycle)};
+      end
+    end
   end
   return result;
 endfunction : pending_state_sprint
@@ -317,7 +377,45 @@ function longint unsigned shm_transaction_lifecycle_checker::ack_key(
   return (longint'(direction) << ID_W) | longint'(transaction_id);
 endfunction : ack_key
 
-function void shm_transaction_lifecycle_checker::complete_record(shm_transaction_uid_t transaction_uid);
+function void shm_transaction_lifecycle_checker::advance_direction(
+    creq_rw_e direction, shm_cycle_t current_cycle);
+  int unsigned direction_index = int'(direction);
+
+  while (direction_order[direction_index].size() != 0) begin
+    shm_transaction_uid_t transaction_uid = direction_order[direction_index][0];
+    lifecycle_record record;
+
+    if (!records.exists(transaction_uid)) begin
+      `uvm_error("SHM_LIFECYCLE_ORDER_MISSING_RECORD",
+                 $sformatf("direction=%s head uid=%0d has no lifecycle record",
+                           direction.name(), transaction_uid))
+      void'(direction_order[direction_index].pop_front());
+      continue;
+    end
+
+    record = records[transaction_uid];
+    if (!record.data_resolved || (record.ack_required && !record.ack_received)) begin
+      break;
+    end
+
+    void'(direction_order[direction_index].pop_front());
+    retire_record(transaction_uid);
+  end
+
+  if (direction_order[direction_index].size() != 0) begin
+    shm_transaction_uid_t transaction_uid = direction_order[direction_index][0];
+    lifecycle_record record = records[transaction_uid];
+
+    if (record.ack_required && record.data_observed && !record.ack_received &&
+        !record.grace_started) begin
+      record.grace_started = 1'b1;
+      record.grace_start_cycle = current_cycle;
+    end
+  end
+endfunction : advance_direction
+
+function void shm_transaction_lifecycle_checker::retire_record(
+    shm_transaction_uid_t transaction_uid);
   longint unsigned key;
   lifecycle_record record;
 
@@ -326,17 +424,21 @@ function void shm_transaction_lifecycle_checker::complete_record(shm_transaction
   end
   record = records[transaction_uid];
   key = ack_key(record.direction, record.transaction_id);
-  if (record.ack_received) begin
-    retired_ack_keys[key] = 1'b1;
+
+  // A newer transaction may already reuse the same ID after this record's ack.
+  // Delete only a correlation entry still owned by the retiring record.
+  if (uid_by_ack_key.exists(key) && uid_by_ack_key[key] == transaction_uid) begin
+    uid_by_ack_key.delete(key);
   end
-  uid_by_ack_key.delete(key);
   records.delete(transaction_uid);
-endfunction : complete_record
+endfunction : retire_record
 
 function void shm_transaction_lifecycle_checker::clear_for_reset();
   records.delete();
   uid_by_ack_key.delete();
   retired_ack_keys.delete();
+  direction_order[int'(SHM_V2M)].delete();
+  direction_order[int'(SHM_M2V)].delete();
 endfunction : clear_for_reset
 
 `endif // INC_SHM_TRANSACTION_LIFECYCLE_CHECKER_SVH

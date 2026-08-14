@@ -19,7 +19,19 @@ Run the transaction copy/compare component test with:
 scripts/ubuntu/check_shmins_sequence_vcs.sh copy
 ```
 
-Run both targets with:
+Run the ordered ack-grace lifecycle component test with:
+
+```sh
+scripts/ubuntu/check_shmins_sequence_vcs.sh lifecycle
+```
+
+This test does not instantiate a DUT. It checks that a fast young transaction
+does not start its ack grace before all older transactions on the same direction
+channel retire, that ack-disabled predecessors still participate in ordering,
+that V2M and M2V do not block each other, and that an early young ack is recorded
+without an out-of-order error.
+
+Run all three targets with:
 
 ```sh
 scripts/ubuntu/check_shmins_sequence_vcs.sh all

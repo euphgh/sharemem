@@ -31,8 +31,8 @@ class shm_environment_config extends uvm_object;
     int unsigned scb_record_age_timeout_cycles = 0;
     int unsigned scb_timeout_scan_interval_cycles = 10;
 
-    // Diagnostic grace after all bytes of one transaction are observed.
-    // Zero disables the intermediate deadline; end-of-test ack checking remains.
+    // Diagnostic grace after a fully observed transaction becomes the ordered
+    // head of its direction channel. Zero disables only the intermediate deadline.
     int unsigned ack_post_complete_grace_cycles = 20;
 
     // Case-level drain watchdog used after the stimulus sequence completes.

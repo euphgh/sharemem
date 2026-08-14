@@ -113,10 +113,14 @@ Monitor 不再为每笔请求创建固定 200-cycle timeout process。它独立�
 
 Environment 中的 `shm_transaction_lifecycle_checker` 关联 accepted creq、scoreboard
 completion 和 raw ack，检查 ack enable、方向、ID、reset epoch 和 exactly-once。只有
-scoreboard 把全部期望 byte 分类为 `OBSERVED` 后，才可选启动
-`ACK_POST_COMPLETE_GRACE_CYCLES` 诊断；默认 20 cycles，0 表示关闭。该 grace 不限制从
-creq accepted 到数据完成的时延，也不是 DUT protocol timeout。测试结束时 required ack
-仍必须存在。
+scoreboard 把全部期望 byte 分类为 `OBSERVED`，并且该事务成为同方向 ordered lifecycle
+队头后，才可选启动 `ACK_POST_COMPLETE_GRACE_CYCLES` 诊断；默认 20 cycles，0 表示关闭。
+V2M/mack 和 M2V/vack 使用独立接收顺序，互不阻塞。前序 ack-disabled 事务在 data
+resolved 后退休；前序 ack-enabled 事务在 data resolved 且 ack received 后退休。年轻
+transaction 提前完成或提前收到 ack 只更新状态，当前不单独报告 out-of-order ack。
+
+该 grace 不限制从 creq accepted 到数据完成的时延，也不包含年轻事务等待前序退休的
+时间，因此不是 DUT protocol timeout。测试结束时 required ack 仍必须存在。
 
 ## 7. X/Z 和错误边界
 
@@ -134,7 +138,8 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 - `drv_tr_cnt`：driver 已发送事务数量和自动分配 ID 的来源；
 - semaphore 是否耗尽、`creq_rls` 是否按预期归还 credit；
 - `shmins_cnt`：monitor 采样事务数量；
-- lifecycle pending record：transaction UID、方向、ID、ack/data completion 状态和 cycle；
+- lifecycle direction queue：transaction UID、队列位置、方向、ID、ack/data completion、
+  grace 状态和 cycle；
 - sequence 打印的最终 item 与 monitor 重建 item 是否一致；
 - `creq_typ` 的编码/解码字段，尤其是 `creq_info` 和 VTRANS。
 

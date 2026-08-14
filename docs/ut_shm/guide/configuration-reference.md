@@ -89,7 +89,7 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh compile +define+MY_DEBUG
 |`SCB_NO_PROGRESS_TIMEOUT_CYCLES`|非负整数|scoreboard|pending record 全局无进展诊断；0（默认）关闭|
 |`SCB_RECORD_AGE_TIMEOUT_CYCLES`|非负整数|scoreboard|单笔 record 总年龄诊断；0（默认）关闭|
 |`SCB_TIMEOUT_SCAN_INTERVAL_CYCLES`|正整数|scoreboard|timeout/completion 扫描周期；默认 10，0 会 fatal|
-|`ACK_POST_COMPLETE_GRACE_CYCLES`|非负整数|lifecycle checker|数据全部实际匹配后等待 required ack 的诊断 grace；默认 20，0 关闭中途诊断|
+|`ACK_POST_COMPLETE_GRACE_CYCLES`|非负整数|lifecycle checker|数据全部实际匹配且成为同方向有序队头后等待 required ack 的诊断 grace；默认 20，0 关闭中途诊断|
 |`TEST_DRAIN_TIMEOUT_CYCLES`|正整数|`shm_environment.wait_for_idle()`|sequence 结束后环境 drain watchdog；默认 10000，0 会 fatal|
 |`file_debug`|无值开关|reference、旧独立 VLM memory monitor|主环境创建 `vlm.ref`；旧 monitor 单独使用时创建 `vlm_memory.rtl`，统一 VLM monitor 当前不创建独立 debug 文件|
 |`UVM_VERBOSITY`|UVM verbosity 名称|UVM|控制 UVM report 输出级别|

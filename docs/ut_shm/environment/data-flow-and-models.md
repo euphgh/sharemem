@@ -92,7 +92,9 @@ Lifecycle 路径使用两个只读 UVM object：
 
 `shm_transaction_lifecycle_checker` 把它们与 monitor 发布的 accepted
 `shmins_sequence_item` 关联。Monitor 不决定 ack 是否预期；scoreboard 不决定 ack
-方向或 ID；lifecycle checker 不参与 byte 数据比较。
+方向或 ID；lifecycle checker 不参与 byte 数据比较。Checker 按 accepted UID 为 V2M 和
+M2V 分别维护 ordered lifecycle queue；年轻事务的 ack grace 只有在它成为本方向队头后
+才启动，另一方向的慢事务不会形成阻塞。
 
 ## 2. 对象所有权与修改规则
 
