@@ -33,7 +33,7 @@ package shm_util_package;
     parameter WARP_STEP       = 12 * 1024             ; // 12KB for one vlm
     parameter MADDR_W         = 21                    ; //total shm addr space :8KB*16t*4warp=20bit,for 8KB expand,give 21
     parameter BADDR_W         = MADDR_W-$clog2(BANK_N)-$clog2(GID_N); // per-gid bank address space
-    parameter VEC_W           = 512;
+    parameter VEC_W           = 256;
     parameter VEC_BYTE_N      = (VEC_W / 8);
     parameter VLM_DATA_BIT_W  = 256                   ;
     parameter VLM_DATA_BYTE_W = (VLM_DATA_BIT_W / 8)   ;
