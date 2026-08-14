@@ -5,16 +5,18 @@
 
 // TLM Analysis Imp Declaration
 
-//-----------------------------------------------------------------------------
-// Class: shm_scoreboard
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// @brief Compares expected and observed SHM byte writes in shared clock cycles.
+//
+// The scoreboard keeps superseded expected values for legal out-of-order DUT
+// writes, publishes transaction-level completion to the lifecycle checker, and
+// provides independently configurable no-progress and record-age diagnostics.
+//------------------------------------------------------------------------------
 class shm_scoreboard extends uvm_scoreboard;
 
     // Data Members
     //---------------------------------------------------------------------
     parameter INFLIGHT_NUM = 8;
-    parameter CLK_PERIOD   = 1;
-
     // banks write map type
     typedef vlm2aa::wmap_util wmap_util;
     typedef vlm2aa::wmap_t wmap_t;
@@ -22,8 +24,8 @@ class shm_scoreboard extends uvm_scoreboard;
 
     typedef set_array_util#(baddr_t, PHYSICAL_BANK_N) waddr_util;
     typedef waddr_util::set_t waddr_set_t[PHYSICAL_BANK_N];
-    // time map type
-    typedef aa_array_util#(PHYSICAL_BANK_N, baddr_t, time) tmap_util;
+    // Cycle map type.
+    typedef aa_array_util#(PHYSICAL_BANK_N, baddr_t, shm_cycle_t) tmap_util;
     typedef tmap_util::aa_array_t tmap_t;
 
     // write aa of q array
@@ -41,8 +43,12 @@ class shm_scoreboard extends uvm_scoreboard;
         shm_wtrans_item tr;
         tmap_t matched;
         tmap_t expired;
+        bit completion_reported;
+        bit age_timeout_reported;
         function new (shm_wtrans_item tr_);
             this.tr = tr_;
+            completion_reported = 1'b0;
+            age_timeout_reported = 1'b0;
             for (int unsigned i = 0; i < PHYSICAL_BANK_N; i++) begin
                 matched[i].delete();
                 expired[i].delete();
@@ -53,6 +59,11 @@ class shm_scoreboard extends uvm_scoreboard;
 
     svt_mem rtl_banks[BANK_N][GID_N];
     shm_environment_config shm_environment_cfg;
+    virtual clk_if clk_vif;
+
+    // Cycle of the latest reference arrival, expiration, or actual write match.
+    shm_cycle_t last_progress_cycle;
+    bit no_progress_timeout_reported;
 
     uvm_analysis_export #(vlm_memory_sequence_item) rtl_wrvlm_analysis_export;
     local uvm_tlm_analysis_fifo #(vlm_memory_sequence_item) rtl_wrvlm_analysis_fifo;
@@ -61,6 +72,7 @@ class shm_scoreboard extends uvm_scoreboard;
     local uvm_tlm_analysis_fifo #(shm_wtrans_item) ref_wrvlm_analysis_fifo;
 
     uvm_tlm_b_transport_imp #(vlm_memory_sequence_item, shm_scoreboard) mem_imp;
+    uvm_analysis_port #(shm_completion_event) completion_analysis_port;
 
     extern function        new(string name = "shm_scoreboard", uvm_component parent);
     extern virtual function void build_phase(uvm_phase phase);
@@ -69,15 +81,71 @@ class shm_scoreboard extends uvm_scoreboard;
     extern virtual task     main_phase(uvm_phase phase);
     extern virtual function void check_phase(uvm_phase phase);
 
-    // collect reference transaction from reference
+    //-------------------------------------------------------------------------
+    // @brief Collects expected write maps and records their acceptance cycle.
+    //-------------------------------------------------------------------------
     extern task collect_ref();
-    // Check for any time-out transactions, which will cause an error
+
+    //-------------------------------------------------------------------------
+    // @brief Scans completion and optional cycle-based timeout diagnostics.
+    //
+    // A reported timeout does not delete or expire expected transaction data.
+    //-------------------------------------------------------------------------
     extern task scan_timeout_creq();
-    // Compare dut w trans with ref, remove ref if dut match it
+
+    //-------------------------------------------------------------------------
+    // @brief Compares observed DUT writes with current and superseded data.
+    //-------------------------------------------------------------------------
     extern task compare_dut_with_ref();
 
+    //-------------------------------------------------------------------------
+    // @brief Applies one new expected write map to older expected records.
+    //
+    // @param new_trans New reference transaction that supersedes overlapping
+    //                  byte addresses from older records.
+    // @post Overlapping old bytes are classified as expired at issue_cycle.
+    //-------------------------------------------------------------------------
     extern function void compare_with_old_trans(const ref shm_wtrans_item new_trans);
+
+    //-------------------------------------------------------------------------
+    // @brief Returns whether all bytes of one reference record are resolved.
+    //
+    // @param index Queue index of the reference record to query.
+    // @return 1 when every expected byte was either observed or superseded.
+    //-------------------------------------------------------------------------
     extern function bit is_finished_ref_trans(int index);
+
+    //-------------------------------------------------------------------------
+    // @brief Returns whether all bytes were observed without supersession.
+    //
+    // @param index Queue index of the reference record to query.
+    // @return 1 for a nonempty map whose every byte matched an actual write.
+    //-------------------------------------------------------------------------
+    extern function bit is_observed_ref_trans(int index);
+
+    //-------------------------------------------------------------------------
+    // @brief Publishes one completion event for each newly resolved record.
+    //-------------------------------------------------------------------------
+    extern function void publish_completion_events();
+
+    //-------------------------------------------------------------------------
+    // @brief Records progress at the current shared clock cycle.
+    //-------------------------------------------------------------------------
+    extern function void record_progress();
+
+    //-------------------------------------------------------------------------
+    // @brief Returns whether no reference, FIFO, or expected byte is pending.
+    //
+    // @return 1 when the scoreboard contains no outstanding work.
+    //-------------------------------------------------------------------------
+    extern function bit is_idle();
+
+    //-------------------------------------------------------------------------
+    // @brief Formats current pending state for drain-time diagnostics.
+    //
+    // @return Multi-line reference, FIFO, cycle, and expected-map summary.
+    //-------------------------------------------------------------------------
+    extern function string pending_state_sprint();
     extern virtual task b_transport(vlm_memory_sequence_item trans, uvm_tlm_time delay);
 
     `uvm_component_utils_begin(shm_scoreboard)
@@ -98,7 +166,9 @@ task shm_scoreboard::b_transport(vlm_memory_sequence_item trans, uvm_tlm_time de
                 byte rdata = rtl_banks[bid][trans.vlm_gid[bid]].read(byte_addr);
                 trans.vlm_data[bid][byte_offs * 8 +: 8] = rdata;
             end
-            `uvm_info(get_type_name(), $sformatf("VLM[%02d][%x] R: %x", bid, trans.vlm_addr[bid], trans.vlm_data[bid]), UVM_FULL)
+            `uvm_info(get_type_name(),
+                      $sformatf("VLM[%02d][%x] R: %x", bid, trans.vlm_addr[bid], trans.vlm_data[bid]),
+                      UVM_FULL)
         end
     end
 endtask // 任务结束，控制权和修改后的 txn 一起交还给 Driver
@@ -117,7 +187,7 @@ function void shm_scoreboard::compare_with_old_trans(const ref shm_wtrans_item n
         shm_wtrans_item old_trans = ref_record_q[i].tr;
         wmap_t expired_addrs = wmap_util::get_intersect(old_trans.wmap, new_trans.wmap);
         foreach(expired_addrs[bank, addr]) begin
-            ref_record_q[i].expired[bank][addr] = new_trans.issue_time;
+            ref_record_q[i].expired[bank][addr] = new_trans.issue_cycle;
         end
     end
 endfunction
@@ -132,6 +202,8 @@ task shm_scoreboard::collect_ref();
             ref_record_t new_ref_record = new(tr);
             ref_record_q.push_back(new_ref_record);
         end
+        record_progress();
+        publish_completion_events();
     end
 endtask
 
@@ -144,46 +216,130 @@ function bit shm_scoreboard::is_finished_ref_trans(int index);
     return waddr_util::contains(hitted_addrs, trans_origin_addrs);
 endfunction
 
-// Check for any time-out transactions, which will cause an error
+function bit shm_scoreboard::is_observed_ref_trans(int index);
+    shm_wtrans_item curr_trans = ref_record_q[index].tr;
+    waddr_set_t curr_matched = tmap_util::get_keys(ref_record_q[index].matched);
+    waddr_set_t trans_origin_addrs = wmap_util::get_keys(curr_trans.wmap);
+    bit has_expected_data = 1'b0;
+
+    foreach (curr_trans.wmap[bank, addr]) begin
+        has_expected_data = 1'b1;
+    end
+    return has_expected_data && waddr_util::contains(curr_matched, trans_origin_addrs);
+endfunction : is_observed_ref_trans
+
+function void shm_scoreboard::publish_completion_events();
+    foreach (ref_record_q[index]) begin
+        shm_completion_event completion_event;
+
+        if (ref_record_q[index].completion_reported || !is_finished_ref_trans(index)) begin
+            continue;
+        end
+
+        completion_event = shm_completion_event::type_id::create("completion_event");
+        completion_event.transaction_uid = ref_record_q[index].tr.transaction_uid;
+        completion_event.cycle = clk_vif.cycle_count;
+        completion_event.kind = is_observed_ref_trans(index) ? SHM_COMPLETION_OBSERVED : SHM_COMPLETION_RESOLVED;
+        ref_record_q[index].completion_reported = 1'b1;
+        completion_analysis_port.write(completion_event);
+    end
+endfunction : publish_completion_events
+
+function void shm_scoreboard::record_progress();
+    last_progress_cycle = clk_vif.cycle_count;
+    no_progress_timeout_reported = 1'b0;
+endfunction : record_progress
+
+function bit shm_scoreboard::is_idle();
+    if (ref_record_q.size() != 0 || !rtl_wrvlm_analysis_fifo.is_empty() ||
+        !ref_wrvlm_analysis_fifo.is_empty()) begin
+        return 1'b0;
+    end
+
+    foreach (wmap_final[bank]) begin
+        if (wmap_final[bank].size() != 0) begin
+            return 1'b0;
+        end
+    end
+    return 1'b1;
+endfunction : is_idle
+
+function string shm_scoreboard::pending_state_sprint();
+    return $sformatf({"scoreboard pending records=%0d rtl_fifo_empty=%0d ref_fifo_empty=%0d ",
+                      "last_progress_cycle=%0d current_cycle=%0d\n%s"},
+                     ref_record_q.size(), rtl_wrvlm_analysis_fifo.is_empty(),
+                     ref_wrvlm_analysis_fifo.is_empty(), last_progress_cycle,
+                     clk_vif.cycle_count,
+                     shm_physical_map_util::sprint_wmap(wmap_final, "final wmap table"));
+endfunction : pending_state_sprint
+
+// Scan completion and optional cycle-based timeout diagnostics.
 task shm_scoreboard::scan_timeout_creq();
     forever begin: forever_wrap
-        const int time_out_cycle = 128;
         ref_record_t rebuild_refs [$];
-        // 每隔一段时间检查一遍，不需要每个时钟都扫，节省性能
-        repeat(10) #(CLK_PERIOD);
+        shm_cycle_t current_cycle;
+
+        clk_vif.wait_cycles(shm_environment_cfg.scb_timeout_scan_interval_cycles);
+        current_cycle = clk_vif.cycle_count;
+        publish_completion_events();
+
         // Find all expired or finish ref trans
         foreach (ref_record_q[id]) begin: foreach_ref
             shm_wtrans_item tr = ref_record_q[id].tr;
             if (is_finished_ref_trans(id)) begin
-                string info_msg = $sformatf("ref_record_q(id = %0d) all data is matched or expired: \n", ref_record_q[id].tr.creq_id);
-                info_msg = {info_msg, tr.sprint(), tmap_util::sprint(ref_record_q[id].expired), tmap_util::sprint(ref_record_q[id].matched)};
+                string info_msg = $sformatf(
+                    "ref_record_q(id = %0d) all data is matched or expired: \n",
+                    ref_record_q[id].tr.creq_id);
+                info_msg = {info_msg, tr.sprint(), tmap_util::sprint(ref_record_q[id].expired),
+                            tmap_util::sprint(ref_record_q[id].matched)};
                 info_msg = {info_msg, "expired table: \n", tmap_util::sprint(ref_record_q[id].expired), "\n"};
                 info_msg = {info_msg, "matched table: \n", tmap_util::sprint(ref_record_q[id].matched), "\n"};
                 `uvm_info(get_type_name(), info_msg, UVM_FULL);
             end
-            else if (($time - tr.issue_time) > (time_out_cycle * CLK_PERIOD)) begin
+            else begin
                 wmap_t unmatched_wmap;
-                string error_msg;
-
-                foreach (tr.wmap[bank, addr]) begin
-                    if (!ref_record_q[id].expired[bank].exists(addr) &&
-                        !ref_record_q[id].matched[bank].exists(addr)) begin
-                        unmatched_wmap[bank][addr] = tr.wmap[bank][addr];
-                    end
-                end
-
-                error_msg = {$sformatf("shmins require expired after %0d cycles:\n", time_out_cycle), tr.sprint()};
-                error_msg = {error_msg, "expired table: \n", tmap_util::sprint(ref_record_q[id].expired), "\n"};
-                error_msg = {error_msg, "matched table: \n", tmap_util::sprint(ref_record_q[id].matched), "\n"};
-                error_msg = {error_msg, "unmatched table: \n",
-                             shm_physical_map_util::sprint_wmap(unmatched_wmap, "unmatched wmap"), "\n"};
-                `uvm_error(get_type_name(), error_msg);
-            end
-            else begin // only not finish and not expired records should be saved
                 rebuild_refs.push_back(ref_record_q[id]);
+
+                if (shm_environment_cfg.scb_record_age_timeout_cycles != 0 &&
+                    current_cycle - tr.issue_cycle > shm_environment_cfg.scb_record_age_timeout_cycles &&
+                    !ref_record_q[id].age_timeout_reported) begin
+                    string error_msg;
+
+                    foreach (tr.wmap[bank, addr]) begin
+                        if (!ref_record_q[id].expired[bank].exists(addr) &&
+                            !ref_record_q[id].matched[bank].exists(addr)) begin
+                            unmatched_wmap[bank][addr] = tr.wmap[bank][addr];
+                        end
+                    end
+
+                    error_msg = {
+                        $sformatf("SHM transaction uid=%0d id=%0d exceeded record age %0d cycles:\n",
+                                  tr.transaction_uid, tr.creq_id,
+                                  shm_environment_cfg.scb_record_age_timeout_cycles),
+                        tr.sprint(),
+                        "expired table: \n", tmap_util::sprint(ref_record_q[id].expired), "\n",
+                        "matched table: \n", tmap_util::sprint(ref_record_q[id].matched), "\n",
+                        "unmatched table: \n",
+                        shm_physical_map_util::sprint_wmap(unmatched_wmap, "unmatched wmap"), "\n"
+                    };
+                    `uvm_error("SHM_SCB_RECORD_AGE_TIMEOUT", error_msg)
+                    ref_record_q[id].age_timeout_reported = 1'b1;
+                end
             end
         end: foreach_ref
         ref_record_q = rebuild_refs;
+
+        if (ref_record_q.size() == 0) begin
+            no_progress_timeout_reported = 1'b0;
+        end
+        else if (shm_environment_cfg.scb_no_progress_timeout_cycles != 0 &&
+                 current_cycle - last_progress_cycle > shm_environment_cfg.scb_no_progress_timeout_cycles &&
+                 !no_progress_timeout_reported) begin
+            `uvm_error("SHM_SCB_NO_PROGRESS_TIMEOUT",
+                       $sformatf("%0d pending SHM records made no scoreboard progress for more than %0d cycles",
+                                 ref_record_q.size(), shm_environment_cfg.scb_no_progress_timeout_cycles))
+            no_progress_timeout_reported = 1'b1;
+        end
     end: forever_wrap
 endtask
 
@@ -222,7 +378,8 @@ task shm_scoreboard::compare_dut_with_ref();
             waddr_set_t hited_addrs = waddr_util::get_union(matched_final_waddr, matched_expired_waddr);
             if (!waddr_util::contains(hited_addrs, vlm_waddrs)) begin: addr_check
                 waddr_set_t error_waddr = waddr_util::get_diff(vlm_waddrs, hited_addrs);
-                string err_msg = {"rtl write address is not expected:\n", waddr_util::sprint(error_waddr, "error address")};
+                string err_msg = {"rtl write address is not expected:\n",
+                                  waddr_util::sprint(error_waddr, "error address")};
                 err_msg = {err_msg, "\n", shm_physical_map_util::sprint_wmap(vlm_wmap, "vlm table")};
                 err_msg = {err_msg, "\n", shm_physical_map_util::sprint_wmap(wmap_final, "final wmap table")};
                 err_msg = {err_msg, "\n",
@@ -283,14 +440,17 @@ task shm_scoreboard::compare_dut_with_ref();
                               {"rtl write fully matched with wmap_final and wmmap_expired:\n",
                                shm_physical_map_util::sprint_wmap(vlm_wmap, "vlm table")},
                               UVM_FULL);
+                    record_progress();
                     foreach(ref_record_q[i]) begin
                         shm_wtrans_item curr_trans = ref_record_q[i].tr;
-                        wmap_t trans_pair_matched = wmap_util::get_intersect(vlm_wmap, curr_trans.wmap);
+                        wmap_t trans_pair_matched =
+                            wmap_util::get_intersect(vlm_wmap, curr_trans.wmap);
                         foreach(trans_pair_matched[bank, addr]) begin
                             if (ref_record_q[i].tr.wmap[bank][addr] == trans_pair_matched[bank][addr])
-                                ref_record_q[i].matched[bank][addr] = $time;
+                                ref_record_q[i].matched[bank][addr] = clk_vif.cycle_count;
                         end
                     end
+                    publish_completion_events();
                 end: value_full_match
             end: value_check
         end
@@ -299,7 +459,10 @@ endtask
 
 function shm_scoreboard::new(string name = "shm_scoreboard", uvm_component parent);
     super.new(name, parent);
+    last_progress_cycle = 0;
+    no_progress_timeout_reported = 1'b0;
     mem_imp = new("mem_imp", this);
+    completion_analysis_port = new("completion_analysis_port", this);
     rtl_wrvlm_analysis_export = new("rtl_vlm_analysis_export", this);
     rtl_wrvlm_analysis_fifo = new("rtl_vlm_analysis_fifo", this);
     ref_wrvlm_analysis_export = new("ref_vlm_analysis_export", this);
@@ -328,6 +491,11 @@ function void shm_scoreboard::build_phase(uvm_phase phase);
     begin
         shm_environment_cfg.print();
     end
+
+    if (!uvm_config_db#(virtual clk_if)::get(this, "", "clk_vif", clk_vif)) begin
+        `uvm_fatal("SHM_SCB_NO_CLK_VIF", "shm_scoreboard requires virtual clk_if 'clk_vif'")
+    end
+    last_progress_cycle = clk_vif.cycle_count;
 
     foreach(rtl_banks[bank, gid]) begin
         int baddr_max = (1 << BADDR_W) - 1;

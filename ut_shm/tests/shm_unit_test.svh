@@ -30,7 +30,7 @@ task shm_unit_test::main_phase(uvm_phase phase);
     `uvm_info(get_type_name(), {"Launch shm unit seq: ", seq.sprint()}, UVM_HIGH);
     seq.set_starting_phase(phase);
     seq.start(shm_env.shmins_mst_agt.sequencer);
-    #200ns;
+    shm_env.wait_for_idle();
     phase.drop_objection(this);
 endtask: main_phase
 

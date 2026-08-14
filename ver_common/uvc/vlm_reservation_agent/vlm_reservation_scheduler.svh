@@ -80,6 +80,16 @@ class vlm_reservation_scheduler extends uvm_component;
   extern function void process_cycle(
       const ref vlm_reservation_cycle_transaction_t txn);
 
+  //----------------------------------------------------------------------------
+  // @brief Returns whether no DUT reservation record remains in the window.
+  //
+  // External busy is not counted because it is environment-generated and may
+  // remain active independently of DUT transaction completion.
+  //
+  // @return 1 when every direction, delay, and BANK record slot is empty.
+  //----------------------------------------------------------------------------
+  extern function bit is_idle();
+
   //------------------------------------------------------------------------------
   // @brief Removes the current due entries and advances all retained state.
   //
@@ -234,6 +244,15 @@ function void vlm_reservation_scheduler::process_cycle(
   has_processed_cycle  = 1'b1;
   last_processed_cycle = txn.cycle;
 endfunction : process_cycle
+
+function bit vlm_reservation_scheduler::is_idle();
+  foreach (shm_records[direction, delay, bank]) begin
+    if (shm_records[direction][delay][bank] != null) begin
+      return 1'b0;
+    end
+  end
+  return 1'b1;
+endfunction : is_idle
 
 function void vlm_reservation_scheduler::advance_window();
   // Read and write schedules advance independently but use the same relative-delay transformation.

@@ -13,7 +13,8 @@
 - sequence 随机化枚举字段、地址字段、每线程 length/mask/offset/data 等输入；
 - driver 调用 `item_to_rtl()` 把枚举字段编码进 20-bit `creq_typ`，再驱动 interface；
 - monitor 从 interface 创建新的 transaction，并调用 `rtl_to_item()` 解码
-  `creq_typ`，供 reference 使用；
+  `creq_typ`，同时添加 accepted cycle、transaction UID 和 reset epoch，供 reference
+  与 lifecycle checker 使用；
 - 地址辅助字段 `offs_elem`、`elem_cnt_max` 和 helper function 用于约束及 reference
   计算，不是独立 DUT 端口。
 
@@ -33,7 +34,7 @@ interface，monitor 采样并检查 X/Z 和全零值，transaction copy 保留�
 
 |字段|含义|
 |---|---|
-|`issue_time`|reference item 创建时间，供 outstanding 超时诊断使用|
+|`issue_cycle`|monitor 接受 creq 的共享 clock cycle，供 outstanding 超时诊断使用|
 |`baddr_2d_array`|每个 thread/element 映射后的 BADDR；第一维在当前实现中按 thread index 使用|
 |`bid_2d_array`|每个 thread/element 映射后的 BANK ID；第一维在当前实现中按 thread index 使用|
 |`gid_2d_array`|每个 thread/element 映射后的低/高物理 BANK ID|
@@ -81,13 +82,27 @@ Reservation 路径不复用 `vlm_memory_sequence_item`，而是使用
 `vlm_reservation_check_result_t` 汇总。它们只在 reservation agent 内部通过同步函数
 调用传递，不进入 environment 级 TLM 网络。
 
+### 1.5 Transaction lifecycle event
+
+Lifecycle 路径使用两个只读 UVM object：
+
+- `shmins_ack_event`：由 shmins monitor 创建，保存方向、ID、cycle 和 reset epoch；
+- `shm_completion_event`：由 scoreboard 创建，保存 transaction UID、cycle，以及
+  `OBSERVED`（全部 byte 实际匹配）或 `RESOLVED`（允许包含被覆盖 byte）分类。
+
+`shm_transaction_lifecycle_checker` 把它们与 monitor 发布的 accepted
+`shmins_sequence_item` 关联。Monitor 不决定 ack 是否预期；scoreboard 不决定 ack
+方向或 ID；lifecycle checker 不参与 byte 数据比较。
+
 ## 2. 对象所有权与修改规则
 
 |数据|创建者|允许修改者|消费者|
 |---|---|---|---|
 |激励 `shmins_sequence_item`|shmins sequence|sequence、driver 编码/分配 ID|shmins driver|
-|监测 `shmins_sequence_item`|shmins monitor|发布前由 monitor 填充；发布后视为只读|shm reference|
+|监测 `shmins_sequence_item`|shmins monitor|发布前由 monitor 填充；发布后视为只读|shm reference、lifecycle checker|
 |`shm_wtrans_item`|shm reference|发布前由 reference 填充；发布后视为只读|shm scoreboard|
+|`shmins_ack_event`|shmins monitor|发布前由 monitor 填充；发布后只读|lifecycle checker|
+|`shm_completion_event`|shm scoreboard|发布前由 scoreboard 填充；发布后只读|lifecycle checker|
 |监测 `vlm_memory_sequence_item`|统一 VLM monitor + resolver|monitor 填原始 payload，resolver 填 gid/match；发布后只读|shm scoreboard 或其他订阅者|
 |读服务 `vlm_memory_sequence_item`|VLM memory driver|driver 填 request；scoreboard 填 `vlm_data`|原 driver|
 |reservation cycle transaction|统一 VLM monitor|monitor 创建 request handle；下游只读|checker、resolver、coverage、scheduler|

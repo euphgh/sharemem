@@ -19,7 +19,8 @@ class shm_wtrans_item extends shmins_sequence_item;
     typedef vlm2aa::wmap_util wmap_util;
     typedef vlm2aa::wmap_t wmap_t;
     // new field for compare
-    time issue_time;
+    // Shared-clock cycle in which the source creq was accepted.
+    shm_cycle_t issue_cycle;
     wmap_t wmap;
     baddr_t baddr_2d_array[BANK_N][];
     bidx_t bid_2d_array[BANK_N][];
@@ -35,7 +36,7 @@ class shm_wtrans_item extends shmins_sequence_item;
     //-------------------------------------------------------------------------
     function new(string name = "ref_item");
         super.new(name);
-        issue_time = $time;
+        issue_cycle = 0;
     endfunction : new
 
     //-------------------------------------------------------------------------
@@ -165,6 +166,7 @@ class shm_wtrans_item extends shmins_sequence_item;
     //-------------------------------------------------------------------------
     function void init_from(shmins_sequence_item shmins);
         this.copy(shmins);
+        issue_cycle = accept_cycle;
         generate_wdata();
     endfunction : init_from
 
@@ -175,7 +177,7 @@ class shm_wtrans_item extends shmins_sequence_item;
     //-------------------------------------------------------------------------
     virtual function void do_print(uvm_printer printer);
         super.do_print(printer);
-        printer.print_time("issue_time", issue_time);
+        printer.print_field_int("issue_cycle", issue_cycle, $bits(issue_cycle), UVM_DEC);
         printer.print_generic("wmap", "physical_byte_map[BANK_N][GID_N]", 0,
                               shm_physical_map_util::sprint_wmap(wmap, ""));
     endfunction : do_print

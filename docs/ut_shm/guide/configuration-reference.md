@@ -86,6 +86,11 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh compile +define+MY_DEBUG
 |`CREQ_ITYPE`|`LDST_S`、`LDST_V`、`LDSTE_S`、`LDSTE_V`|`shmins_mst_unit_sequence`|把 normal 地址拓扑 domain 缩小到该值|
 |`CREQ_SPACE`|`SPACE_LOC`、`SPACE_WRP`、`SPACE_BLK`|`shmins_mst_unit_sequence`|把 normal address-space domain 缩小到该值|
 |`EXTERNAL_BUSY_PERCENT`|`0..100`|reservation agent|覆盖 config 中的 external busy 概率；越界会 fatal|
+|`SCB_NO_PROGRESS_TIMEOUT_CYCLES`|非负整数|scoreboard|pending record 全局无进展诊断；0（默认）关闭|
+|`SCB_RECORD_AGE_TIMEOUT_CYCLES`|非负整数|scoreboard|单笔 record 总年龄诊断；0（默认）关闭|
+|`SCB_TIMEOUT_SCAN_INTERVAL_CYCLES`|正整数|scoreboard|timeout/completion 扫描周期；默认 10，0 会 fatal|
+|`ACK_POST_COMPLETE_GRACE_CYCLES`|非负整数|lifecycle checker|数据全部实际匹配后等待 required ack 的诊断 grace；默认 20，0 关闭中途诊断|
+|`TEST_DRAIN_TIMEOUT_CYCLES`|正整数|`shm_environment.wait_for_idle()`|sequence 结束后环境 drain watchdog；默认 10000，0 会 fatal|
 |`file_debug`|无值开关|reference、旧独立 VLM memory monitor|主环境创建 `vlm.ref`；旧 monitor 单独使用时创建 `vlm_memory.rtl`，统一 VLM monitor 当前不创建独立 debug 文件|
 |`UVM_VERBOSITY`|UVM verbosity 名称|UVM|控制 UVM report 输出级别|
 |`UVM_TOPOLOGY`|无值开关|UVM|打印 UVM topology|
@@ -95,6 +100,10 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh compile +define+MY_DEBUG
 
 `CREQ_*` 只配置 normal domain，不配置 VTRANS。VTRANS 使用独立 domain 和子类协议
 约束，因此 normal 的 `CREQ_RW=SHM_M2V` 可以与非零 `VTRANS_EN` 合法共存。
+
+三个 timeout 名称都以 cycle 为单位。Scoreboard timeout 和 ack grace 是可关闭的 hang
+诊断，不是 DUT protocol latency；`TEST_DRAIN_TIMEOUT_CYCLES` 是 testcase 结束保护，触发
+时会打印仍 pending 的 scoreboard、lifecycle 和 reservation 状态。
 
 ## 5. TC、LST 与 CFG
 

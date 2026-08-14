@@ -13,13 +13,14 @@
 |`mem_imp`|memory slave driver|为 MEM read response 提供 blocking transport|
 |`ref_wrvlm_analysis_fifo`|reference export 后端|解耦期望收集|
 |`rtl_wrvlm_analysis_fifo`|actual export 后端|解耦实际写比较|
+|`completion_analysis_port`|transaction lifecycle checker|发布每笔 reference 的 data completion 分类和 cycle|
 |`rtl_banks[BANK_N][GID_N]`|scoreboard 所有|保存 DUT 已兑现 write 的实际 memory model|
 
 核心匹配状态为：
 
 - `wmap_final`：每个地址按 creq 顺序计算出的最新未兑现值；
 - `wmap_expired`：被后续 creq 覆盖、但 DUT 乱序执行时仍可合法出现的旧值队列；
-- `ref_record_q`：每笔 creq 的原始 `wmap`，以及逐地址 `matched/expired` 时间。
+- `ref_record_q`：每笔 creq 的原始 `wmap`，以及逐地址 `matched/expired` cycle。
 
 `wmap/wmmap` 的底层 collection 仍使用
 `physical_bank_index=bank_id*GID_N+gid` 的一维索引，以保持集合运算接口不变。日志通过
@@ -47,7 +48,7 @@ write 到达和 timeout 扫描视为同一状态机的三个入口。
 1. 计算新 `wmap` 与现有 `wmap_final` 的地址交集；
 2. 把交集中的旧值加入 `wmap_expired`；
 3. 用新 `wmap` 覆盖 `wmap_final`；
-4. 在所有旧 `ref_record` 中，把重叠地址记为在新事务 `issue_time` 过期；
+4. 在所有旧 `ref_record` 中，把重叠地址记为在新事务 `issue_cycle` 过期；
 5. 将新事务加入 `ref_record_q`。
 
 这里的“expired”表示旧期望已经被后续 creq 覆盖，不表示 DUT 错误，也不同于 timeout。
@@ -62,24 +63,31 @@ write 到达和 timeout 扫描视为同一状态机的三个入口。
 - 数据等于该地址的最新最终值，或等于仍未消费的合法旧值。
 
 命中最终值时从 `wmap_final` 删除；命中过期旧值时只消费对应旧值。整笔实际 write
-合法后，再给所有相关 `ref_record` 写入 matched 时间。
+合法后，再给所有相关 `ref_record` 写入 `clk_if.cycle_count`。
 
 这允许 DUT 把地址重叠的 creq 乱序兑现，但不会改变顺序语义：测试结束时
 `wmap_final` 必须为空，所以每个地址最终仍需出现按 creq 顺序计算出的最后值。若最终
 结果与顺序执行不一致，即使中间写入曾匹配某个旧值，也属于 DUT 错误。
 
-## 5. Record 完成与 timeout 日志
+## 5. Record 完成、生命周期事件与 timeout
 
 一笔 `ref_record` 的所有原始地址只要分别进入 `matched` 或 `expired` 集合，就视为该
-record 已被后续状态解释完毕。扫描任务每 10 个 `CLK_PERIOD` 检查一次：
+record 已被后续状态解释完毕。Scoreboard 使用共享 `clk_if.cycle_count`，不再用绝对
+simulation time 推导 cycle。每个 record 只发布一次 completion event：
 
-- 已完成：保留原有 “all data is matched or expired” info，并打印 transaction、
-  expired table 和 matched table；
-- 超过固定 128 cycles 且未完成：保留原有 expired 报错，同时打印 expired、matched
-  和没有进入两者的 unmatched table。
+- `SHM_COMPLETION_OBSERVED`：非空期望 map 的全部 byte 都由实际 DUT write 匹配；
+- `SHM_COMPLETION_RESOLVED`：全部 byte 已解释完，但至少包含被后续 creq 覆盖的 byte，
+  或该事务本来没有期望 byte。
 
-协议本身没有最大完成延迟。128-cycle 只是当前环境策略，可能误报合法长延迟，见
-`SCB-002`。
+扫描间隔由 `SCB_TIMEOUT_SCAN_INTERVAL_CYCLES` 配置。两类可选诊断彼此独立：
+
+- `SCB_NO_PROGRESS_TIMEOUT_CYCLES`：存在 pending record，且 reference 到达、byte
+  supersession 或实际 write match 均没有进展的 cycle 数；
+- `SCB_RECORD_AGE_TIMEOUT_CYCLES`：单笔 record 从 creq accepted cycle 起的总年龄。
+
+两者默认均为 0，即关闭中途 timeout，只保留 drain/check phase 的最终一致性检查。即使
+打开并触发，scoreboard 也只报告一次，不删除 record、不把 unmatched byte 改成 expired，
+后续正确结果仍可继续匹配。它们是 case 可调的 hang 诊断，不是 DUT 最大延迟协议。
 
 ## 6. MEM read service
 
@@ -116,7 +124,7 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 ## 9. 调试观察点
 
 - 新 reference 到达前后的 `wmap_final/wmap_expired`；
-- 每个 `ref_record` 的 `issue_time`、matched、expired 和 unmatched table；
+- 每个 `ref_record` 的 `issue_cycle`、matched、expired 和 unmatched table；
 - 实际 MEM write 转换后的 byte map 与 bank strobe；
 - MEM transaction 的 gid、gid_valid、reservation match status 及对应到期 record；
 - 命中 final 还是 expired，以及相应条目是否只被消费一次；
@@ -129,12 +137,14 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 |---|---|
 |`ut_shm/env/shm_scoreboard.svh`|期望/实际 FIFO、outstanding 算法、read service 和结束检查|
 |`ut_shm/env/shm_wtrans_item.svh`|保留原始 creq 上下文的期望 byte map|
+|`ut_shm/env/shm_transaction_lifecycle_types.svh`|scoreboard completion 和 raw ack event 类型|
+|`ut_shm/env/shm_transaction_lifecycle_checker.svh`|把 completion 与 creq/ack 生命周期关联|
 |`ut_shm/env/vlm2aa.svh`|实际 MEM transaction 到 byte map 的转换|
 |`ut_shm/env/shm_physical_map_util.svh`|把 flattened wmap/wmmap 格式化为 BANK/GID/BADDR 层次|
 |`ut_shm/util/sv-collection/`|set、associative array 和 queue 的集合运算工具|
 
 `ut_shm/tests/shm_unit_test.svh` 提供完整数据路径集成测试。当前没有针对交叠 creq 乱序
-兑现、只出现旧值而没有最终值、未知实际地址或 timeout 配置的
+兑现、只出现旧值而没有最终值、未知实际地址、completion 分类或 timeout 配置的
 独立 scoreboard 测试；新增算法时应先用小规模 byte map 定向场景固定这些边界。
 
 ## 11. 开发 contract
@@ -152,7 +162,8 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 
 ## 12. 当前实现状态
 
-- `SCB-002`：timeout 固定为 128 cycles。
+- `SCB-002`：固定 128-cycle timeout 已移除并改为可关闭的 no-progress/record-age
+  plusarg；2026-08-14 空 design VCS 编译通过，仍待长延迟和 timeout 触发定向验证。
 - `VMEM-001`：read service 未实现 `FFD_CYC` snapshot。
 - `ENV-001`：运行中 reset 未清理 outstanding 和实际 memory 状态。
 - scoreboard memory、wmap 和 read service 已接入 reservation match metadata，并通过

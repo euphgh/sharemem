@@ -55,6 +55,7 @@ function void shm_base_test::build_phase(uvm_phase phase);
     shm_env = shm_environment::type_id::create("shm_env", this);
     shm_environment_cfg = shm_environment_config::type_id::create("shm_environment_cfg", this);
     shm_environment_cfg.init();
+    shm_environment_cfg.plusargs_override_config();
 
     uvm_config_db#(shm_environment_config)::set(this, "shm_env", "shm_environment_config", shm_environment_cfg);
 

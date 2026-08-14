@@ -47,6 +47,12 @@ package shm_util_package;
     typedef bit [$clog2(GID_N)-1:0] shm_gid_t;
     typedef bit [BADDR_W-1:0] shm_baddr_t;
 
+    // Repository-wide monotonically increasing simulation-clock count.
+    typedef longint unsigned shm_cycle_t;
+
+    // Monitor-owned identity used to correlate one creq across components.
+    typedef longint unsigned shm_transaction_uid_t;
+
     //-------------------------------------------------------------------------
     // @brief Logical SHM byte address before the downstream bank organization.
     //-------------------------------------------------------------------------

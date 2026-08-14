@@ -1,7 +1,7 @@
 # shmins_mst_agent
 
 本文说明 shmins master agent 的 transaction、sequence、credit driver、creq monitor 和
-ack timeout 路径。creq 字段和 credit/ack 协议由
+raw ack 采集路径。creq 字段和 credit/ack 协议由
 [creq/ack 接口规范](../../spec/creq-ack-interface.md)定义；本文只解释验证组件如何
 产生和观察这些行为。
 
@@ -25,7 +25,7 @@ Agent 从 Config DB 获取 `shmins_mst_agent_config` 和 `shmins_vif`。默认�
 |`ver_common/uvc/shmins_agent/shmins_interface.sv`|creq、release 和 ack clocking block|
 |`ver_common/uvc/shmins_agent/shmins_mst_agent.svh`|agent 创建和连接|
 |`ver_common/uvc/shmins_agent/shmins_mst_driver.svh`|credit 控制和 creq 驱动|
-|`ver_common/uvc/shmins_agent/shmins_monitor.svh`|creq 采集和 ack timeout|
+|`ver_common/uvc/shmins_agent/shmins_monitor.svh`|creq 和 raw direction-specific ack 采集|
 |`ver_common/uvc/shmins_agent/sequences/shmins_sequence_item.svh`|正式公共 creq transaction、编码和 helper|
 |`ver_common/uvc/shmins_agent/sequences/shmins_mst_unit_sequence.svh`|domain 和 plusarg 可配置的 master unit sequence|
 |`ver_common/uvc/shmins_agent/sequences/shmins_contiguous_sequence_item.svh`|LDST_S/LDST_V 地址生成|
@@ -98,20 +98,25 @@ Driver 在 `main_phase` 中：
 Credit 与 ack 相互独立。Driver 不等待 ack 才发送下一笔，也不把 ack 当作 credit
 release。
 
-## 6. Monitor 和 ack timeout
+## 6. Monitor、ack 与 transaction lifecycle
 
 Monitor 在 `creq_vld===1` 的采样沿创建新的 `shmins_sequence_item`，复制 payload、
-解码 `creq_typ`，再通过 `shmins_analysis_port` 同步发布给 reference。
+解码 `creq_typ`，再通过 `shmins_analysis_port` 同步发布给 reference。每笔 accepted creq
+同时带有共享 `accept_cycle`、monitor-owned `transaction_uid` 和 `reset_epoch`。
 
-对于 `creq_ack_en==1` 的事务，monitor 按方向和 `creq_id` 保存 timeout process：
+Monitor 不再为每笔请求创建固定 200-cycle timeout process。它独立采样：
 
-- V2M 等待 `mack_done/mack_id`；
-- M2V 等待 `vack_done/vack_id`；
-- 200 个周期内收到匹配 ack 时终止 timeout process；
-- 超时则报告 `UVM_ERROR`。
+- `mack_done/mack_id` 为 V2M raw ack；
+- `vack_done/vack_id` 为 M2V raw ack；
+- done 和有效 ID 的 X/Z；
+- ack 的共享 cycle 和 reset epoch。
 
-该 timeout 是环境诊断策略，不是 DUT 最大延迟协议。运行中 reset 对这些 process 的
-取消属于 `ENV-001`。
+Environment 中的 `shm_transaction_lifecycle_checker` 关联 accepted creq、scoreboard
+completion 和 raw ack，检查 ack enable、方向、ID、reset epoch 和 exactly-once。只有
+scoreboard 把全部期望 byte 分类为 `OBSERVED` 后，才可选启动
+`ACK_POST_COMPLETE_GRACE_CYCLES` 诊断；默认 20 cycles，0 表示关闭。该 grace 不限制从
+creq accepted 到数据完成的时延，也不是 DUT protocol timeout。测试结束时 required ack
+仍必须存在。
 
 ## 7. X/Z 和错误边界
 
@@ -129,7 +134,7 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 - `drv_tr_cnt`：driver 已发送事务数量和自动分配 ID 的来源；
 - semaphore 是否耗尽、`creq_rls` 是否按预期归还 credit；
 - `shmins_cnt`：monitor 采样事务数量；
-- `thread_handles[direction][id]`：等待 ack 的 timeout process；
+- lifecycle pending record：transaction UID、方向、ID、ack/data completion 状态和 cycle；
 - sequence 打印的最终 item 与 monitor 重建 item 是否一致；
 - `creq_typ` 的编码/解码字段，尤其是 `creq_info` 和 VTRANS。
 
@@ -154,7 +159,8 @@ regression。相关缺口由 `SHMINS-001`～`SHMINS-010` 的验收项追踪。
 - M2V 生成完成后必须复查所有有效 m-read/v-write 物理 byte 集合不相交，冲突粒度为 byte。
 - LOC/WRP/BLK 不得分别实现 gid/BADDR 拆分；物理 BANK 组织只能由公共第二层 helper 定义。
 - Public sequence knob 必须实际约束 item；不能只解析 plusarg 而忽略字段。
-- Runtime reset 必须释放 credit wait、取消 ack timeout，并阻止 reset 前 item 继续驱动。
+- Runtime reset 必须释放 credit wait、清除 lifecycle pending 状态，并阻止 reset 前 item
+  继续驱动。
 
 ## 11. 当前实现状态
 
@@ -172,8 +178,10 @@ regression。相关缺口由 `SHMINS-001`～`SHMINS-010` 的验收项追踪。
 - `SHMINS-006`：缺少 active payload X/Z 检查。
 - `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 已实现，V2M/M2V 24 个 case
   已进入主列表，等待扩容后的真实 RTL regression。
-- `SHMINS-008`：固定 ack timeout 与协议无最大延迟冲突。
-- `SHMINS-009`：credit/release 和 ack 完备性检查不足。
+- `SHMINS-008`：固定 ack timeout 已移除，改为 scoreboard observed 后可配置 grace；
+  2026-08-14 空 design VCS 编译通过，待长延迟 ack 定向验证。
+- `SHMINS-009`：ack enable、unexpected、duplicate、wrong-direction、wrong-ID 的 lifecycle
+  checker 已实现但待定向验证；credit/release 上溢检查仍未实现。
 - `SHMINS-010`：复位期间 release/ack 静默没有检查。
 - `ENV-001`：运行中 reset 未取消 driver/monitor pending 状态。
 - 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 正向主路径已通过 85-case 真实 RTL 回归；

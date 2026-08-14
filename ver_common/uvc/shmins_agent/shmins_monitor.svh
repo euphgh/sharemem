@@ -1,24 +1,31 @@
 `ifndef INC_SHMINS_MONITOR_SVH
 `define INC_SHMINS_MONITOR_SVH
 
-//-----------------------------------------------------------------------------
-// Class: shmins_monitor
-//-----------------------------------------------------------------------------
-
 import shm_util_package::*;
 
+//------------------------------------------------------------------------------
+// @brief Samples accepted SHM creq and raw direction-specific ack events.
+//
+// Accepted transactions receive shared-clock, reset-epoch, and unique identity
+// metadata. The monitor reports four-state sampling errors but delegates ack
+// correlation, completion timing, and end-of-test drain to the environment.
+//------------------------------------------------------------------------------
 class shmins_monitor extends uvm_monitor;
-
-    parameter   SHMINS_ACK_TIMEOUT = 200;
-    parameter   M2V_SEL = 0;
-    parameter   V2M_SEL = 1;
 
     //---------------------------------------------------------------------
     // Data Members
     //---------------------------------------------------------------------
     int unsigned    shmins_agent_id;
     int unsigned    shmins_cnt = 0;
-    process         thread_handles[2][int];
+
+    // Shared cycle source used to timestamp accepted creq and ack events.
+    virtual clk_if clk_vif;
+
+    // Monotonic monitor-owned identity; zero remains the unassigned value.
+    shm_transaction_uid_t next_transaction_uid = 1;
+
+    // Incremented whenever reset is asserted during simulation.
+    longint unsigned reset_epoch = 0;
 
     shmins_sequence_item m_trans;
 
@@ -40,6 +47,7 @@ class shmins_monitor extends uvm_monitor;
     // Port Declaration
     //---------------------------------------------------------------------
     uvm_analysis_port #(shmins_sequence_item) shmins_analysis_port;
+    uvm_analysis_port #(shmins_ack_event) ack_analysis_port;
 
     //---------------------------------------------------------------------
     // Standard UVM Methods
@@ -48,9 +56,22 @@ class shmins_monitor extends uvm_monitor;
     extern virtual function void build_phase(uvm_phase phase);
     extern virtual task     main_phase(uvm_phase phase);
 
-    // User Defined APIs
-    //---------------------------------------------------------------------
+    //-------------------------------------------------------------------------
+    // @brief Samples accepted creq transactions and publishes independent copies.
+    //-------------------------------------------------------------------------
     extern task monitor_signals();
+
+    //-------------------------------------------------------------------------
+    // @brief Samples raw ack pulses for one request direction.
+    //
+    // @param direction SHM_V2M selects mack; SHM_M2V selects vack.
+    //-------------------------------------------------------------------------
+    extern task monitor_ack(creq_rw_e direction);
+
+    //-------------------------------------------------------------------------
+    // @brief Advances the monitor reset epoch on each reset assertion.
+    //-------------------------------------------------------------------------
+    extern task monitor_reset_epoch();
 
     // UVM Factory Registration
     //---------------------------------------------------------------------
@@ -78,6 +99,10 @@ endfunction :new
 function void shmins_monitor::build_phase(uvm_phase phase);
     super.build_phase(phase);
     shmins_analysis_port = new("shmins_analysis_port", this);
+    ack_analysis_port = new("ack_analysis_port", this);
+    if (!uvm_config_db#(virtual clk_if)::get(this, "", "clk_vif", clk_vif)) begin
+        `uvm_fatal("SHMINS_MON_NO_CLK_VIF", "shmins_monitor requires virtual clk_if 'clk_vif'")
+    end
 endfunction : build_phase
 
 //-----------------------------------------------------------------------------
@@ -90,28 +115,62 @@ task shmins_monitor::main_phase(uvm_phase phase);
     `uvm_info(get_type_name(), "In main_phase...!!", UVM_DEBUG);
     fork
         monitor_signals();
-        forever begin
-            wait (shmins_mon_vif.rst_n === 1);
-            @(shmins_mon_vif.mon_cb iff shmins_mon_vif.mon_cb.mack_done === 1'b1);
-            if (thread_handles[V2M_SEL].exists(shmins_mon_vif.mon_cb.mack_id)) begin
-                int id = shmins_mon_vif.mon_cb.mack_id;
-                thread_handles[V2M_SEL][id].kill();
-                thread_handles[V2M_SEL].delete(id);
-                `uvm_info(get_type_name(), $sformatf("trans(V2M) acked with id %0x", id), UVM_FULL);
-            end
-        end
-        forever begin
-            wait (shmins_mon_vif.rst_n === 1);
-            @(shmins_mon_vif.mon_cb iff shmins_mon_vif.mon_cb.vack_done === 1'b1);
-            if (thread_handles[M2V_SEL].exists(shmins_mon_vif.mon_cb.vack_id)) begin
-                int id = shmins_mon_vif.mon_cb.vack_id;
-                thread_handles[M2V_SEL][id].kill();
-                thread_handles[M2V_SEL].delete(id);
-                `uvm_info(get_type_name(), $sformatf("trans(M2V) acked with id %0x", id), UVM_FULL);
-            end
-        end
+        monitor_ack(SHM_V2M);
+        monitor_ack(SHM_M2V);
+        monitor_reset_epoch();
     join
 endtask: main_phase
+
+task shmins_monitor::monitor_ack(creq_rw_e direction);
+    forever begin
+        logic ack_done;
+        logic [ID_W-1:0] ack_id;
+        shmins_ack_event ack_event;
+
+        @(shmins_mon_vif.mon_cb);
+        if (shmins_mon_vif.rst_n !== 1'b1) begin
+            continue;
+        end
+
+        if (direction == SHM_V2M) begin
+            ack_done = shmins_mon_vif.mon_cb.mack_done;
+            ack_id = shmins_mon_vif.mon_cb.mack_id;
+        end
+        else begin
+            ack_done = shmins_mon_vif.mon_cb.vack_done;
+            ack_id = shmins_mon_vif.mon_cb.vack_id;
+        end
+
+        if ($isunknown(ack_done)) begin
+            `uvm_error("SHMINS_ACK_DONE_XZ", $sformatf("%s ack done contains X/Z", direction.name()))
+            continue;
+        end
+        if (ack_done !== 1'b1) begin
+            continue;
+        end
+        if ($isunknown(ack_id)) begin
+            `uvm_error("SHMINS_ACK_ID_XZ", $sformatf("%s ack id contains X/Z: %b", direction.name(), ack_id))
+            continue;
+        end
+
+        ack_event = shmins_ack_event::type_id::create("ack_event");
+        ack_event.direction = direction;
+        ack_event.transaction_id = ack_id;
+        ack_event.cycle = clk_vif.cycle_count;
+        ack_event.reset_epoch = reset_epoch;
+
+        // Let a creq accepted on this same edge enter the lifecycle table first.
+        uvm_wait_for_nba_region();
+        ack_analysis_port.write(ack_event);
+    end
+endtask : monitor_ack
+
+task shmins_monitor::monitor_reset_epoch();
+    forever begin
+        @(negedge shmins_mon_vif.rst_n);
+        reset_epoch++;
+    end
+endtask : monitor_reset_epoch
 
 //-----------------------------------------------------------------------------
 // User Defined
@@ -152,26 +211,11 @@ task shmins_monitor::monitor_signals();
         end
 
         shmins_trans.rtl_to_item();
+        shmins_trans.accept_cycle = clk_vif.cycle_count;
+        shmins_trans.transaction_uid = next_transaction_uid;
+        shmins_trans.reset_epoch = reset_epoch;
+        next_transaction_uid++;
         shmins_analysis_port.write(shmins_trans);
-
-        if (shmins_trans.creq_ack_en) begin
-            fork
-                automatic bit thd_hl_sel = shmins_trans.creq_rw == SHM_V2M ? V2M_SEL : M2V_SEL;
-                automatic string trans_type = shmins_trans.creq_rw == SHM_V2M ? "V2M" : "M2V";
-                automatic int expected_ack_id = shmins_trans.creq_id;
-                automatic int unsigned expected_ack_index = shmins_cnt;
-                begin
-                    // 获取当前这个 fork 进程的句柄
-                    `uvm_info(get_type_name(), $sformatf("%0dth trans(%s) with id %0x expected ack", expected_ack_index, trans_type, expected_ack_id), UVM_FULL);
-                    thread_handles[thd_hl_sel][expected_ack_id] = process::self();
-
-                    // 等待超时
-                    repeat(SHMINS_ACK_TIMEOUT) @(shmins_mon_vif.mon_cb);
-                    `uvm_error(get_type_name(), $sformatf("Ack of %0dth %s trans with id %0x TIMEOUT", expected_ack_index, trans_type, expected_ack_id));
-                    thread_handles[thd_hl_sel].delete(expected_ack_id);
-                end
-            join_none
-        end
         shmins_cnt++;
     end
 endtask

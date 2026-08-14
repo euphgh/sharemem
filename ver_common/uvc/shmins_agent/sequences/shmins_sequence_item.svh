@@ -97,6 +97,15 @@ class shmins_sequence_item extends uvm_sequence_item;
   // Solver-generated driver delay measured in cycles.
   rand int delay_cycle = '0;
 
+  // Shared-clock cycle assigned when the monitor observes the accepted creq.
+  shm_cycle_t accept_cycle = 0;
+
+  // Monitor-owned monotonically increasing identity used across components.
+  shm_transaction_uid_t transaction_uid = 0;
+
+  // Reset generation in which the monitor accepted this transaction.
+  longint unsigned reset_epoch = 0;
+
   // Optional benchmark policy. M2V duplicate reads remain legal by default.
   bit m2v_unique_enable = 1'b0;
 
@@ -515,6 +524,9 @@ class shmins_sequence_item extends uvm_sequence_item;
     `uvm_field_int(creq_base, UVM_DEFAULT)
     `uvm_field_int(creq_tmsk, UVM_DEFAULT)
     `uvm_field_int(delay_cycle, UVM_DEFAULT)
+    `uvm_field_int(accept_cycle, UVM_DEFAULT)
+    `uvm_field_int(transaction_uid, UVM_DEFAULT)
+    `uvm_field_int(reset_epoch, UVM_DEFAULT)
     `uvm_field_int(m2v_unique_enable, UVM_DEFAULT)
     `uvm_field_sarray_int(creq_prio, UVM_DEFAULT)
     `uvm_field_sarray_int(creq_len, UVM_DEFAULT)
@@ -1265,6 +1277,9 @@ function void shmins_sequence_item::do_copy(uvm_object rhs);
   creq_base = rhs_item.creq_base;
   creq_tmsk = rhs_item.creq_tmsk;
   delay_cycle = rhs_item.delay_cycle;
+  accept_cycle = rhs_item.accept_cycle;
+  transaction_uid = rhs_item.transaction_uid;
+  reset_epoch = rhs_item.reset_epoch;
   m2v_unique_enable = rhs_item.m2v_unique_enable;
   elem_cnt_max = rhs_item.elem_cnt_max;
   generation_retry_count = rhs_item.generation_retry_count;

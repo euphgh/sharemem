@@ -12,6 +12,7 @@ package shm_env_package;
   import shm_seq_item_package::*;
   import shm_seq_package::*;
 
+  `include "shm_transaction_lifecycle_types.svh"
   `include "shmins_mst_agent_config.svh"
   `include "shmins_mst_sequencer.svh"
   `include "shmins_mst_driver.svh"
@@ -31,6 +32,7 @@ package shm_env_package;
   `include "shm_physical_map_util.svh"
   `include "shm_reference.svh"
   `include "shm_scoreboard.svh"
+  `include "shm_transaction_lifecycle_checker.svh"
   `include "shm_environment.svh"
 
 endpackage: shm_env_package

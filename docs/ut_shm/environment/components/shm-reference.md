@@ -99,7 +99,7 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 - thread/element 的 MADDR、逻辑 bank/warp/laddr、物理 bank/gid/BADDR 和逐 byte strobe；
 - VTRANS 的 source `[element][thread]` 与 target `[thread][element]`；
 - M2V 从 `ref_banks` 读取的值和 VLM 写回地址；
-- `wmap` 内 overlap error 以及每笔 transaction 的 `issue_time`。
+- `wmap` 内 overlap error 以及每笔 transaction 的 `issue_cycle`。
 
 ## 9. 相关测试
 

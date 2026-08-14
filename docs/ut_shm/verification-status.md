@@ -23,6 +23,11 @@ reservation 正向主路径的系统回归证据；随机 `RUN=1` 列表未覆�
 同日远端 VCS `W-2024.09-SP1_Full64` 组件测试通过四 topology transaction copy/compare
 以及 reservation external-busy plusarg/drive 检查，`SHMINS-002`、`SHMINS-011` 和
 `RSV-003` 已关闭。
+2026-08-14 已把 scoreboard 时间戳统一为共享 `clk_if.cycle_count`，移除 monitor 的固定
+200-cycle ack process，新增 accepted creq/data completion/raw ack lifecycle checker，
+并将 scoreboard timeout、post-completion ack grace 和 test drain 改为 case plusarg。
+空 design VCS 编译通过；长延迟、timeout 触发和 ack 负例尚未完成定向验证，因此相关项
+只能进入待验证或部分实现状态，不能关闭。
 
 ## 1. 状态和优先级
 
@@ -83,13 +88,13 @@ reservation 正向主路径的系统回归证据；随机 `RUN=1` 列表未覆�
 |`SHMINS-005`|P2|待实现|shmins agent|部分循环和位宽硬编码为当前 16-thread/4-bit 配置|
 |`SHMINS-006`|P1|待实现|shmins monitor|active creq payload 缺少系统性的 X/Z 检查|
 |`SHMINS-007`|P1|待验证|unit sequence/TC|V2M/M2V WRP/BLK 共 24 个 strided case 已进入主列表，待真实 RTL 回归|
-|`SHMINS-008`|P1|待实现|shmins monitor|固定 200-cycle ack timeout 与协议无最大延迟冲突|
-|`SHMINS-009`|P1|待实现|shmins monitor|credit/release 和 unexpected/duplicate ack 缺少完备检查|
+|`SHMINS-008`|P1|待验证|shmins monitor/lifecycle|固定 200-cycle timeout 已移除，待长延迟和 grace 定向验证|
+|`SHMINS-009`|P1|实现中|shmins/lifecycle|ack 完备 checker 已实现待验证；credit/release 上溢仍缺|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
 |`VMEM-001`|P0|待实现|memory model|MEM read 未实现 `FFD_CYC` 写可见窗口|
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
-|`SCB-002`|P1|待实现|scoreboard|128-cycle timeout 固定，可能把合法长延迟误报为失败|
+|`SCB-002`|P1|待验证|scoreboard|固定 timeout 已改为可关闭的 cycle plusarg，待定向验证|
 |`RSV-002`|P1|待实现|reservation coverage|coverage 组件目前为空实现|
 |`RSV-004`|P1|待实现|reservation checker|全局 `input_error` 会屏蔽无关 slot 的检查|
 |`RSV-005`|P1|待实现|reservation monitor|复位期间没有检查 DUT request/valid 必须为 0|
@@ -271,10 +276,12 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `SHMINS-008` Ack timeout 不是协议时限
 
-- 现状：shmins monitor 为 ack-enabled 请求启动固定 200-cycle timeout，并在到期时
-  报告 `UVM_ERROR`；spec 明确 ack 没有最大延迟。
-- 影响：超过 200 周期后仍正确完成的 DUT 请求会被误判失败。
-- 目标：timeout 可配置或关闭，并明确属于 hang 诊断；默认策略不得被解释成 DUT
+- 现状：2026-08-14 已删除 monitor 的逐事务固定 200-cycle process。Monitor 只发布 raw
+  ack；lifecycle checker 只在 scoreboard 把全部期望 byte 实际匹配为 `OBSERVED` 后，
+  可选使用 `ACK_POST_COMPLETE_GRACE_CYCLES` 报告缺失 ack。0 可关闭中途诊断，最终
+  required ack 仍在 drain/check phase 检查。
+- 影响：实现不再限制 creq accepted 到数据完成的时延，但尚缺长延迟和 grace 边界证据。
+- 目标：保持 timeout 可配置或关闭，并明确属于 hang 诊断；默认策略不得被解释成 DUT
   protocol checker。
 - 验收：关闭 timeout 时长延迟 ack 不报错；配置诊断阈值时日志能区分协议错误与
   hang 诊断；最终正确 ack 仍按方向和 ID 完成匹配。
@@ -282,8 +289,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 ### `SHMINS-009` Credit 与 ack 完备性检查
 
 - 现状：driver semaphore 限制环境自身发送并在每个 `creq_rls` 上 `put()`，但没有检查
-  credit 是否超过 `OTF_N`；monitor 只为 ack-enabled 请求等待一次匹配事件，没有完整
-  报告 ack-disabled 请求的 unexpected ack、重复 ack 或错误方向事件。
+  credit 是否超过 `OTF_N`。2026-08-14 lifecycle checker 已实现 ack-disabled、unexpected、
+  duplicate、wrong-direction、wrong-ID/reset-epoch 关联和 exactly-once 状态，尚未完成
+  独立负例验收。
 - 影响：DUT 的 release 上溢和部分 ack 协议违例可能漏报，或只表现为后续间接错误。
 - 目标依据：`CREQ-005`、`ACK-001` 和 `ACK-002`。
 - 验收：定向覆盖 credit 下溢/上溢、unexpected/duplicate/wrong-direction/wrong-ID ack，
@@ -324,8 +332,10 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `SCB-002` 可配置 timeout
 
-- 现状：scoreboard 固定在 128 cycles 后把未完成 reference record 报为 expired。
-- 影响：协议没有最大完成延迟，合法长延迟可能被误报。
+- 现状：2026-08-14 scoreboard 已统一使用 `clk_if.cycle_count`，固定 128-cycle 路径已替换
+  为 `SCB_NO_PROGRESS_TIMEOUT_CYCLES` 和 `SCB_RECORD_AGE_TIMEOUT_CYCLES`。两者默认 0
+  关闭；触发只报告一次并保留 record，扫描周期单独配置。
+- 影响：协议时延不再被默认阈值限制，但尚缺关闭、触发后继续匹配和无进展恢复的定向证据。
 - 目标依据：[DUT 概览的协议边界](spec/dut-overview.md#7-协议边界)。
 - 验收：timeout 可配置或关闭；超过默认诊断阈值但最终正确的事务不会被强制判错。
 

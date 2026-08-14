@@ -19,6 +19,8 @@ flowchart LR
     SEQ["shmins sequence"] --> SA["shmins_mst_agent"]
     SA --> REF["shm_reference"]
     REF --> SCB["shm_scoreboard"]
+    SA --> LC["transaction lifecycle checker"]
+    SCB --> LC
     VA["统一 VLM agent"] --> SCB
   end
 
@@ -34,6 +36,9 @@ flowchart LR
   SA <--> SI
   VA <--> VI
   CI -. "shared cycle count" .-> VA
+  CI -. "shared cycle count" .-> SA
+  CI -. "shared cycle count" .-> SCB
+  CI -. "shared cycle count" .-> LC
 ```
 
 环境按职责分成两条 interface 路径和三类 transaction 数据流：
@@ -89,7 +94,8 @@ uvm_test_top
     │   ├── coverage
     │   └── scheduler
     ├── shm_ref : shm_reference
-    └── shm_scb : shm_scoreboard
+    ├── shm_scb : shm_scoreboard
+    └── lifecycle_checker : shm_transaction_lifecycle_checker
 ```
 
 `shm_environment` 总是创建 shmins agent 和统一 VLM agent。VLM agent 固定为 active-only，
@@ -112,11 +118,11 @@ active/passive 设置。
 |---|---|---|---|---|
 |`shm_tb_top`|`*`|`shmins_vif`|`virtual shmins_interface`|`shm_environment`、shmins agent|
 |`shm_tb_top`|`*`|`vlm_vif`|`virtual vlm_interface`|`shm_environment`、统一 VLM agent|
-|`shm_tb_top`|`*`|`clk_vif`|`virtual clk_if`|reservation 周期敏感组件|
+|`shm_tb_top`|`*`|`clk_vif`|`virtual clk_if`|reservation、shmins monitor、scoreboard、lifecycle checker 和 environment drain|
 |`shm_base_test`|`shm_env`|`shm_environment_config`|`shm_environment_config`|`shm_environment`|
 |`shm_environment`|`shmins_mst_agt`|`cfg`|`shmins_mst_agent_config`|shmins agent|
 |`shm_environment`|`vlm_agt`|`cfg`|`vlm_reservation_agent_config`|统一 VLM agent|
-|`shm_environment`|`shm_ref`、`shm_scb`|`shm_environment_config`|`shm_environment_config`|reference、scoreboard|
+|`shm_environment`|`shm_ref`、`shm_scb`、`lifecycle_checker`|`shm_environment_config`|`shm_environment_config`|reference、scoreboard、lifecycle checker|
 
 统一 VLM interface 存在 `vlm_reservation_agent_config` 中，共享 `clk_vif` 通过 Config DB
 传给周期敏感组件。Monitor、checker、scheduler 和 agent MEM 路径必须使用同一个 cycle
@@ -133,9 +139,12 @@ scoreboard；reservation checker/resolver 保持在统一 VLM agent 内同步调
 |源|连接类型|目标|传递内容|
 |---|---|---|---|
 |`shmins_mst_agt.monitor.shmins_analysis_port`|analysis port → analysis imp|`shm_ref.shmins_analysis_export`|采样后的 `shmins_sequence_item`|
+|`shmins_mst_agt.monitor.shmins_analysis_port`|analysis port → analysis imp|`lifecycle_checker.accept_imp`|带 UID/cycle/reset epoch 的 accepted creq|
+|`shmins_mst_agt.monitor.ack_analysis_port`|analysis port → analysis imp|`lifecycle_checker.ack_imp`|raw direction-specific ack event|
 |`shm_ref.wdata_ass_arr_port`|analysis port → analysis FIFO|`shm_scb.ref_wrvlm_analysis_export`|`shm_wtrans_item` 期望 byte map|
 |`vlm_agt.write_analysis_port`|analysis port → analysis FIFO|`shm_scb.rtl_wrvlm_analysis_export`|经唯一到期 record 补全 gid 的实际 MEM write transaction|
 |`vlm_agt.mem_port`|blocking transport port → imp|`shm_scb.mem_imp`|带 gid 的 MEM read request，并在同一 transaction 中返回数据|
+|`shm_scb.completion_analysis_port`|analysis port → analysis imp|`lifecycle_checker.completion_imp`|transaction data observed/resolved event|
 
 统一 monitor 先产生原始 cycle snapshot；agent 在 scheduler pre-update 状态下完成 MEM
 匹配并返回 gid/match status，然后才发布 memory transaction。没有唯一匹配 record 的
@@ -152,7 +161,7 @@ MEM read driver 使用同一 resolver 取得 gid，再向 scoreboard 查询
 |`build_phase`|test 创建 environment/config；environment 获取 interface 和配置、创建 agent/reference/scoreboard；agent 创建启用的子组件|
 |`connect_phase`|agent 连接 driver/sequencer 并分配 virtual interface；environment 建立跨组件 TLM 连接|
 |`configure_phase`|`shm_reference.ref_banks` 和 `shm_scoreboard.rtl_banks` 使用相同策略初始化|
-|`main_phase`|test 启动 shmins sequence；统一 VLM agent 按 sample → check/resolve → publish → schedule → drive 顺序逐周期响应；scoreboard 并行收集与比对|
+|`main_phase`|test 启动 shmins sequence；统一 VLM agent 按 sample → check/resolve → publish → schedule → drive 顺序逐周期响应；scoreboard 并行收集与比对；lifecycle checker 关联 creq/data/ack；sequence 结束后 environment 等待连续两周期 idle|
 |`check_phase`|scoreboard 检查 FIFO 和期望写集合是否仍有未消费内容|
 |`report_phase`|base test 根据 UVM error/fatal 数量打印 case pass/fail|
 |`final_phase`|需要文件输出的 monitor 关闭 debug 文件|
