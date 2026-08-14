@@ -3,6 +3,7 @@ shm_unit_test
 +TRANS_DELAY_MAX=128
 +TRANS_NUM=16
 +EXTERNAL_BUSY_PERCENT=10
++TEST_DRAIN_TIMEOUT_CYCLES=5000
 endargs
 
 v2m_unit_test: shm_unit_test
