@@ -222,6 +222,9 @@ MEM port record: [direction][delay][bank_id]
 
 ### 阶段 7：集成 testcase、coverage 和回归
 
+本阶段的当前逐文件实施顺序、组件测试和真实 RTL case 由
+[定向验证开发计划](shm-directed-verification-development-plan.md) 继续细化。
+
 新增或更新：
 
 - address helper 单元测试；
