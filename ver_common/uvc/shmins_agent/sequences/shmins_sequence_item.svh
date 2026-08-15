@@ -227,13 +227,6 @@ class shmins_sequence_item extends uvm_sequence_item;
   extern function int unsigned align_mask();
 
   //----------------------------------------------------------------------------
-  // @brief Returns an encoded address upper bound for the selected space.
-  //
-  // @return One past the LOC, legacy WRP, or current group-relative BLK encoded range.
-  //----------------------------------------------------------------------------
-  extern function int unsigned addr_max();
-
-  //----------------------------------------------------------------------------
   // @brief Returns the maximum data element count supported by dtype and ITYPE.
   //
   // @return Data-vector capacity, additionally limited by offset capacity for LDSTE_V.
@@ -610,15 +603,6 @@ function int unsigned shmins_sequence_item::align_mask();
     default: return 32'h0;
   endcase
 endfunction : align_mask
-
-function int unsigned shmins_sequence_item::addr_max();
-  case (creq_space)
-    SPACE_LOC: return WARP_STEP;
-    SPACE_WRP: return 1 << BADDR_W;
-    SPACE_BLK: return int'(coded_warp_bytes() * BANK_N * int'(creq_wpnum));
-    default:   return WARP_STEP;
-  endcase
-endfunction : addr_max
 
 function int unsigned shmins_sequence_item::max_elem_cnt();
   if (creq_itype == LDSTE_V) begin
