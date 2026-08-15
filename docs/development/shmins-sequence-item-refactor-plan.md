@@ -353,7 +353,8 @@ plusarg 保留；出现的 `CREQ_*` 通过 normal setter 缩小对应 domain，`
 ### 6.6 Package 和兼容边界
 
 正式 `shm_seq_item_package` include 公共基类、contiguous、strided、indexed、VTRANS 和
-enum helper；`shm_seq_package` 只 include `shmins_mst_unit_sequence`。公共基类保留
+enum helper；`shm_seq_package` include `shmins_mst_unit_sequence` 和可复用的
+`shm_directed_item_sequence`。公共基类保留
 driver、monitor、reference 和 `shm_wtrans_item` 已使用的字段、copy、RTL pack/unpack 和
 地址 helper API。旧 solver item 只作为 benchmark ORIGINAL 基线，不再进入正式 package。
 

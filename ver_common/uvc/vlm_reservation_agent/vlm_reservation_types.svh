@@ -104,6 +104,37 @@ typedef struct {
 } vlm_reservation_cycle_transaction_t;
 
 //------------------------------------------------------------------------------
+// @brief Records independent admission facts for one reservation request slot.
+//
+// Flags are intentionally non-exclusive because one malformed request can
+// violate more than one rule. This metadata is diagnostic only and must not
+// control scheduler admission or DUT outputs.
+//------------------------------------------------------------------------------
+typedef struct packed {
+  bit present;
+  bit accepted;
+  bit dly_zero;
+  bit dly_range;
+  bit target_busy;
+  bit pending_bank_due_conflict;
+  bit current_bank_due_conflict;
+} vlm_reservation_admission_outcome_t;
+
+//------------------------------------------------------------------------------
+// @brief Records independent matching facts for one direction/BANK MEM slot.
+//------------------------------------------------------------------------------
+typedef struct packed {
+  bit request_present;
+  bit record_present;
+  bit matched;
+  bit unexpected;
+  bit missing;
+  bit busy_error;
+  bit address_mismatch;
+  bit due_cycle_mismatch;
+} vlm_mem_match_outcome_t;
+
+//------------------------------------------------------------------------------
 // @brief Summarizes checker outcomes for one normalized cycle transaction.
 //
 // The checker creates one result before the scheduler mutates its state. The
@@ -133,6 +164,13 @@ typedef struct {
   shm_gid_t mem_gid[VLM_RESERVATION_DIRECTION_N][BANK_N];
   bit mem_gid_valid[VLM_RESERVATION_DIRECTION_N][BANK_N];
   bit mem_reservation_matched[VLM_RESERVATION_DIRECTION_N][BANK_N];
+
+  // Per-request admission facts. Read reservations use write-port index zero.
+  vlm_reservation_admission_outcome_t
+      reservation_outcome[VLM_RESERVATION_DIRECTION_N][BANK_N][WRITE_PORT_N];
+
+  // Per-direction and per-BANK actual-MEM matching facts.
+  vlm_mem_match_outcome_t mem_match_outcome[VLM_RESERVATION_DIRECTION_N][BANK_N];
 } vlm_reservation_check_result_t;
 
 `endif // INC_VLM_RESERVATION_TYPES_SVH

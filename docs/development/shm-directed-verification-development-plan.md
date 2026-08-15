@@ -100,8 +100,8 @@ DUT 行为仍以 [DUT spec](../ut_shm/spec/index.md) 为准。本文只规定验
 
 ### 4.2 定向 request 发送层
 
-在 `ut_shm/tests/` 新增 test-only `shm_directed_item_sequence.svh`，并由
-`shm_test_package.sv` include。该 sequence：
+在 `ver_common/uvc/shmins_agent/sequences/` 新增可复用的
+`shm_directed_item_sequence.svh`，并由 `shm_seq_package.sv` include。该 sequence：
 
 - 接收已经通过正式 topology item `randomize()` 和 `validate_transaction()` 的 request；
 - 只执行 `start_item/finish_item`，不再修改 request 字段；
@@ -271,7 +271,7 @@ metadata 全部匹配，并输出 `[VLM_GID_CONTRACT_TEST] ... PASS`。
 | 9 | `examples/shm_reference_compile/` | 新增 reference gid 隔离组件测试 |
 | 10 | `examples/vlm_reservation_compile/gid_contract_tb.sv` | 新增 ownership/resolver 组件测试 |
 | 11 | `scripts/ubuntu/check_*_vcs.sh` | 增加新 target、PASS marker 和 `all` 集成 |
-| 12 | `ut_shm/tests/shm_directed_item_sequence.svh` 及 test package | 为真实 RTL 定向 case 提供发送层 |
+| 12 | `ver_common/uvc/shmins_agent/sequences/shm_directed_item_sequence.svh` 及 seq package | 为各 UT 定向 case 提供可复用发送层 |
 | 13 | `docs/ut_shm/verification-status.md` 及 testpoint/component 文档 | 记录实际证据和剩余缺口 |
 
 上表是依赖顺序，不是建议并行修改的文件集。尤其是 coverage 和组件测试必须消费
@@ -329,6 +329,35 @@ checker 已经固定的结构化 outcome，不得先根据日志文本复制一�
 每个 test 先单独运行和固定失败 seed，然后加入 `p0_directed.lst`。待所有目标 coverage
 bin 命中、无未解释 UVM error/fatal、原 109-case 主列表无回归后，再由 `shm.lst`
 include 该列表。
+
+### 7.1 2026-08-14 第一批基础设施实测状态
+
+阶段 A～D 的基础设施已经实现并在远端 VCS `W-2024.09-SP1_Full64` 上通过：
+
+- topology item 提供可复用的 M2V read/write byte-overlap 判定，生成器和最终 validator
+  使用同一规则；
+- 公共 `shm_directed_item_sequence` 可以发送已经构造并验证的 topology item，且不改变
+  `shmins_mst_unit_sequence` 公共 API；
+- reservation checker 返回逐请求 admission outcome 和逐 BANK MEM match outcome；这些字段
+  只供 assertion/checker 证据、诊断和 coverage 使用，不参与 RTL 输出或 scheduler 接纳决策；
+- `shm_address_coverage` 和 `vlm_reservation_coverage` 已实现第一批所需的 address/gid、
+  ownership、conflict 和 MEM match 基础 coverpoint/cross；
+- strict expected-report catcher、地址/M2V hazard、reference gid isolation、reservation
+  ownership/resolver 三类组件测试已经建立。
+
+可重复的远端结果如下：
+
+|命令|结果|
+|---|---|
+|`scripts/ubuntu/check_shmins_sequence_vcs.sh all`|compile、copy、ordered lifecycle、dual-gid address 全部通过；0 error/fatal|
+|`scripts/ubuntu/check_shm_reference_vcs.sh`|相同 bank/BADDR、不同 gid 的 V2M/M2V reference 隔离通过；0 error/fatal|
+|`scripts/ubuntu/check_vlm_reservation_vcs.sh all`|compile、alignment、external busy、gid contract 全部通过|
+|`make smoke`|空 design 编译、elaboration、link 和 0-transaction smoke 通过；`UVM_CASE_PASS`，0 error/fatal|
+
+空 design 和组件测试只证明验证代码的 contract、连接和独立模型行为，不是 RTL 功能证据。
+阶段 E 的四个真实 RTL directed test 和 `p0_directed.lst` 尚未实现，因此第一批问题 ID
+仍不能关闭。本批 coverage 验收只要求目标 collector/bin/cross 可采样并能由定向场景命中；
+暂不要求全项目 coverage merge，也不设置总百分比阈值。
 
 ## 8. 第一批完成条件
 

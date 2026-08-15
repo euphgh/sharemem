@@ -31,7 +31,14 @@ channel retire, that ack-disabled predecessors still participate in ordering,
 that V2M and M2V do not block each other, and that an early young ack is recorded
 without an out-of-order error.
 
-Run all three targets with:
+Run the dual-gid physical-address, VTRANS wpid 3/4, and M2V byte-hazard
+component test with:
+
+```sh
+scripts/ubuntu/check_shmins_sequence_vcs.sh dual-gid-address
+```
+
+Run all four targets with:
 
 ```sh
 scripts/ubuntu/check_shmins_sequence_vcs.sh all

@@ -34,6 +34,12 @@ design 全量编译和 0-transaction smoke；clocked grace timeout 触发边界�
 32 bit；验证环境同步改为 `VEC_W=256`、`VEC_BYTE_N=32`。用户确认适配后真实 design 的
 `shm.lst` 全部 109 个 case 再次通过。该证据关闭 `SHMINS-007`，并把其余正向主路径证据
 更新为 109-case 基线；它仍不替代双 gid 边界、负例、运行中 reset 或 functional coverage。
+同日第一批双 gid 定向验证基础设施完成：地址/M2V hazard、reference gid 隔离和 reservation
+ownership/resolver 组件测试通过，address/reservation 第一批 functional coverage 已接入，
+空 design compile/elaboration 和 0-transaction smoke 通过。Reservation outcome 只作为
+checker/assertion、诊断和 coverage 证据，不参与 scheduler 接纳或 RTL 输出控制。真实 RTL
+directed case 和本批 coverage bin 命中证据尚未完成；本批不要求全项目 coverage merge 或
+总百分比阈值。
 
 ## 1. 状态和优先级
 
@@ -84,11 +90,11 @@ design 全量编译和 0-transaction smoke；clocked grace timeout 触发边界�
 |---|---:|---|---|---|
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
-|`COV-001`|P1|待实现|跨组件|ut_shm 尚未建立 functional coverage 模型|
-|`DBANK-001`|P0|待验证|共享地址/shmins|109-case RTL 回归覆盖 LOC/WRP/BLK、V2M/M2V 主路径；地址/gid/vaddr/hazard 边界待验证|
-|`DBANK-002`|P0|待验证|reference/expected model|gid-aware reference 已通过 109-case RTL 回归，待相同 BADDR 跨 gid 数据隔离定向验证|
-|`DBANK-004`|P0|待验证|VLM agent/scoreboard|resolver、read response 和 actual memory 已通过 109-case RTL 回归，待冲突/失败路径定向验证|
-|`DBANK-005`|P1|待实现|test/coverage|109-case 主列表已通过；双 gid 边界、ownership、M2V hazard 与 coverage 仍缺|
+|`COV-001`|P1|实现中|跨组件|第一批 address/reservation coverage 已接入；其余 testpoint coverage 与 bin 命中证据仍缺|
+|`DBANK-001`|P0|待验证|共享地址/shmins|地址公式、VTRANS gid 和 M2V hazard 组件测试通过；待真实 RTL 边界 case|
+|`DBANK-002`|P0|待验证|reference/expected model|相同 BADDR 跨 gid reference 隔离组件测试通过；待真实 RTL 定向 case|
+|`DBANK-004`|P0|待验证|VLM agent/scoreboard|ownership/resolver 组件测试通过；待完整冲突矩阵和真实 RTL 定向 case|
+|`DBANK-005`|P1|实现中|test/coverage|定向发送层和第一批 coverage 已实现；真实 RTL case、LST 和 bin 命中证据仍缺|
 |`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 正向数据通路已通过 109-case RTL 回归，待 mask 边界与 X/Z 定向验证|
 |`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
 |`SHMINS-005`|P2|待实现|shmins agent|256-bit 向量参数适配已通过；16-thread/4-bit 等硬编码仍在|
@@ -100,7 +106,7 @@ design 全量编译和 0-transaction smoke；clocked grace timeout 触发边界�
 |`VMEM-002`|P1|待实现|memory monitor|MEM valid、地址、strobe 和有效数据缺少完整 X/Z 检查|
 |`VMEM-003`|P2|待实现|memory agent|sequencer 和部分 compare API 没有有效行为|
 |`SCB-002`|P1|待验证|scoreboard|固定 timeout 已改为可关闭的 cycle plusarg，待定向验证|
-|`RSV-002`|P1|待实现|reservation coverage|coverage 组件目前为空实现|
+|`RSV-002`|P1|实现中|reservation coverage|第一批 ownership/resolver coverpoint 和 cross 已实现；完整 testpoint coverage 仍缺|
 |`RSV-004`|P1|待实现|reservation checker|全局 `input_error` 会屏蔽无关 slot 的检查|
 |`RSV-005`|P1|待实现|reservation monitor|复位期间没有检查 DUT request/valid 必须为 0|
 
@@ -162,7 +168,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 - 现状：共享参数已删除 `VADDR_W` 并定义双 gid 物理地址；正式 topology item 已回填
   逻辑/物理 element 地址、使用 gid-aware byte key，并为 M2V 生成 byte-disjoint writeback
-  BADDR；LOC/WRP/BLK、V2M/M2V 的正向主路径已通过 109-case 真实 RTL 回归。
+  BADDR；生成器和 validator 复用同一 byte-hazard 谓词。LOC/WRP/BLK、V2M/M2V 的正向
+  主路径已通过 109-case 真实 RTL 回归；独立公式组件测试覆盖 BANK 0/15、warp 0/3/4/7、
+  laddr 首尾、VTRANS wpid 3/4 和 M2V exact-overlap 拒绝。
 - 目标：三种 space 输出 `<bank,absolute warp,laddr>`，公共 helper 统一生成 gid/BADDR；
   `creq_vaddr` 改为 16 bit 并携带 gid 内 WARP 基址；M2V 排除有效 read/write byte overlap。
 - 验收：地址公式测试覆盖 warp 0/3/4/7、SPACE_BLK 非零 group 和 WARP 首尾；三类
@@ -172,7 +180,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 - 现状：`wmap` 已用 flattened `<bank,gid>` storage index，`ref_banks` 已扩展为
   `[BANK_N][GID_N]`；reference M2V 直接使用 `creq_vaddr` 并从 wpid 取得 write gid；
-  V2M/M2V/VTRANS 正向数据检查已通过 109-case 真实 RTL 回归。
+  V2M/M2V/VTRANS 正向数据检查已通过 109-case 真实 RTL 回归；standalone reference 组件
+  测试已证明相同 bank/BADDR、不同 gid 的 V2M 写入和 M2V 读取互不覆盖。
 - 目标：全部 expected physical byte key 改为 `<bank,gid,BADDR>`；reference M2V 直接使用
   `creq_vaddr`，只从 wpid 得到 write gid。
 - 验收：相同 bank/BADDR、不同 gid 的数据隔离；V2M/VTRANS/M2V 的 wpid 3/4 定向
@@ -183,7 +192,10 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 现状：scheduler busy 和 record 已携带 gid；checker 从唯一到期 record 生成 per-BANK
   match metadata，统一 agent 固定 metadata 后驱动 read response/发布 write，scoreboard
   只对 matched transaction 访问对应 gid memory；正常 reservation/MEM 兑现路径已通过
-  109-case 真实 RTL 回归。
+  109-case 真实 RTL 回归。Checker 现在额外返回逐请求 admission outcome 和逐 BANK MEM
+  match outcome；组件测试已覆盖 target-gid external busy、other-gid external allow、同周期
+  write-port conflict、正常 match、unexpected 和 address mismatch。Outcome 只供
+  assertion/checker、诊断和 coverage 使用，不控制 scheduler 或 RTL 输出。
 - 目标：busy ownership 使用 `[direction][delay][gid][subbank]`，MEM port record 保持
   `[direction][delay][bank]`；resolver 从唯一到期 record 恢复 gid，read driver复用同一
   match result，scoreboard actual memory增加gid，未匹配 MEM 不更新可信模型。
@@ -193,8 +205,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 ### `DBANK-005` 双 gid testcase 与覆盖
 
 - 现状：现有 109 个 case 已在真实 design 上全部通过，证明统一双 gid 环境可以承载当前
-  正向矩阵；但其随机 `RUN=1` 组织和空 reservation coverage 不能证明双 gid 边界、
-  ownership、失败路径或 coverage closure。
+  正向矩阵。第一批 address/reservation coverage collector、定向 topology item 发送层和
+  三类组件测试已经实现；但随机 `RUN=1` 组织仍不能证明真实 RTL 双 gid 边界、ownership、
+  失败路径或 coverage closure，`p0_directed.lst` 尚未建立。
 - 目标：实现 `TP-ADDR-009`、`TP-MEM-005`、`TP-RSV-007/008` 以及更新后的 M2V、LOC、
   WRP、BLK testpoint；coverage 至少交叉 direction、gid、subbank、busy source和match结果。
 - 验收：开发计划阶段 7 的定向 case 全部通过，主 regression 无新增 error，并保存可重复
@@ -219,14 +232,17 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `COV-001` ut_shm functional coverage
 
-- 现状：shmins monitor 只有注释掉的历史 coverage include；reservation coverage 是空
-  API；reference、scoreboard 和 memory agent 均没有有效 covergroup/coverpoint。
+- 现状：`shm_address_coverage` 已只读采样 reference transaction 的 direction、space、
+  absolute warp、gid、laddr、wpnum 和 M2V read/write gid；`vlm_reservation_coverage` 已采样
+  direction、bank、gid、subbank、delay、ownership、admission 和 MEM match outcome。
+  Mask、ack、FFD_CYC、reset 等其他 testpoint 尚无对应 functional coverage。
 - 影响：case 运行和 checker 通过不能证明 spec 场景实际发生，所有 testpoint 都缺少
   功能覆盖关闭证据。
 - 目标依据：[Testpoints](plan/testpoints.md)和
   [Coverage 与关闭条件](plan/coverage-and-closure.md)。
 - 验收：每个 required testpoint 都能映射到已实现的 functional bin/cross，报告可按
-  testpoint ID 回溯，未命中项有定向激励或有效 waiver。
+  testpoint ID 回溯，未命中项有定向激励或有效 waiver。第一批双 gid 验收暂不要求全项目
+  coverage merge 或总百分比阈值，但必须保存其目标 bin/cross 的命中证据。
 
 ### `SHMINS-001` `creq_tmsk` 数据通路
 
@@ -347,10 +363,15 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `RSV-002` Reservation coverage
 
-- 现状：coverage class 只保留空的同步 API，所有计数器恒为 0，没有 covergroup。
-- 影响：reservation delay、busy 来源、共享 slot 和匹配结果没有功能覆盖闭环。
-- 目标：阶段 5 定义 testpoint 后实现对应 coverpoint/cross，且不改变 scheduler 状态。
-- 验收：覆盖报告能追踪主要合法场景和错误注入场景。
+- 现状：coverage 已在 scheduler 更新前采样同一 transaction/check result/pre-update state，
+  实现 direction、bank、gid、subbank、delay、other-gid ownership、admission outcome、MEM
+  match outcome 和 resolved gid 的第一批 coverpoint/cross，并维护可供组件测试检查的计数器。
+- 影响：第一批双 gid ownership/resolver 已有采样基础；reservation 的完整 delay、并发共享、
+  X/Z 和 reset 场景仍未覆盖闭环。
+- 目标：继续按 testpoint 补齐缺失的 coverpoint/cross，且不得改变 scheduler 状态或参与
+  request admission。
+- 验收：覆盖报告能追踪主要合法场景和错误注入场景；第一批不设置全项目 merge 或总
+  百分比阈值，但目标 bin 必须有可回溯命中证据。
 
 ### `RSV-004` `input_error` 抑制粒度
 

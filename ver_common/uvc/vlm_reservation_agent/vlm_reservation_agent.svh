@@ -177,7 +177,7 @@ task vlm_reservation_agent::main_phase(uvm_phase phase);
     // collect_cycle() is the only API in the reactive loop that consumes simulation time.
     monitor.collect_cycle(current_txn);
 
-    // Checking, empty coverage sampling, scheduling, and driving all complete in the sampled cycle.
+    // Checking, coverage sampling, scheduling, and driving all complete in the sampled cycle.
     process_cycle(current_txn);
     process_memory_requests(current_txn, current_check_result);
     scheduler.process_cycle(current_txn);

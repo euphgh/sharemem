@@ -195,7 +195,7 @@ Synopsys VIP packages
 |`collection`|scoreboard 使用的关联数组、set 和 queue 工具|
 |`shm_util_package`|共享参数、`bit_rt_range`、字符串工具|
 |`shm_seq_item_package`|shmins/MEM transaction、enum field、`vlm2aa`|
-|`shm_seq_package`|shmins master 和 unit sequence|
+|`shm_seq_package`|shmins master unit sequence 和可复用 directed-item transport sequence|
 |`shm_env_package`|shmins/统一 VLM agent、environment config、reference、scoreboard、environment|
 |`shm_test_package`|`shm_base_test`、`shm_unit_test`|
 

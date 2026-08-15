@@ -31,7 +31,7 @@ agent 自身负责发布 MEM transaction 和组织 read response，因此没有�
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_monitor.svh`|四态采样和归一化|
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_checker.svh`|busy、reservation 与 MEM 到期匹配|
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_scheduler.svh`|窗口、record、external/SHM/final busy|
-|`ver_common/uvc/vlm_reservation_agent/vlm_reservation_coverage.svh`|coverage 同步入口，当前为空实现|
+|`ver_common/uvc/vlm_reservation_agent/vlm_reservation_coverage.svh`|第一批 ownership、admission 和 MEM match coverage|
 
 ## 3. 单周期处理顺序
 
@@ -152,11 +152,15 @@ Checker 的入口是同步 function `check_cycle(const ref txn)`。它不消耗�
 |`mem_match_error_count`|本周期到期 record 与实际 MEM request 的匹配错误数|
 |`dly_zero_error_count`|本周期不支持的 `dly==0` 请求数|
 |`matched_mem_request_count`|本周期完整通过到期匹配的 MEM request 数|
+|`reservation_outcome[direction][bank][port]`|逐请求 present/accepted/delay/target-busy/pending/current-conflict flags|
+|`mem_match_outcome[direction][bank]`|逐 MEM slot request/record/matched/unexpected/missing/busy/address/due flags|
 |`passed`|上述四类 error count 均为 0；matched 数不参与 pass 判定|
 
 Checker class 还维护同名的仿真期累计计数器。Monitor 报告的 X/Z 不直接增加这些
 checker counter，也不直接把 `current_result.passed` 置 0；该状态通过
-`txn.input_error` 单独传给 checker 和 coverage。
+`txn.input_error` 单独传给 checker 和 coverage。结构化 outcome 与现有 report ID 同时
+填写，只供 assertion/checker 证据、组件断言、coverage 和调试使用；它们不反馈给
+scheduler，也不能控制 RTL request/busy 输出。
 
 ### 8.2 依赖和 cycle 一致性
 
@@ -295,13 +299,18 @@ checker/scheduler 中的 alignment 判断已经删除，但完整地址兑现检
 
 ## 10. Coverage
 
-`vlm_reservation_coverage.sample_cycle()` 已接入正确的 pre-update 采样位置，但当前没有
-covergroup，预留计数器也保持为 0。它不能作为 reservation 场景已经覆盖的证据，见
-`RSV-002`。
+`vlm_reservation_coverage.sample_cycle()` 在正确的 pre-update 位置消费 normalized
+transaction、checker result 和只读 scheduler ownership。第一批 covergroup 已采样：
 
-后续 coverage 应观察 reservation direction/delay、external/SHM busy 来源、跨 bank
-共享 sub-bank、同 bank 冲突、到期匹配和输入错误，但不得修改 scheduler 或 checker
-状态。
+- reservation direction、bank、gid、subbank、delay 和 accepted/target-busy/
+  pending-conflict/current-conflict outcome；
+- candidate gid、other-gid external/SHM owner 和 admission outcome 的交叉；
+- MEM direction、resolved gid、gid-valid、matched、unexpected、missing 和 address mismatch；
+- 可供组件测试检查的 accepted、external block、dly-zero、matched MEM 等计数器。
+
+这些 outcome 和 coverage 只提供 checker/assertion 证据与诊断，不参与 request admission、
+scheduler 更新或 busy 输出。完整 reservation testpoint 和真实 RTL bin 命中证据仍由
+`RSV-002` 跟踪；第一批暂不要求全项目 coverage merge 或总百分比阈值。
 
 ## 11. Reset 和错误边界
 
@@ -321,11 +330,13 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 
 ## 12. 相关测试
 
-`examples/vlm_reservation_compile/` 提供联合 elaboration、alignment 和 external busy
-定向入口，`ut_shm/tests/shm_unit_test.svh` 则在完整环境中使用该 agent。Alignment case
-验证非对齐 read/write reservation 的地址保留和完整地址兑现；external-busy 当前源码
-字段已经对齐，并于 2026-08-13 通过独立远端组件测试。Coverage 为空也意味着乃至当前
-109-case 真实 RTL 回归都不能替代功能覆盖闭环。
+`examples/vlm_reservation_compile/` 提供联合 elaboration、alignment、external busy 和
+`gid-contract` 定向入口，`ut_shm/tests/shm_unit_test.svh` 则在完整环境中使用该 agent。
+Alignment case 验证非对齐 read/write reservation 的地址保留和完整地址兑现；external-busy
+验证 plusarg/drive；gid-contract 使用严格 expected-report catcher 检查 target/other-gid
+external ownership、同周期双 write-port conflict、正常 MEM match、unexpected 和 address
+mismatch。2026-08-14 远端 `scripts/ubuntu/check_vlm_reservation_vcs.sh all` 全部通过。
+这些组件结果不替代真实 RTL directed case 和功能覆盖闭环。
 
 ## 13. 调试观察点
 
@@ -352,15 +363,17 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 
 ## 15. 当前实现状态
 
-- `RSV-002`：coverage 是空实现。
+- `RSV-002`：第一批 ownership/admission/MEM-match coverage 已实现，完整 testpoint 和
+  真实 RTL bin 命中证据仍缺。
 - `RSV-003`：external-busy 示例已验证 config 默认值、plusarg 覆盖为 100 和 busy drive，
   远端 VCS 报告 0 error、0 fatal，2026-08-13 关闭。
 - `RSV-004`：全局 `input_error` 会屏蔽无关 slot 的检查。
 - `RSV-005`：复位期间没有检查 DUT request/valid 必须为 0。
 - `ENV-001`：运行中 reset 未清理 scheduler record 和 busy 状态。
 - gid busy、record gid、resolver 和统一 interface/agent 已接入，并于 2026-08-13 随真实
-  RTL 集成 testcase 跑通；busy ownership、端口冲突和 resolver 失败路径仍需按
-  [双 gid 接口重构开发计划](../../../development/shm-dual-bank-interface-refactor-plan.md)
-  完成独立定向验证。
+  RTL 集成 testcase 跑通；2026-08-14 已增加结构化 outcome 和部分 ownership、端口冲突、
+  resolver 失败路径组件测试。完整组合矩阵和真实 RTL directed case 仍按
+  [SHM 定向验证开发计划](../../../development/shm-directed-verification-development-plan.md)
+  继续实施。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

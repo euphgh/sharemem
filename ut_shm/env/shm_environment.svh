@@ -10,6 +10,7 @@
 class shm_environment extends uvm_env;
 
     shm_reference  shm_ref;
+    shm_address_coverage address_coverage;
     shm_scoreboard shm_scb;
     shm_transaction_lifecycle_checker lifecycle_checker;
 
@@ -113,6 +114,7 @@ function void shm_environment::build_phase(uvm_phase phase);
             this, "lifecycle_checker", "shm_environment_config", shm_environment_cfg);
 
         shm_ref = shm_reference::type_id::create("shm_ref", this);
+        address_coverage = shm_address_coverage::type_id::create("address_coverage", this);
         shm_scb = shm_scoreboard::type_id::create("shm_scb", this);
         lifecycle_checker =
             shm_transaction_lifecycle_checker::type_id::create("lifecycle_checker", this);
@@ -141,6 +143,10 @@ function void shm_environment::connect_phase(uvm_phase phase);
 
     if (shm_ref != null && shm_scb != null) begin
         shm_ref.wdata_ass_arr_port.connect(shm_scb.ref_wrvlm_analysis_export);
+    end
+
+    if (shm_ref != null && address_coverage != null) begin
+        shm_ref.wdata_ass_arr_port.connect(address_coverage.analysis_export);
     end
 
     if (shm_scb != null && lifecycle_checker != null) begin

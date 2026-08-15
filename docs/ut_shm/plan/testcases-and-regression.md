@@ -172,7 +172,7 @@ wpnum 等字段主要依赖随机化。没有 functional coverage 时，单个 s
 - `LDST_S` 或 `LDST_V`；
 - 每个 thread 16 个 element；
 - 所有 element mask 为 1；
-- `creq_wpid==0`。
+- `creq_wpid inside {[0:WARP_N-1]}`；VTRANS 仍按所选 warp 映射到对应 gid。
 
 VTRANS sequence 已按 spec 约束 `creq_tmsk=='1`。VTRANS 仍只有一个 case，DTYPE 和
 ITYPE 由 seed 随机选择；没有 coverage 时，不能确认四个合法组合都出现。

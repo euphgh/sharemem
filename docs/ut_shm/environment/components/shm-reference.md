@@ -103,12 +103,17 @@ byte 是该地址的架构最终值；前一笔的旧值只能作为乱序执行
 
 ## 9. 相关测试
 
-`ut_shm/tests/shm_unit_test.svh` 是当前 reference 的集成使用入口。现阶段没有把地址
-映射、VTRANS 转置、M2V 读写回或跨 creq 重叠拆成独立 reference 单元测试。BLK 的
-WPID-derived 非零 `warp_group` 已由独立公式检查和实际 RTL regression 覆盖；transaction
-copy 后字段完整性已由四 topology 独立正反例覆盖。2026-08-13 当前 reference 主路径已随
-新 sequence item 在真实 design 上通过当时 `shm.lst` 的全部 85 个 case。
-2026-08-14 在 256-bit vector 输入适配后，扩容的 109-case 主列表再次全部通过。
+`ut_shm/tests/shm_unit_test.svh` 是当前 reference 的集成使用入口。BLK 的 WPID-derived
+非零 `warp_group` 已由独立公式检查和实际 RTL regression 覆盖；transaction copy 后字段
+完整性已由四 topology 独立正反例覆盖。2026-08-13 当前 reference 主路径已随新 sequence
+item 在真实 design 上通过当时 `shm.lst` 的全部 85 个 case。2026-08-14 在 256-bit vector
+输入适配后，扩容的 109-case 主列表再次全部通过。
+
+同日新增 `examples/shm_reference_compile/gid_isolation_tb.sv`。它使用不同 byte pattern
+写入物理 bank/BADDR 相同、gid 分别为 0/1 的 reference memory，检查 flattened wmap key
+不合并，并从两个 gid 分别执行 M2V readback。远端
+`scripts/ubuntu/check_shm_reference_vcs.sh` 通过且 0 error/fatal。该组件结果证明 expected
+model 的 gid 隔离，不替代 VTRANS 转置、M2V vaddr 边界和真实 RTL directed case。
 
 ## 10. 开发 contract
 
@@ -133,7 +138,8 @@ copy 后字段完整性已由四 topology 独立正反例覆盖。2026-08-13 当
   interleave/space benchmark、全部 interleave size 的扩展检查和实际 RTL BLK regression
   已通过，2026-08-13 关闭。
 - `ENV-001`：运行中 reset 未重建 `ref_banks` 或取消旧期望。
-- 双 gid reference memory、wmap 和 M2V 写回正向主路径已通过 109-case 真实 RTL 回归，尚缺
-  wpid 3/4 和 gid 数据隔离定向证据。
+- 双 gid reference memory、wmap 和 M2V 写回正向主路径已通过 109-case 真实 RTL 回归；
+  同 BADDR 跨 gid 的 V2M/M2V reference 隔离组件测试已通过。VTRANS 转置、M2V vaddr
+  边界和真实 RTL wpid 3/4 定向证据仍缺。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

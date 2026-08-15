@@ -12,7 +12,7 @@ scoreboard，并把 tb top
 - 获取并校验 environment config、shmins/VLM business interface 和共享 cycle interface；
 - 创建 shmins 和统一 VLM 两个 agent；
 - 在完整 active 模式下创建 `shm_reference`、`shm_scoreboard` 和 transaction lifecycle
-  checker；
+  checker，以及第一批双 gid `shm_address_coverage`；
 - 下发 agent config、business vif 和共享 `clk_vif`；
 - 建立 creq、raw ack、scoreboard completion、期望写、实际写和 MEM read service 的
   TLM 连接；
@@ -27,6 +27,7 @@ scoreboard，并把 tb top
 |---|---|
 |`ut_shm/env/shm_environment.svh`|environment build/connect 实现|
 |`ut_shm/env/shm_environment_config.svh`|顶层环境、agent、timeout 和 drain 配置对象|
+|`ut_shm/env/shm_address_coverage.svh`|只读采样 reference 派生逻辑/物理地址和 M2V gid 关系|
 |`ut_shm/env/shm_transaction_lifecycle_checker.svh`|accepted creq、ack 与数据完成关联|
 |`ut_shm/env/shm_env_package.sv`|按依赖顺序 include agent、reference、scoreboard 和 environment|
 |`ut_shm/tb/shm_ut_connect.svh`|从 tb top 向 Config DB 发布 virtual interface|
@@ -59,8 +60,8 @@ Environment 按以下顺序建立依赖：
 4. 把统一 VLM vif 和 cycle source 写入 VLM config；
 5. 分别向两个 agent 设置 `cfg` 和需要的 vif；
 6. 创建两个 agent；
-7. 当 `shm_is_active==UVM_ACTIVE` 时创建 reference、scoreboard 和 lifecycle checker，
-   并向三者下发 environment config。
+7. 当 `shm_is_active==UVM_ACTIVE` 时创建 reference、scoreboard、lifecycle checker 和
+   address coverage，并向需要配置的组件下发 environment config。
 
 缺少 config、子 config 或 virtual interface 都使用带有明确 ID 的 `UVM_FATAL`，避免
 环境在半连接状态继续运行。主要 ID 包括 `SHM_ENV_NO_CFG`、
@@ -77,6 +78,7 @@ Environment 按以下顺序建立依赖：
 |统一 VLM monitor write analysis port|scoreboard RTL analysis export|两端实例都存在且 transaction 已完成 reservation match|
 |统一 VLM memory driver blocking transport port|scoreboard `mem_imp`|两端实例都存在且 read gid 有效|
 |reference expected-write analysis port|scoreboard reference analysis export|两端实例都存在|
+|reference expected-write analysis port|address coverage analysis export|两端实例都存在|
 |scoreboard completion port|lifecycle completion imp|两端实例都存在|
 
 Reservation agent 不通过 environment TLM 与 scoreboard 相连。它直接读取 reservation
@@ -116,6 +118,10 @@ Environment 只配置一个 `vlm_vif`；实际 write 和 read service transactio
 针对 Config DB 缺失、unsupported passive 组合或运行中 reset 清理的 environment 定向
 测试；这些场景分别由 `ENV-002` 和 `ENV-001` 的验收项追踪。
 
+2026-08-14 在远端执行根目录 `make smoke`，空 design 完成 parse、elaboration、link 和
+0-transaction UVM run，结果为 `UVM_CASE_PASS` 且 0 error/fatal。该结果只证明新增 coverage
+和定向 sequence 的 package/include/TLM 连接正确，不作为 DUT 行为证据。
+
 ## 9. 开发 contract
 
 - Config DB 字段名和实例路径属于环境连接 contract，改名必须同步设置者与获取者。
@@ -133,5 +139,7 @@ Environment 只配置一个 `vlm_vif`；实际 write 和 read service transactio
   新增的 24 个 strided case。`DBANK-003` 和 `SHMINS-007` 已关闭。
 - `ENV-001`：运行中 reset 尚未统一清理。
 - `ENV-002`：公开配置仍能表达当前不支持的 passive 组合。
+- 第一批 `shm_address_coverage` 已接入 reference fanout；真实 RTL directed case 的目标
+  bin/cross 命中证据尚未生成。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

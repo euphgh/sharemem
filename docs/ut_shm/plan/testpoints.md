@@ -27,18 +27,20 @@ spec 要求的激励、观察和 coverage，再记录当前 sequence、checker �
 |待确认|Spec 本身仍需设计确认|
 |受限支持|只有满足额外合法性条件的子场景有定义，其余行为未定义|
 
-当前没有 functional coverage，因此本文没有 testpoint 可标记为“已闭环”。表格中的
-“目标 coverage”是后续实现要求，不表示已有 covergroup。
+当前只实现了第一批双 gid 的 address/reference 和 reservation functional coverage 基础；
+其他 testpoint 仍缺少对应 covergroup，已实现项也尚未保存真实 RTL directed case 的目标
+bin 命中证据，因此本文仍没有 testpoint 可标记为“已闭环”。本批暂不要求全项目 coverage
+merge 或总百分比阈值。
 
 ## 2. Testpoint 总览
 
 |领域|Testpoint|当前结论|
 |---|---|---|
 |Creq/ack|`TP-CREQ-001`～`005`、`TP-ACK-001`|credit、tmsk、四态、priority 和完整 ack 检查均不完整|
-|数据路径|`TP-DATA-001`～`004`|双 gid V2M/M2V、reference 和 scoreboard 正向主路径已通过 109-case 真实 RTL 回归，边界定向和 coverage 未完成|
-|地址模型|`TP-ADDR-001`～`009`|BLK group-relative MADDR 的公式、边界和 RTL 回归已通过；其他 space 边界与 functional coverage 未完成|
+|数据路径|`TP-DATA-001`～`004`|双 gid正向主路径和reference隔离组件测试通过；真实RTL边界定向与完整coverage未完成|
+|地址模型|`TP-ADDR-001`～`009`|BLK公式/回归和双gid物理公式组件测试通过；真实RTL边界与完整coverage未完成|
 |MEM|`TP-MEM-001`～`005`|统一 monitor、gid resolver 和模型正向主路径已通过 109-case 真实 RTL 回归；FFD_CYC 和定向负例未完成|
-|Reservation|`TP-RSV-001`～`008`|gid busy、跨gid端口规则和resolver已接入；冲突/失败路径定向和coverage未完成|
+|Reservation|`TP-RSV-001`～`008`|结构化outcome、第一批coverage和ownership/resolver组件测试已接入；完整矩阵与RTL定向未完成|
 |Reset|`TP-RST-001`～`002`|初始 reset 可避开未知采样，运行中 reset 没有统一取消状态|
 
 ## 3. Creq 与 ack
@@ -56,8 +58,8 @@ spec 要求的激励、观察和 coverage，再记录当前 sequence、checker �
 
 |ID|Spec 与验证目标|所需激励|观察点与 checker|目标 coverage|当前 case|状态与缺口|
 |---|---|---|---|---|---|---|
-|`TP-DATA-001`|[普通 V2M](../spec/creq-ack-interface.md#5-普通-v2m-与-m2v)：所有有效输入 byte 按物理 `<bank,gid,BADDR>` 写入 MEM，无效 byte 不改变存储|覆盖 ITYPE、space、DTYPE、ATYPE、mask、length、两个gid、跨 beat 和多 bank写|shmins monitor → gid-aware reference byte map → unified VLM write → scoreboard final/expired 匹配|direction=V2M × ITYPE × SPACE × DTYPE × ATYPE × gid；strobe和bank count|`v2m.lst` 的 55 个 case（54 个普通 V2M、1 个 VTRANS）已在 256-bit 接口上通过真实 RTL；没有 gid 边界定向|双 gid reference/scoreboard 正向主路径已通过全列表；coverage 和 gid 边界定向 case 缺失|
-|`TP-DATA-002`|[普通 M2V](../spec/creq-ack-interface.md#5-普通-v2m-与-m2v)：从物理 `<bank,gid,BADDR>` m-read，再按已编码 gid 内 WARP 基址的 `creq_vaddr` 写回；有效 read/write byte 不重叠|覆盖两个 gid、初始 memory、已有 V2M 写、read/write bank、vaddr 边界、byte overlap 接近但不相交及非法相交 generator case|reference `ref_banks[bank][gid]` 预测；统一 VLM resolver 为 MEM 补 gid；driver 从 `rtl_banks[bank][gid]` 返回；scoreboard 检查 v-write|M2V × ITYPE × SPACE × read gid × write gid × wpid 3/4 × byte-overlap class|`m2v.lst` 的 54 个 case 已在 256-bit 接口上通过真实 RTL；没有 gid/vaddr/hazard 边界定向|双 gid 激励、模型和 checker 正向主路径已通过全列表；coverage 和边界 case 缺失|
+|`TP-DATA-001`|[普通 V2M](../spec/creq-ack-interface.md#5-普通-v2m-与-m2v)：所有有效输入 byte 按物理 `<bank,gid,BADDR>` 写入 MEM，无效 byte 不改变存储|覆盖 ITYPE、space、DTYPE、ATYPE、mask、length、两个gid、跨 beat 和多 bank写|shmins monitor → gid-aware reference byte map → unified VLM write → scoreboard final/expired 匹配|direction=V2M × ITYPE × SPACE × DTYPE × ATYPE × gid；strobe和bank count|109-case真实RTL主路径通过；standalone reference已验证相同bank/BADDR跨gid的V2M隔离；address coverage已接入|模型和组件隔离证据已具备；真实RTL gid边界case、完整coverage和bin命中证据仍缺|
+|`TP-DATA-002`|[普通 M2V](../spec/creq-ack-interface.md#5-普通-v2m-与-m2v)：从物理 `<bank,gid,BADDR>` m-read，再按已编码 gid 内 WARP 基址的 `creq_vaddr` 写回；有效 read/write byte 不重叠|覆盖两个 gid、初始 memory、已有 V2M 写、read/write bank、vaddr 边界、byte overlap 接近但不相交及非法相交 generator case|reference `ref_banks[bank][gid]` 预测；统一 VLM resolver 为 MEM 补 gid；driver 从 `rtl_banks[bank][gid]` 返回；scoreboard 检查 v-write|M2V × ITYPE × SPACE × read gid × write gid × wpid 3/4 × byte-overlap class|109-case真实RTL主路径通过；reference跨gid读取和exact byte-overlap拒绝组件测试通过；M2V gid cross已接入|公共hazard谓词和组件证据已具备；真实RTL vaddr边界、更多overlap class和bin命中证据仍缺|
 |`TP-DATA-003`|[`CREQ-006`](../spec/creq-ack-interface.md#8-复位与检查规则)和 [VTRANS](../spec/creq-ack-interface.md#6-vtrans)：合法输入为 16×16，数据转置但地址与控制不变，使用通用 V2M write byte 语义|DTYPE 8/16 × ITYPE LDST_S/LDST_V，非零 offset、不同数据模式、全 tmsk/vmsk，并覆盖不合法方向/space/length/mask 负例|reference 的 source `[element][thread]` 与 target `[thread][element]`、reservation/MEM 完整地址、scoreboard byte 数据|DTYPE × ITYPE × source/destination index；data pattern；beat address low bits|`v2m_vtrans_test` 已通过真实 RTL，合法组合由单个 seed 随机|VTRANS 正向主路径已通过全列表；负例、coverage 和组合定向仍缺失；总体部分实现|
 |`TP-DATA-004`|[架构顺序](../environment/components/shm-scoreboard.md#4-实际-write-比对)：DUT 可乱序兑现重叠 creq，但最终 memory 必须等价于 creq 顺序执行|定向构造完全重叠、部分重叠、链式覆盖和非重叠 creq，并控制 DUT 先兑现旧值或最终值|scoreboard `wmap_final/wmap_expired`、record matched/expired/unmatched 和 `check_phase` 最终收敛|overlap class × observed order × final/expired match × final convergence|公共 case 的 64～128 周期间隔不能稳定形成 outstanding/重叠；无定向 case|激励缺失、checker 已有但缺独立定向验证，coverage 缺失、case 缺失；总体部分实现|
 
@@ -73,7 +75,7 @@ spec 要求的激励、观察和 coverage，再记录当前 sequence、checker �
 |`TP-ADDR-006`|[SPACE_BLK](../spec/address-model.md#7-space_blk)：MADDR 编码当前 group 内的 bank/warp_offs/inv_index，`wpid/wpnum` 选择 absolute group，再统一拆 gid/BADDR|wpnum 1/2/4、wpid 0/3/4/7、MADDR 0 与 `C*B*P-1/C*B*P`、absolute warp 0～7、空洞边界|独立公式与公共 helper 比对 group-relative range、逻辑 bank/warp/laddr、物理 gid/BADDR 和实际 MEM|wpnum × wpid-derived group × warp_offs × absolute warp × gid × G × bank × hole|两轮各 1248 个独立公式边界检查覆盖全部 13 个 interleave size；实际 RTL BLK regression 通过|激励、helper、reference 和 RTL 回归已完成；functional coverage 待实现|
 |`TP-ADDR-007`|[MEM beat 地址与 byte lane](../spec/address-model.md#9-mem-beat-地址与-byte-lane)：read/write beat 均允许非对齐，lane `k` 对应 `beat_addr+k`|两个 gid、低 5 bit、跨传统 32-Byte 边界、vaddr WARP首尾和 sparse strobe|memory model 按 `<bank,gid,BADDR>` 返回；scoreboard 展开逐 byte；reservation 完整地址兑现|direction × gid × address-low-bits × boundary crossing × strobe|正向随机地址已通过 109-case RTL 回归；没有 gid/跨界定向|激励和模型正向主路径已通过全列表；coverage、gid 和跨边界定向 case 缺失|
 |`TP-ADDR-008`|V2M `LDSTE_S + SPACE_WRP/BLK` 仅在排除 element 0 跨 thread 重叠写后可定义；M2V 同组合受支持|V2M 必须令每个 thread `creq_vmsk[*][0]==0` 并保证其余写地址无冲突；M2V 覆盖正常 element 0 读取|reference 单笔 overlap 检查、scoreboard 数据结果和 M2V read/writeback|direction × SPACE_WRP/BLK × element0 mask × overlap outcome|Strided item 已自动 mask V2M element 0；V2M/M2V 共 24 个叶子 case 已通过扩容后的真实 RTL 主列表|激励、checker 和系统 case 已验证；functional coverage 缺失，总体可运行未闭环；`SHMINS-007` 已关闭|
-|`TP-ADDR-009`|[逻辑到物理映射](../spec/address-model.md#8-逻辑地址到物理地址)：三种 space 共用 `gid=warp/4`、`BADDR=(warp%4)*WARP_STEP+laddr`|公式级遍历关键 bank/warp/laddr；故意构造 warp0/4 同 BADDR|独立 helper 单元测试和 reference 诊断字段|space × warp 0/3/4/7 × gid × laddr boundary|正式 helper 已由 benchmark consumer 和 109-case RTL 回归使用|helper 正向主路径已验证；独立公式测试、关键边界 case 和 coverage 缺失|
+|`TP-ADDR-009`|[逻辑到物理映射](../spec/address-model.md#8-逻辑地址到物理地址)：三种 space 共用 `gid=warp/4`、`BADDR=(warp%4)*WARP_STEP+laddr`|公式级遍历关键 bank/warp/laddr；故意构造 warp0/4 同 BADDR|独立 helper 单元测试和 reference 诊断字段|space × warp 0/3/4/7 × gid × laddr boundary|独立公式组件测试覆盖BANK 0/15、warp 0/3/4/7、laddr首尾和VTRANS wpid 3/4；address coverage已接入|公式和组件边界证据已具备；三种space的真实RTL定向case及目标cross命中证据仍缺|
 
 ## 6. MEM 接口
 
@@ -83,20 +85,20 @@ spec 要求的激励、观察和 coverage，再记录当前 sequence、checker �
 |`TP-MEM-002`|[`MEM-003`](../spec/mem-vlm-interface.md#6-检查规则)和 [写事务](../spec/mem-vlm-interface.md#22-写事务)：strobe lane写入`mem_waddr+lane`，地址允许非对齐|两个gid、full/sparse/single-lane、低5bit和跨32-Byte边界|matched memory transaction、`rtl_banks[bank][gid]`、reference byte map和scoreboard|source × gid × strobe × DTYPE × lowbits × crossing|正向随机写流量已通过 109-case RTL 回归；无 gid/strobe 定向|gid-aware 模型正向主路径已通过全列表；边界 case 和 coverage 缺失|
 |`TP-MEM-003`|[`MEM-004`](../spec/mem-vlm-interface.md#6-检查规则)：T0 read 在 `T0+RPORT_DLY` 返回，只包含 `T0+FFD_CYC-1` 及之前的重叠写|`FFD_CYC=0/1/>1`，截止前/同周期/截止后写，byte 部分重叠和多次覆盖|T0 read transaction、写事件时间、memory snapshot 和返回 data；固定延迟路径存在，FFD snapshot 缺口见 `VMEM-001`|FFD_CYC × write relative cycle × overlap class × strobe × return correctness|M2V case 使用 read service，但没有 FFD 定向 case，当前参数只有 1|激励缺失、检查/模型部分、coverage 缺失、case 缺失；总体部分实现|
 |`TP-MEM-004`|[同周期读写](../spec/mem-vlm-interface.md#25-同周期读写)及流水：不同 BANK 并行，同 BANK 可同时 read/write，每 BANK read 每拍可流水且保持顺序|连续 read、同拍多 BANK、同 BANK read/write、不同地址及重叠地址|memory monitor read/write transaction、每 BANK pending read queue、RPORT_DLY 后 data 和 M2V 最终写回|bank concurrency × pipeline depth × same-bank RW × overlap × order|公共 64～128 周期间隔不能稳定形成流水或同拍 read/write；无定向 case|激励缺失、检查部分、coverage 缺失、case 缺失；总体部分实现|
-|`TP-MEM-005`|[`VLM-012`](../spec/mem-vlm-interface.md#6-检查规则)：MEM 无 gid，只有唯一到期 reservation match 才能补全 gid并更新数据模型|正常 match、unexpected、missing、地址错误，以及两个 gid相同 BADDR 的隔离访问|resolver 的 gid/gid_valid/matched；read driver和 scoreboard只消费完全匹配事务|direction × gid × match outcome × same-BADDR-different-gid|正常 match 已通过 109-case RTL 回归；无失败路径和同 BADDR 跨 gid 定向|monitor/resolver、driver 和 scoreboard 正向主路径已验证；负例、隔离 case 和 coverage 缺失|
+|`TP-MEM-005`|[`VLM-012`](../spec/mem-vlm-interface.md#6-检查规则)：MEM 无 gid，只有唯一到期 reservation match 才能补全 gid并更新数据模型|正常 match、unexpected、missing、地址错误，以及两个 gid相同 BADDR 的隔离访问|resolver 的 gid/gid_valid/matched；read driver和 scoreboard只消费完全匹配事务|direction × gid × match outcome × same-BADDR-different-gid|109-case正常路径通过；组件测试覆盖matched gid1、unexpected和address mismatch，reference覆盖同BADDR跨gid隔离；match coverage已接入|结构化outcome和部分负例组件证据已具备；missing/双gid完整矩阵、RTL定向及bin命中证据仍缺|
 
 ## 7. VLM reservation
 
 |ID|Spec 与验证目标|所需激励|观察点与 checker|目标 coverage|当前 case|状态与缺口|
 |---|---|---|---|---|---|---|
 |`TP-RSV-001`|[`VLM-002`](../spec/mem-vlm-interface.md#6-检查规则)：req 有效时 addr/dly/gid 已知，`1<=dly<VTAB_D`|read/write、两个 write port、gid 0/1、delay边界和 addr/dly/gid XZ负例|统一 monitor X/Z 和 checker `DLY_ZERO/DLY_RANGE`|direction × port × gid × delay bins × known/XZ|正向 reservation 流量已通过 109-case RTL 回归|统一接口和 checker 正向主路径已通过全列表；coverage 和 gid/delay/XZ 定向 case 缺失|
-|`TP-RSV-002`|[`VLM-004`](../spec/mem-vlm-interface.md#6-检查规则)及 busy前移：目标 `[dly][gid][subbank]` 必须空闲并逐拍前移|两个 gid的 external/SHM busy、不同 delay/subbank，命中和非目标 slot|checker `TARGET_BUSY`、observed/final/SHM busy、record gid/due和window|direction × delay × gid × subbank × busy source × outcome|`EXTERNAL_BUSY_PERCENT=10` 的正向流量已通过 109-case RTL 回归|gid scheduler/checker 正向主路径已通过全列表；coverage 和 ownership 定向 case 缺失|
-|`TP-RSV-003`|[`VLM-005`](../spec/mem-vlm-interface.md#6-检查规则)：同 bank/direction/due仅一笔，即使gid/subbank不同；read/write独立|历史跨gid pending、同周期双write port各种gid/subbank组合、不同delay合法、同bank read/write同due合法|checker `PENDING_BANK_DUE_CONFLICT/CURRENT_BANK_DUE_CONFLICT`|direction × conflict source × same/different gid × same/different subbank × outcome|109-case 正向回归未定向制造端口冲突|checker 已实现；冲突正反例、coverage 和定向 case 缺失|
-|`TP-RSV-004`|[`MEM-005`](../spec/mem-vlm-interface.md#6-检查规则)、`VLM-006/012`：reservation 与到期 MEM 双向一一对应；record额外携带gid供MEM继承|两个gid正常兑现、missing、unexpected、提前、延后、重复和地址错误|checker错误族、matched counter、resolver gid/match status；局部抑制仍见`RSV-004`|match outcome × direction × bank × gid × timing × address relation|正常兑现已通过 109-case RTL 回归；无负向定向|checker/resolver 正向主路径已通过全列表；coverage、gid 边界和失败路径 case 缺失|
+|`TP-RSV-002`|[`VLM-004`](../spec/mem-vlm-interface.md#6-检查规则)及 busy前移：目标 `[dly][gid][subbank]` 必须空闲并逐拍前移|两个 gid的 external/SHM busy、不同 delay/subbank，命中和非目标 slot|checker `TARGET_BUSY`、observed/final/SHM busy、record gid/due和window|direction × delay × gid × subbank × busy source × outcome|109-case正向路径通过；组件测试覆盖target-gid external拒绝和other-gid external允许；admission coverage已接入|external ownership组件证据已具备；SHM ownership、delay/subbank矩阵、RTL定向和bin命中仍缺|
+|`TP-RSV-003`|[`VLM-005`](../spec/mem-vlm-interface.md#6-检查规则)：同 bank/direction/due仅一笔，即使gid/subbank不同；read/write独立|历史跨gid pending、同周期双write port各种gid/subbank组合、不同delay合法、同bank read/write同due合法|checker `PENDING_BANK_DUE_CONFLICT/CURRENT_BANK_DUE_CONFLICT`|direction × conflict source × same/different gid × same/different subbank × outcome|组件测试已覆盖同bank/due双write-port current conflict，结构化outcome和coverage已接入|current conflict已有组件证据；pending历史冲突、组合矩阵、合法对照、RTL定向和bin命中仍缺|
+|`TP-RSV-004`|[`MEM-005`](../spec/mem-vlm-interface.md#6-检查规则)、`VLM-006/012`：reservation 与到期 MEM 双向一一对应；record额外携带gid供MEM继承|两个gid正常兑现、missing、unexpected、提前、延后、重复和地址错误|checker错误族、matched counter、resolver gid/match status；局部抑制仍见`RSV-004`|match outcome × direction × bank × gid × timing × address relation|109-case正常路径通过；组件测试覆盖matched、unexpected和address mismatch，结构化outcome和coverage已接入|部分正常/负例组件证据已具备；missing/时序/重复/双gid矩阵、RTL定向和bin命中仍缺|
 |`TP-RSV-005`|[`VLM-003`](../spec/mem-vlm-interface.md#6-检查规则)、`VLM-007`：read/write reservation 均允许非对齐，并由完全相同的 MEM 完整地址兑现|read/write、两个 write port、低 5 bit 为 0/非零，以及只改变低位的 mismatch|reservation checker 完整地址比较；scheduler 保留所有地址位|direction × port × address-low-bits × match result|reservation 定向例覆盖非对齐地址原样兑现和低位 mismatch|激励和检查已有、coverage 缺失；总体部分实现|
 |`TP-RSV-006`|[`VLM-008`](../spec/mem-vlm-interface.md#6-检查规则)：不同bank可共享同direction/delay/gid/subbank slot；read/write独立|至少两个bank共享完整slot，同bank read/write同due及ownership对照|checker按gid/subbank跨bank OR reduction|bank multiplicity × direction × delay × gid × subbank × shared|109-case 正向回归使用 gid-aware busy，但不保证命中共享 slot|跨 bank OR-reduction 已实现；共享 slot 定向 case 和 coverage 缺失|
-|`TP-RSV-007`|[`VLM-010`](../spec/mem-vlm-interface.md#6-检查规则)：other-gid external busy允许，other-gid同bank/due DUT record阻塞|对同一候选交替构造两种busy所有者，并覆盖不同bank对照|scheduler ownership与checker target/pending判定|direction × candidate gid × other-gid source × same/different bank × outcome|109-case 回归以 10% external busy 运行，但未定向区分两种所有者|scheduler/checker ownership 逻辑已实现；受控对照 case 和 coverage 缺失|
-|`TP-RSV-008`|[`VLM-012`](../spec/mem-vlm-interface.md#6-检查规则)：到期record为MEM恢复唯一gid|两个gid相同地址正常兑现，及unexpected/missing/address mismatch|resolver result、memory transaction metadata和可信模型是否更新|direction × gid × match outcome × address relation|正常兑现已通过 109-case RTL 回归；无同地址隔离和负向定向|resolver 正向主路径已验证；隔离、失败路径 case 和 coverage 缺失|
+|`TP-RSV-007`|[`VLM-010`](../spec/mem-vlm-interface.md#6-检查规则)：other-gid external busy允许，other-gid同bank/due DUT record阻塞|对同一候选交替构造两种busy所有者，并覆盖不同bank对照|scheduler ownership与checker target/pending判定|direction × candidate gid × other-gid source × same/different bank × outcome|组件测试已证明target-gid external拒绝、other-gid external允许；ownership cross已接入|external所有权对照已具备；other-gid SHM pending和different-bank对照、RTL定向及bin命中仍缺|
+|`TP-RSV-008`|[`VLM-012`](../spec/mem-vlm-interface.md#6-检查规则)：到期record为MEM恢复唯一gid|两个gid相同地址正常兑现，及unexpected/missing/address mismatch|resolver result、memory transaction metadata和可信模型是否更新|direction × gid × match outcome × address relation|组件测试覆盖gid1正常恢复、unexpected和address mismatch；reference覆盖相同BADDR跨gid隔离；match cross已接入|部分resolver与隔离组件证据已具备；gid0/1完整矩阵、missing、agent发布元数据、RTL定向及bin命中仍缺|
 
 ## 8. Reset
 
@@ -109,18 +111,20 @@ spec 要求的激励、观察和 coverage，再记录当前 sequence、checker �
 
 ### 9.1 有 case，但覆盖证据不足
 
-- V2M/M2V 矩阵能固定 direction、ITYPE、SPACE、DTYPE 和 ATYPE_W，但没有 functional
-  coverage，无法证明随机的 length、mask、inv_size、wpnum、ack、priority、地址边界和
-  reservation 场景已经出现。
+- V2M/M2V 矩阵能固定 direction、ITYPE、SPACE、DTYPE 和 ATYPE_W；第一批 address 和
+  reservation coverage 已接入，但尚无真实 RTL directed run 的目标 bin 命中证据，且
+  length、mask、ack、priority 等仍无 coverage。
 - VTRANS 只有一个 case，虽然 `creq_tmsk` 已约束全 1，DTYPE 与 ITYPE 组合仍由 seed 决定。
 - V2M/M2V `LDSTE_S + SPACE_WRP/BLK` 的 24 个 case 已进入 regression，并随
-  109-case 主列表通过真实 RTL 运行；functional coverage 仍未实现。
+  109-case 主列表通过真实 RTL 运行；本批 address collector 已接入，但对应 target cross
+  尚未形成可保存的命中证据。
 
 ### 9.2 Spec 有要求，但当前没有定向 case
 
 - credit 压力、ack 错误、四态输入、thread mask、priority、地址空洞、非零 WARP group；
 - FFD_CYC、流水 read、同拍 read/write；
-- reservation 冲突、跨 BANK 共享 slot、负向匹配；
+- reservation 完整冲突矩阵、跨 BANK 共享 slot 和真实 RTL 负向匹配；纯 checker 组件已
+  覆盖部分 ownership/current-conflict/unexpected/address-mismatch 场景；
 - 运行中 reset 和所有 pending-state 取消。
 
 ### 9.3 Checker 或模型缺口

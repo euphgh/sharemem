@@ -230,6 +230,10 @@ function void vlm_reservation_checker::initialize_result(ref vlm_reservation_che
       result.mem_gid[direction][bank] = '0;
       result.mem_gid_valid[direction][bank] = 1'b0;
       result.mem_reservation_matched[direction][bank] = 1'b0;
+      result.mem_match_outcome[direction][bank] = '0;
+      for (int unsigned port = 0; port < WRITE_PORT_N; port++) begin
+        result.reservation_outcome[direction][bank][port] = '0;
+      end
     end
   end
 endfunction : initialize_result
@@ -393,9 +397,11 @@ function bit vlm_reservation_checker::check_reservation_request(
   vlm_rsv_req prev_rsv;
 
   request_is_valid = 1'b1;
+  result.reservation_outcome[direction][bank][write_port].present = 1'b1;
 
   // The current verification profile reports dly zero and excludes it from normal scheduling.
   if (rsv.delay == 0) begin
+    result.reservation_outcome[direction][bank][write_port].dly_zero = 1'b1;
     result.dly_zero_error_count++;
     dly_zero_error_count++;
     `uvm_error("VLM_RESERVATION_DLY_ZERO",
@@ -406,6 +412,7 @@ function bit vlm_reservation_checker::check_reservation_request(
 
   // An out-of-range delay cannot safely index scheduler busy or record state.
   if (rsv.delay >= VTAB_D) begin
+    result.reservation_outcome[direction][bank][write_port].dly_range = 1'b1;
     result.reservation_error_count++;
     reservation_error_count++;
     `uvm_error("VLM_RESERVATION_DLY_RANGE",
@@ -422,6 +429,7 @@ function bit vlm_reservation_checker::check_reservation_request(
   // A request is illegal when either reliable observed busy or authoritative scheduler ownership is occupied.
   if (observed_target_busy || owned_target_busy) begin
     request_is_valid = 1'b0;
+    result.reservation_outcome[direction][bank][write_port].target_busy = 1'b1;
     result.reservation_error_count++;
     reservation_error_count++;
     `uvm_error("VLM_RESERVATION_TARGET_BUSY",
@@ -434,6 +442,7 @@ function bit vlm_reservation_checker::check_reservation_request(
   // A pending record at the same direction, delay, and BANK would require a second actual MEM port.
   if (scheduler.shm_records[direction][rsv.delay][bank] != null) begin
     request_is_valid = 1'b0;
+    result.reservation_outcome[direction][bank][write_port].pending_bank_due_conflict = 1'b1;
     result.reservation_error_count++;
     reservation_error_count++;
     `uvm_error("VLM_RESERVATION_PENDING_BANK_DUE_CONFLICT",
@@ -449,6 +458,7 @@ function bit vlm_reservation_checker::check_reservation_request(
       // Two write reservations for one BANK may coexist only when their due cycles differ.
       if (prev_rsv != null && prev_rsv.delay == rsv.delay) begin
         request_is_valid = 1'b0;
+        result.reservation_outcome[direction][bank][write_port].current_bank_due_conflict = 1'b1;
         result.reservation_error_count++;
         reservation_error_count++;
         `uvm_error("VLM_RESERVATION_CURRENT_BANK_DUE_CONFLICT",
@@ -459,6 +469,7 @@ function bit vlm_reservation_checker::check_reservation_request(
     end
   end
 
+  result.reservation_outcome[direction][bank][write_port].accepted = request_is_valid;
   return request_is_valid;
 endfunction : check_reservation_request
 
@@ -495,6 +506,9 @@ function void vlm_reservation_checker::check_mem_request_pair(
   int unsigned sub_bank;
   longint unsigned rec_due_cycle;
 
+  result.mem_match_outcome[direction][bank].request_present = req != null;
+  result.mem_match_outcome[direction][bank].record_present = rec != null;
+
   // No actual request and no due record is the idle, matched state for this direction and BANK.
   if (req == null && rec == null) begin
     return;
@@ -502,6 +516,7 @@ function void vlm_reservation_checker::check_mem_request_pair(
 
   // A fully known actual MEM request without a due record is always an unreserved access.
   if (req != null && rec == null) begin
+    result.mem_match_outcome[direction][bank].unexpected = 1'b1;
     result.mem_match_error_count++;
     mem_match_error_count++;
     `uvm_error("VLM_RESERVATION_UNEXPECTED_MEM",
@@ -513,6 +528,7 @@ function void vlm_reservation_checker::check_mem_request_pair(
   // With a cycle-level input_error, null cannot reliably prove that this BANK produced no MEM request.
   if (req == null && rec != null) begin
     if (!txn.input_error) begin
+      result.mem_match_outcome[direction][bank].missing = 1'b1;
       result.mem_match_error_count++;
       mem_match_error_count++;
       `uvm_error("VLM_RESERVATION_MISSING_MEM",
@@ -530,6 +546,7 @@ function void vlm_reservation_checker::check_mem_request_pair(
   if (!scheduler.shm_busy[direction][0][rec.gid][sub_bank] ||
       scheduler.external_busy[direction][0][rec.gid][sub_bank]) begin
     request_matches = 1'b0;
+    result.mem_match_outcome[direction][bank].busy_error = 1'b1;
     result.mem_match_error_count++;
     mem_match_error_count++;
     `uvm_error("VLM_RESERVATION_MEM_BUSY",
@@ -540,6 +557,7 @@ function void vlm_reservation_checker::check_mem_request_pair(
   // BANK and direction match structurally; compare every address bit without beat alignment or masking.
   if (req.address != rec.address) begin
     request_matches = 1'b0;
+    result.mem_match_outcome[direction][bank].address_mismatch = 1'b1;
     result.mem_match_error_count++;
     mem_match_error_count++;
     `uvm_error("VLM_RESERVATION_MEM_ADDRESS",
@@ -550,6 +568,7 @@ function void vlm_reservation_checker::check_mem_request_pair(
   // A delay-zero array position is a due match only when the immutable issue equation reaches txn.cycle.
   if (rec_due_cycle != txn.cycle) begin
     request_matches = 1'b0;
+    result.mem_match_outcome[direction][bank].due_cycle_mismatch = 1'b1;
     result.mem_match_error_count++;
     mem_match_error_count++;
     `uvm_error("VLM_RESERVATION_MEM_DUE_CYCLE",
@@ -558,6 +577,7 @@ function void vlm_reservation_checker::check_mem_request_pair(
   end
 
   if (request_matches) begin
+    result.mem_match_outcome[direction][bank].matched = 1'b1;
     result.mem_gid[direction][bank] = rec.gid;
     result.mem_gid_valid[direction][bank] = 1'b1;
     result.mem_reservation_matched[direction][bank] = 1'b1;

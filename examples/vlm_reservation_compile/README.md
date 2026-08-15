@@ -41,3 +41,21 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh external-busy
 
 This passes `+EXTERNAL_BUSY_PERCENT=100`, confirms that it overrides the test
 config value, and checks that both interface busy tables are driven high.
+
+Run the dual-gid ownership and MEM resolver contract test with:
+
+```sh
+scripts/ubuntu/check_vlm_reservation_vcs.sh gid-contract
+```
+
+This test checks structured admission/match outcomes for target-gid and
+other-gid external busy, same-bank/due write-port conflict, normal gid
+resolution, unexpected MEM, and address mismatch. Expected negative reports
+are matched by ID and exact count. The outcomes are diagnostic and coverage
+metadata only; they do not control request admission or RTL outputs.
+
+Run all component targets with:
+
+```sh
+scripts/ubuntu/check_vlm_reservation_vcs.sh all
+```

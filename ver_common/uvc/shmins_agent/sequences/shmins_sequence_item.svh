@@ -363,6 +363,18 @@ class shmins_sequence_item extends uvm_sequence_item;
   extern function bit generate_m2v_writeback_address();
 
   //----------------------------------------------------------------------------
+  // @brief Checks one M2V writeback BADDR against range and read-byte hazards.
+  //
+  // The comparison uses complete <BANK,gid,BADDR> byte keys. Adjacent bytes and
+  // equal BADDR values in different gids therefore remain legal.
+  //
+  // @param candidate_vaddr Candidate first-byte BADDR for vector writeback.
+  // @return 1 when the complete active writeback is in-range and byte-disjoint
+  //         from all active read addresses; otherwise 0.
+  //----------------------------------------------------------------------------
+  extern function bit legal_m2v_writeback_address(logic [BADDR_W-1:0] candidate_vaddr);
+
+  //----------------------------------------------------------------------------
   // @brief Returns whether this transaction requires physical byte uniqueness.
   //
   // @return 1 for V2M or explicitly enabled M2V uniqueness; otherwise 0.
@@ -871,7 +883,6 @@ function bit shmins_sequence_item::populate_element_addresses();
 endfunction : populate_element_addresses
 
 function bit shmins_sequence_item::generate_m2v_writeback_address();
-  bit read_bytes[longint unsigned];
   int unsigned warp_base;
   int unsigned candidate_span;
   int unsigned random_start;
@@ -880,52 +891,64 @@ function bit shmins_sequence_item::generate_m2v_writeback_address();
     return 1'b1;
   end
 
-  for (int thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
-    for (int elem_idx = 0; elem_idx < thread_elem_cnt(thread_idx) && elem_idx < ELEM_MAX_N; elem_idx++) begin
-      if (!is_active_element(thread_idx, elem_idx)) begin
-        continue;
-      end
-      for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
-        shm_physical_addr_t byte_addr = elem_physical_addr[thread_idx][elem_idx];
-        byte_addr.baddr += shm_baddr_t'(byte_lane);
-        read_bytes[make_physical_byte_key(byte_addr)] = 1'b1;
-      end
-    end
-  end
-
   warp_base = (int'(creq_wpid) % WARP_PER_GID) * WARP_STEP;
   candidate_span = WARP_STEP - VEC_BYTE_N + 1;
   random_start = $urandom_range(candidate_span - 1, 0);
   for (int unsigned attempt = 0; attempt < candidate_span; attempt++) begin
     int unsigned candidate = warp_base + ((random_start + attempt) % candidate_span);
-    bit overlaps = 1'b0;
-
-    for (int thread_idx = 0; thread_idx < THD_N && !overlaps; thread_idx++) begin
-      for (int elem_idx = 0; elem_idx < thread_elem_cnt(thread_idx) && elem_idx < ELEM_MAX_N && !overlaps;
-           elem_idx++) begin
-        if (!is_active_element(thread_idx, elem_idx)) begin
-          continue;
-        end
-        for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
-          shm_physical_addr_t write_addr;
-
-          write_addr.bank_id = shm_bank_id_t'(thread_idx);
-          write_addr.gid = shm_gid_t'(int'(creq_wpid) / WARP_PER_GID);
-          write_addr.baddr = shm_baddr_t'(candidate + elem_idx * data_byte_w() + byte_lane);
-          if (read_bytes.exists(make_physical_byte_key(write_addr))) begin
-            overlaps = 1'b1;
-            break;
-          end
-        end
-      end
-    end
-    if (!overlaps) begin
+    if (legal_m2v_writeback_address(shm_baddr_t'(candidate))) begin
       creq_vaddr = shm_baddr_t'(candidate);
       return 1'b1;
     end
   end
   return 1'b0;
 endfunction : generate_m2v_writeback_address
+
+function bit shmins_sequence_item::legal_m2v_writeback_address(logic [BADDR_W-1:0] candidate_vaddr);
+  bit read_bytes[longint unsigned];
+  int unsigned warp_base;
+
+  if (creq_rw != SHM_M2V) begin
+    return 1'b1;
+  end
+
+  warp_base = (int'(creq_wpid) % WARP_PER_GID) * WARP_STEP;
+  if (int'(candidate_vaddr) < warp_base || int'(candidate_vaddr) + VEC_BYTE_N > warp_base + WARP_STEP) begin
+    return 1'b0;
+  end
+
+  for (int thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
+    for (int elem_idx = 0; elem_idx < thread_elem_cnt(thread_idx) && elem_idx < ELEM_MAX_N; elem_idx++) begin
+      if (!is_active_element(thread_idx, elem_idx)) begin
+        continue;
+      end
+      for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
+        shm_physical_addr_t read_addr = elem_physical_addr[thread_idx][elem_idx];
+        read_addr.baddr += shm_baddr_t'(byte_lane);
+        read_bytes[make_physical_byte_key(read_addr)] = 1'b1;
+      end
+    end
+  end
+
+  for (int thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
+    for (int elem_idx = 0; elem_idx < thread_elem_cnt(thread_idx) && elem_idx < ELEM_MAX_N; elem_idx++) begin
+      if (!is_active_element(thread_idx, elem_idx)) begin
+        continue;
+      end
+      for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
+        shm_physical_addr_t write_addr;
+
+        write_addr.bank_id = shm_bank_id_t'(thread_idx);
+        write_addr.gid = shm_gid_t'(int'(creq_wpid) / WARP_PER_GID);
+        write_addr.baddr = shm_baddr_t'(int'(candidate_vaddr) + elem_idx * data_byte_w() + byte_lane);
+        if (read_bytes.exists(make_physical_byte_key(write_addr))) begin
+          return 1'b0;
+        end
+      end
+    end
+  end
+  return 1'b1;
+endfunction : legal_m2v_writeback_address
 
 function bit shmins_sequence_item::uniqueness_required();
   return creq_rw == SHM_V2M || m2v_unique_enable;
@@ -1223,6 +1246,12 @@ function void shmins_sequence_item::validate_transaction();
         end
       end
     end
+  end
+
+  if (creq_rw == SHM_M2V && !legal_m2v_writeback_address(creq_vaddr)) begin
+    validation_error_count++;
+    `uvm_error("SHMINS_SPLIT_M2V_WRITEBACK",
+               $sformatf("creq_vaddr=0x%0h is out of range or overlaps an active read byte", creq_vaddr))
   end
 
   if (validation_error_count != 0) begin

@@ -31,6 +31,7 @@ package shm_env_package;
   `include "shm_environment_config.svh"
   `include "shm_physical_map_util.svh"
   `include "shm_reference.svh"
+  `include "shm_address_coverage.svh"
   `include "shm_scoreboard.svh"
   `include "shm_transaction_lifecycle_checker.svh"
   `include "shm_environment.svh"

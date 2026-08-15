@@ -13,7 +13,8 @@ usage() {
   compile  编译 split sequence item 和 shmins_mst_unit_sequence，不包含 DUT
   copy     编译并运行 sequence-item copy/compare 组件测试
   lifecycle 编译并运行 ordered ack-grace lifecycle 组件测试
-  all      依次执行 compile、copy 和 lifecycle
+  dual-gid-address 编译并运行双 gid 地址与 M2V byte-hazard 组件测试
+  all      依次执行 compile、copy、lifecycle 和 dual-gid-address
   clean    删除本 example 的 build 目录
 
 环境变量：
@@ -35,7 +36,7 @@ case "$target" in
         usage
         exit 0
         ;;
-    compile | copy | lifecycle | all | clean)
+    compile | copy | lifecycle | dual-gid-address | all | clean)
         ;;
     *)
         printf '错误：未知目标：%s\n' "$target" >&2
@@ -199,6 +200,33 @@ run_lifecycle_test() {
     )
 }
 
+run_dual_gid_address_test() {
+    local simv="$build_dir/dual_gid_address_simv"
+    local address_tb="$example_dir/dual_gid_address_tb.sv"
+
+    if ! command -v -- "$vcs_bin" >/dev/null 2>&1; then
+        printf '错误：找不到 VCS 可执行文件：%s\n' "$vcs_bin" >&2
+        exit 2
+    fi
+    if [[ ! -f "$utility_package" || ! -f "$address_tb" ]]; then
+        printf '错误：缺少 SHMINS dual-gid address 测试输入\n' >&2
+        exit 2
+    fi
+
+    mkdir -p -- "$build_dir"
+    printf 'Ubuntu VCS：编译并运行 SHMINS dual-gid address 组件测试\n'
+    (
+        cd -- "$build_dir"
+        "$vcs_bin" -full64 -sverilog -ntb_opts "$uvm_version" -timescale=1ns/1ps \
+            "+incdir+$repo_root/ut_shm/util" "+incdir+$sequence_dir" \
+            "$utility_package" "$address_tb" "$@" \
+            -top shmins_dual_gid_address_tb -o "$simv" -l dual_gid_address_compile.log
+        "$simv" -l dual_gid_address_test.log
+        check_uvm_test_log dual_gid_address_test.log \
+            '[SHMINS_DUAL_GID_ADDRESS_TEST] dual-gid address and M2V byte-hazard component test: PASS'
+    )
+}
+
 case "$target" in
     compile)
         compile_empty_design "$@"
@@ -209,10 +237,14 @@ case "$target" in
     lifecycle)
         run_lifecycle_test "$@"
         ;;
+    dual-gid-address)
+        run_dual_gid_address_test "$@"
+        ;;
     all)
         compile_empty_design "$@"
         run_copy_test "$@"
         run_lifecycle_test "$@"
+        run_dual_gid_address_test "$@"
         ;;
     clean)
         rm -rf -- "$build_dir"
