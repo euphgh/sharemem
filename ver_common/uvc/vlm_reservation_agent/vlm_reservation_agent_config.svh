@@ -17,6 +17,9 @@ class vlm_reservation_agent_config extends uvm_object;
   // Percentage probability applied independently to every free external busy slot.
   int unsigned EXTERNAL_BUSY_PERCENT;
 
+  // Optional deterministic policy; when non-null it replaces percentage-based generation.
+  vlm_reservation_external_busy_policy external_busy_policy;
+
   //------------------------------------------------------------------------------
   // @brief Constructs an agent configuration object with default settings.
   //
@@ -38,6 +41,7 @@ endclass : vlm_reservation_agent_config
 function vlm_reservation_agent_config::new(string name = "vlm_reservation_agent_config");
   super.new(name);
   EXTERNAL_BUSY_PERCENT = 0;
+  external_busy_policy = null;
 endfunction : new
 
 function bit vlm_reservation_agent_config::validate();

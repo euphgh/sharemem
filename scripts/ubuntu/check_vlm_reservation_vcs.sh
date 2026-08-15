@@ -13,8 +13,10 @@ usage() {
   compile        联合编译 reservation agent、memory agent 和 RpuShmTop stub
   alignment      编译并运行 reservation alignment 职责边界与完整地址定向测试
   external-busy  编译并运行 external busy plusarg 定向测试
+  directed-busy  编译并运行 deterministic external busy policy 组件测试
   gid-contract   编译并运行双 gid ownership/resolver 定向测试
-  all            依次执行以上四个目标
+  agent-metadata 编译并运行 unmatched MEM metadata 组件测试
+  all            依次执行以上六个目标
   clean          删除本脚本生成的 build 目录
 
 环境变量：
@@ -40,7 +42,7 @@ case "$target" in
         usage
         exit 0
         ;;
-    compile | alignment | external-busy | gid-contract | all | clean)
+    compile | alignment | external-busy | directed-busy | gid-contract | agent-metadata | all | clean)
         ;;
     *)
         printf '错误：未知目标：%s\n' "$target" >&2
@@ -181,6 +183,34 @@ run_external_busy() {
     )
 }
 
+run_directed_busy() {
+    local simv="$build_dir/directed_busy_policy_simv"
+
+    prepare_build
+    require_file "$example_dir/directed_busy_policy_tb.sv"
+
+    printf 'Ubuntu VCS：编译并运行 deterministic external busy policy 组件测试\n'
+    (
+        cd -- "$build_dir"
+        "${vcs_common[@]}" \
+            "$utility_package" \
+            "$clock_interface" \
+            "$example_dir/directed_busy_policy_tb.sv" \
+            "${vcs_extra[@]}" \
+            -top directed_busy_policy_tb \
+            -o "$simv" \
+            -l directed_busy_policy_compile.log
+        "$simv" -l directed_busy_policy_test.log
+        if grep -Eq 'UVM_(ERROR|FATAL)' directed_busy_policy_test.log ||
+           ! grep -Fq '[VLM_DIRECTED_BUSY_POLICY_TEST] deterministic external-busy policy component test: PASS' \
+             directed_busy_policy_test.log; then
+            printf '错误：deterministic external busy policy 组件测试未通过\n' >&2
+            tail -n 100 directed_busy_policy_test.log >&2
+            return 1
+        fi
+    )
+}
+
 run_gid_contract() {
     local simv="$build_dir/gid_contract_simv"
 
@@ -211,6 +241,33 @@ run_gid_contract() {
     )
 }
 
+run_agent_metadata() {
+    local simv="$build_dir/agent_metadata_simv"
+
+    prepare_build
+    require_file "$vlm_interface"
+    require_file "$example_dir/agent_metadata_tb.sv"
+    require_file "$repo_root/examples/common/shm_expected_report_catcher.svh"
+
+    printf 'Ubuntu VCS：编译并运行 unmatched MEM metadata 组件测试\n'
+    (
+        cd -- "$build_dir"
+        "${vcs_common[@]}" \
+            "+incdir+$repo_root/examples/common" \
+            "$utility_package" \
+            "$clock_interface" \
+            "$vlm_interface" \
+            "$example_dir/agent_metadata_tb.sv" \
+            "${vcs_extra[@]}" \
+            -top agent_metadata_tb \
+            -o "$simv" \
+            -l agent_metadata_compile.log
+        "$simv" -l agent_metadata_test.log
+        check_uvm_test_log agent_metadata_test.log \
+            '[VLM_AGENT_METADATA_TEST] unmatched MEM metadata component test: PASS'
+    )
+}
+
 clean_build() {
     rm -rf -- "$build_dir"
     printf '已删除：%s\n' "$build_dir"
@@ -226,14 +283,22 @@ case "$target" in
     external-busy)
         run_external_busy
         ;;
+    directed-busy)
+        run_directed_busy
+        ;;
     gid-contract)
         run_gid_contract
+        ;;
+    agent-metadata)
+        run_agent_metadata
         ;;
     all)
         compile_integration
         run_alignment
         run_external_busy
+        run_directed_busy
         run_gid_contract
+        run_agent_metadata
         ;;
     clean)
         clean_build

@@ -7,6 +7,7 @@ package vlm_compile_test_pkg;
   `include "uvm_macros.svh"
   `include "vlm_memory_sequence_item.svh"
   `include "vlm_reservation_types.svh"
+  `include "vlm_reservation_external_busy_policy.svh"
   `include "vlm_reservation_agent_config.svh"
   `include "vlm_reservation_scheduler.svh"
   `include "vlm_reservation_checker.svh"

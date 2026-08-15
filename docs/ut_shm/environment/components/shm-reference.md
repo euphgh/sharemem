@@ -111,9 +111,10 @@ item 在真实 design 上通过当时 `shm.lst` 的全部 85 个 case。2026-08-
 
 同日新增 `examples/shm_reference_compile/gid_isolation_tb.sv`。它使用不同 byte pattern
 写入物理 bank/BADDR 相同、gid 分别为 0/1 的 reference memory，检查 flattened wmap key
-不合并，并从两个 gid 分别执行 M2V readback。远端
-`scripts/ubuntu/check_shm_reference_vcs.sh` 通过且 0 error/fatal。该组件结果证明 expected
-model 的 gid 隔离，不替代 VTRANS 转置、M2V vaddr 边界和真实 RTL directed case。
+不合并，并从两个 gid 分别执行 M2V readback。2026-08-15 P0-1 扩展后，测试还逐 byte
+检查 VTRANS wpid 3/4 的 16×16 转置，并验证 M2V wpid 3/4 的 writeback gid 和已编码
+`creq_vaddr`。远端 `scripts/ubuntu/check_shm_reference_vcs.sh` 通过且 0 error/fatal。该组件
+结果证明 expected model 的 gid 隔离和 reference contract，不替代真实 RTL directed case。
 
 ## 10. 开发 contract
 
@@ -139,7 +140,7 @@ model 的 gid 隔离，不替代 VTRANS 转置、M2V vaddr 边界和真实 RTL d
   已通过，2026-08-13 关闭。
 - `ENV-001`：运行中 reset 未重建 `ref_banks` 或取消旧期望。
 - 双 gid reference memory、wmap 和 M2V 写回正向主路径已通过 109-case 真实 RTL 回归；
-  同 BADDR 跨 gid 的 V2M/M2V reference 隔离组件测试已通过。VTRANS 转置、M2V vaddr
-  边界和真实 RTL wpid 3/4 定向证据仍缺。
+  同 BADDR 跨 gid 的 V2M/M2V 隔离、VTRANS wpid 3/4 转置和 M2V wpid 3/4 writeback
+  组件测试已通过。真实 RTL wpid 3/4 定向和目标 coverage bin 命中证据仍缺。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

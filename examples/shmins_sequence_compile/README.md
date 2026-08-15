@@ -31,12 +31,16 @@ channel retire, that ack-disabled predecessors still participate in ordering,
 that V2M and M2V do not block each other, and that an early young ack is recorded
 without an out-of-order error.
 
-Run the dual-gid physical-address, VTRANS wpid 3/4, and M2V byte-hazard
-component test with:
+Run the LOC/WRP/BLK dual-gid physical-address, VTRANS wpid 3/4, and M2V
+byte-hazard component test with:
 
 ```sh
 scripts/ubuntu/check_shmins_sequence_vcs.sh dual-gid-address
 ```
+
+The hazard scenarios distinguish exact and one-byte overlap, adjacent ranges,
+disjoint bytes in one 32-byte beat, equal BANK/BADDR in different gids, and
+both ends of the gid-local WARP writeback range.
 
 Run all four targets with:
 

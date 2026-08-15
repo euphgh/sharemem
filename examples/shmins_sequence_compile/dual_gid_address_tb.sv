@@ -41,6 +41,14 @@ package shmins_dual_gid_address_test_pkg;
                                                           int unsigned warp,
                                                           int unsigned laddr);
 
+    //----------------------------------------------------------------------------
+    // @brief Checks one contiguous space at a fixed low/high gid boundary wpid.
+    //
+    // @param space Address space selected for procedural MADDR generation.
+    // @param wpid  Absolute warp expected in every active mapped element.
+    //----------------------------------------------------------------------------
+    extern protected function void check_contiguous_space_wpid(creq_space_e space, int unsigned wpid);
+
     `uvm_component_utils(shmins_dual_gid_address_test)
   endclass : shmins_dual_gid_address_test
 
@@ -71,6 +79,33 @@ package shmins_dual_gid_address_test_pkg;
     end
   endfunction : check_logical_address
 
+  function void shmins_dual_gid_address_test::check_contiguous_space_wpid(
+      creq_space_e space,
+      int unsigned wpid);
+    shmins_contiguous_sequence_item item;
+
+    item = shmins_contiguous_sequence_item::type_id::create($sformatf("space_%0d_wpid_%0d", space, wpid));
+    if (!item.randomize() with {
+          creq_rw == SHM_V2M;
+          creq_dtype == DTYP_8;
+          creq_itype == LDST_S;
+          creq_space == space;
+          creq_wpid == wpid;
+          creq_wpnum == 1;
+          creq_tmsk == 16'h0001;
+          elem_num[0] == 1;
+          creq_vmsk[0][0] == 1'b1;
+        }) begin
+      `uvm_fatal("SHMINS_DUAL_GID_SPACE_RANDOMIZE",
+                 $sformatf("failed to randomize space %0d wpid %0d", space, wpid))
+    end
+    if (item.elem_logical_addr[0][0].warp_id != wpid || item.elem_physical_addr[0][0].gid != wpid / 4) begin
+      `uvm_fatal("SHMINS_DUAL_GID_SPACE_MAP",
+                 $sformatf("space %0d wpid %0d mapped to logical warp %0d gid %0d", space, wpid,
+                           item.elem_logical_addr[0][0].warp_id, item.elem_physical_addr[0][0].gid))
+    end
+  endfunction : check_contiguous_space_wpid
+
   task shmins_dual_gid_address_test::run_phase(uvm_phase phase);
     shmins_contiguous_sequence_item m2v_item;
     shmins_vtrans_sequence_item vtrans_low_item;
@@ -78,6 +113,11 @@ package shmins_dual_gid_address_test_pkg;
     shm_logical_addr_t invalid_logical;
     shm_physical_addr_t physical_addr;
     bit found_overlap_candidate;
+    int unsigned one_byte_overlap_candidate;
+    int unsigned adjacent_candidate;
+    int unsigned same_beat_candidate;
+    int unsigned first_candidate;
+    int unsigned last_candidate;
 
     phase.raise_objection(this);
     check_logical_address(0, 0, 0);
@@ -88,6 +128,12 @@ package shmins_dual_gid_address_test_pkg;
     check_logical_address(BANK_N - 1, 3, 0);
     check_logical_address(BANK_N - 1, 4, WARP_STEP - 1);
     check_logical_address(BANK_N - 1, 7, 0);
+    check_contiguous_space_wpid(SPACE_LOC, 3);
+    check_contiguous_space_wpid(SPACE_LOC, 4);
+    check_contiguous_space_wpid(SPACE_WRP, 3);
+    check_contiguous_space_wpid(SPACE_WRP, 4);
+    check_contiguous_space_wpid(SPACE_BLK, 3);
+    check_contiguous_space_wpid(SPACE_BLK, 4);
 
     invalid_logical = '0;
     invalid_logical.laddr = shm_warp_laddr_t'(WARP_STEP);
@@ -135,16 +181,17 @@ package shmins_dual_gid_address_test_pkg;
 
     m2v_item = shmins_contiguous_sequence_item::type_id::create("m2v_item");
     found_overlap_candidate = 1'b0;
-    for (int unsigned attempt = 0; attempt < 64 && !found_overlap_candidate; attempt++) begin
+    for (int unsigned attempt = 0; attempt < 256 && !found_overlap_candidate; attempt++) begin
       int unsigned read_baddr;
       int unsigned warp_base;
+      int unsigned warp_end;
 
       if (!m2v_item.randomize() with {
             creq_rw == SHM_M2V;
-            creq_dtype == DTYP_8;
+            creq_dtype == DTYP_32;
             creq_itype == LDST_S;
             creq_space == SPACE_LOC;
-            creq_wpid == 4;
+            creq_wpid == 3;
             creq_tmsk == 16'h0001;
             elem_num[0] == 1;
             creq_vmsk[0][0] == 1'b1;
@@ -153,7 +200,26 @@ package shmins_dual_gid_address_test_pkg;
       end
       read_baddr = m2v_item.elem_physical_addr[0][0].baddr;
       warp_base = (int'(m2v_item.creq_wpid) % WARP_PER_GID) * WARP_STEP;
-      found_overlap_candidate = read_baddr >= warp_base && read_baddr + VEC_BYTE_N <= warp_base + WARP_STEP;
+      warp_end = warp_base + WARP_STEP;
+      first_candidate = warp_base;
+      last_candidate = warp_end - VEC_BYTE_N;
+      if (read_baddr < warp_base + 4 || read_baddr + VEC_BYTE_N > warp_end) begin
+        continue;
+      end
+      one_byte_overlap_candidate = read_baddr - 3;
+      adjacent_candidate = read_baddr - 4;
+      same_beat_candidate = 0;
+      for (int unsigned candidate = warp_base; candidate <= last_candidate; candidate++) begin
+        if ((candidate >> 5) == (read_baddr >> 5) &&
+            (candidate + m2v_item.data_byte_w() <= read_baddr ||
+             read_baddr + m2v_item.data_byte_w() <= candidate)) begin
+          same_beat_candidate = candidate;
+          break;
+        end
+      end
+      found_overlap_candidate = same_beat_candidate != 0 &&
+                                m2v_item.legal_m2v_writeback_address(first_candidate) &&
+                                m2v_item.legal_m2v_writeback_address(last_candidate);
     end
     if (!m2v_item.legal_m2v_writeback_address(m2v_item.creq_vaddr)) begin
       `uvm_fatal("SHMINS_DUAL_GID_GENERATED_VADDR", "generated M2V writeback failed the reusable predicate")
@@ -164,6 +230,24 @@ package shmins_dual_gid_address_test_pkg;
     end
     if (m2v_item.legal_m2v_writeback_address(m2v_item.elem_physical_addr[0][0].baddr)) begin
       `uvm_fatal("SHMINS_DUAL_GID_OVERLAP", "exact read/write byte overlap was accepted")
+    end
+    if (m2v_item.legal_m2v_writeback_address(one_byte_overlap_candidate)) begin
+      `uvm_fatal("SHMINS_DUAL_GID_ONE_BYTE_OVERLAP", "one-byte read/write overlap was accepted")
+    end
+    if (!m2v_item.legal_m2v_writeback_address(adjacent_candidate)) begin
+      `uvm_fatal("SHMINS_DUAL_GID_ADJACENT", "adjacent byte ranges were rejected")
+    end
+    if (!m2v_item.legal_m2v_writeback_address(same_beat_candidate)) begin
+      `uvm_fatal("SHMINS_DUAL_GID_SAME_BEAT", "disjoint bytes in one 32-byte beat were rejected")
+    end
+    begin
+      shm_gid_t original_read_gid = m2v_item.elem_physical_addr[0][0].gid;
+
+      m2v_item.elem_physical_addr[0][0].gid = shm_gid_t'(1 - int'(original_read_gid));
+      if (!m2v_item.legal_m2v_writeback_address(m2v_item.elem_physical_addr[0][0].baddr)) begin
+        `uvm_fatal("SHMINS_DUAL_GID_DIFFERENT_GID", "equal BANK/BADDR in another gid was treated as overlap")
+      end
+      m2v_item.elem_physical_addr[0][0].gid = original_read_gid;
     end
 
     `uvm_info("SHMINS_DUAL_GID_ADDRESS_TEST", "dual-gid address and M2V byte-hazard component test: PASS", UVM_LOW)

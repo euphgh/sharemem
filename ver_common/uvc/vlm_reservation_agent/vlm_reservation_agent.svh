@@ -151,8 +151,17 @@ function void vlm_reservation_agent::build_phase(uvm_phase phase);
   coverage            = vlm_reservation_coverage::type_id::create("coverage", this);
   scheduler           = vlm_reservation_scheduler::type_id::create("scheduler", this);
   scheduler.external_busy_percent = configured_external_busy_percent;
+  scheduler.external_busy_policy = cfg.external_busy_policy;
 
-  `uvm_info("VLM_RESERVATION_EXTERNAL_PERCENT", $sformatf("using EXTERNAL_BUSY_PERCENT=%0d", scheduler.external_busy_percent), UVM_LOW)
+  `uvm_info("VLM_RESERVATION_EXTERNAL_PERCENT",
+            $sformatf("using EXTERNAL_BUSY_PERCENT=%0d", scheduler.external_busy_percent),
+            UVM_LOW)
+  if (scheduler.external_busy_policy != null) begin
+    `uvm_info("VLM_RESERVATION_EXTERNAL_POLICY",
+              $sformatf("using deterministic external busy policy %s",
+                        scheduler.external_busy_policy.get_type_name()),
+              UVM_LOW)
+  end
 endfunction : build_phase
 
 function void vlm_reservation_agent::connect_phase(uvm_phase phase);

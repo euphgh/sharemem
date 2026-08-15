@@ -7,7 +7,7 @@
 // Owns external busy, DUT SHM records, derived SHM busy, and final driven busy
 // for both directions. Each cycle it advances the window, admits legal known
 // reservations, and may occupy any currently free slot according to the
-// external busy percentage. It does not sample interfaces or check MEM data.
+// configured external busy policy. It does not sample interfaces or check MEM data.
 //------------------------------------------------------------------------------
 class vlm_reservation_scheduler extends uvm_component;
 
@@ -17,6 +17,9 @@ class vlm_reservation_scheduler extends uvm_component;
   // Percentage probability, from 0 through 100, applied independently to every
   // free slot across the full busy window during external busy generation.
   int unsigned external_busy_percent;
+
+  // Optional deterministic generator that takes precedence over random percentage generation.
+  vlm_reservation_external_busy_policy external_busy_policy;
 
   // External occupancy indexed by direction, relative delay, and sub bank.
   vlm_busy_table_t external_busy[VLM_RESERVATION_DIRECTION_N];
@@ -138,16 +141,17 @@ class vlm_reservation_scheduler extends uvm_component;
   extern protected function void rebuild_shm_busy();
 
   //------------------------------------------------------------------------------
-  // @brief Randomly occupies currently free external busy slots.
+  // @brief Occupies free external busy slots using the configured generation mode.
   //
-  // Applies external_busy_percent independently to every slot in the complete
-  // direction, delay, and sub-bank window. Slots already owned by external or
-  // SHM busy remain unchanged, so the two ownership tables never overlap.
+  // A non-null policy selects exact free slots for the next interface cycle.
+  // Otherwise external_busy_percent is applied independently to every slot.
+  // Existing external or SHM ownership is never overwritten.
   //
+  // @param drive_cycle Interface cycle that will observe the generated table.
   // @pre SHM busy has been rebuilt after all current reservations are admitted.
   // @post Only previously free slots may transition to external busy.
   //------------------------------------------------------------------------------
-  extern protected function void generate_external_busy();
+  extern protected function void generate_external_busy(longint unsigned drive_cycle);
 
   //------------------------------------------------------------------------------
   // @brief Rebuilds the final driven busy tables from their ownership sources.
@@ -169,6 +173,7 @@ function vlm_reservation_scheduler::new(string name = "vlm_reservation_scheduler
   super.new(name, parent);
 
   external_busy_percent         = 0;
+  external_busy_policy          = null;
   has_processed_cycle           = 1'b0;
   last_processed_cycle          = 0;
   accepted_record_count         = 0;
@@ -238,7 +243,7 @@ function void vlm_reservation_scheduler::process_cycle(
 
   // Include every newly accepted record before external busy selects from the remaining free slots.
   rebuild_shm_busy();
-  generate_external_busy();
+  generate_external_busy(txn.cycle + 1);
   rebuild_final_busy();
 
   has_processed_cycle  = 1'b1;
@@ -377,8 +382,9 @@ function void vlm_reservation_scheduler::rebuild_shm_busy();
   end
 endfunction : rebuild_shm_busy
 
-function void vlm_reservation_scheduler::generate_external_busy();
+function void vlm_reservation_scheduler::generate_external_busy(longint unsigned drive_cycle);
   int unsigned random_percent;
+  bit occupy_slot;
 
   // External read and write reservations are generated independently.
   for (int unsigned direction = 0; direction < VLM_RESERVATION_DIRECTION_N; direction++) begin
@@ -391,10 +397,15 @@ function void vlm_reservation_scheduler::generate_external_busy();
             continue;
           end
 
-          random_percent = $urandom_range(99, 0);
+          if (external_busy_policy != null) begin
+            occupy_slot = external_busy_policy.should_occupy(
+                drive_cycle, vlm_reservation_direction_e'(direction), delay, gid, sub_bank);
+          end else begin
+            random_percent = $urandom_range(99, 0);
+            occupy_slot = random_percent < external_busy_percent;
+          end
 
-          // A result below the configured percentage changes this free slot to external ownership.
-          if (random_percent < external_busy_percent) begin
+          if (occupy_slot) begin
             external_busy[direction][delay][gid][sub_bank] = 1'b1;
             generated_external_slot_count++;
           end

@@ -101,6 +101,12 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh compile +define+MY_DEBUG
 `CREQ_*` 只配置 normal domain，不配置 VTRANS。VTRANS 使用独立 domain 和子类协议
 约束，因此 normal 的 `CREQ_RW=SHM_M2V` 可以与非零 `VTRANS_EN` 合法共存。
 
+Reservation config 另提供非 plusarg API `external_busy_policy`。默认 null 时使用表中的
+`EXTERNAL_BUSY_PERCENT`；非 null 时 policy 优先，百分比随机不参与该周期的 busy 生成。
+`vlm_reservation_directed_busy_policy` 可按 inclusive drive-cycle range 和完整
+`<direction,delay,gid,sub_bank>` 构造可重复 external busy，适合 directed test。Policy
+只填充 scheduler 中仍空闲的 slot，不覆盖 SHM ownership。
+
 三个 timeout 名称都以 cycle 为单位。Scoreboard timeout 和 ack grace 是可关闭的 hang
 诊断，不是 DUT protocol latency；`TEST_DRAIN_TIMEOUT_CYCLES` 是 testcase 结束保护，触发
 时会打印仍 pending 的 scoreboard、lifecycle 和 reservation 状态。

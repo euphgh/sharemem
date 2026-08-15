@@ -54,6 +54,26 @@ resolution, unexpected MEM, and address mismatch. Expected negative reports
 are matched by ID and exact count. The outcomes are diagnostic and coverage
 metadata only; they do not control request admission or RTL outputs.
 
+Run the deterministic external-busy policy test with:
+
+```sh
+scripts/ubuntu/check_vlm_reservation_vcs.sh directed-busy
+```
+
+The policy test covers exact drive cycles, inclusive cycle ranges, scheduler
+window movement, precedence over percentage generation, and exclusion of
+SHM-owned slots.
+
+Run the unmatched MEM publication test with:
+
+```sh
+scripts/ubuntu/check_vlm_reservation_vcs.sh agent-metadata
+```
+
+This test checks config-to-scheduler policy propagation and confirms that an
+unmatched published MEM transaction keeps `gid_valid==0` and
+`reservation_matched==0`.
+
 Run all component targets with:
 
 ```sh

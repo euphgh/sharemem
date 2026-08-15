@@ -12,7 +12,8 @@ vlm_agent
 ├── vlm_monitor
 ├── vlm_reservation_checker
 ├── vlm_reservation_coverage
-└── vlm_reservation_scheduler
+├── vlm_reservation_scheduler
+└── external_busy_policy       可选的 config-owned uvm_object，不是子 component
 ```
 
 Agent 取得统一 `vlm_interface` 和共享 `clk_if`，固定创建完整层次并主动驱动 busy 与 read
@@ -31,6 +32,7 @@ agent 自身负责发布 MEM transaction 和组织 read response，因此没有�
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_monitor.svh`|四态采样和归一化|
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_checker.svh`|busy、reservation 与 MEM 到期匹配|
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_scheduler.svh`|窗口、record、external/SHM/final busy|
+|`ver_common/uvc/vlm_reservation_agent/vlm_reservation_external_busy_policy.svh`|可定向 external busy 策略及 cycle-range 实现|
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_coverage.svh`|第一批 ownership、admission 和 MEM match coverage|
 
 ## 3. 单周期处理顺序
@@ -125,16 +127,25 @@ Write 的两个 reservation port 若在同一 bank 同一周期选择相同 dela
 到期 slot。
 
 每周期 scheduler 先推进窗口和清理已到期记录，再重建 busy、接纳当前合法 request，
-最后在仍空闲的每个 slot 上独立随机生成 external busy。
+最后在仍空闲的每个 slot 上生成 external busy。生成来源是 optional policy 或百分比随机
+模式，二者不会在同一个周期混用。
 
 ## 7. External busy 配置
 
-默认概率来自 config 的大写字段 `EXTERNAL_BUSY_PERCENT`，命令行
-`+EXTERNAL_BUSY_PERCENT=<0..100>` 可以覆盖。Agent 在 build phase 校验范围，并把最终
-值传给 scheduler 的内部字段 `external_busy_percent`。
+Config 的 `external_busy_policy` 默认为 null。null 表示使用原百分比随机模式：概率来自
+大写字段 `EXTERNAL_BUSY_PERCENT`，命令行 `+EXTERNAL_BUSY_PERCENT=<0..100>` 可以覆盖。
+Agent 在 build phase 校验范围，并把最终值传给 scheduler 的内部字段
+`external_busy_percent`。
 
 随机 busy 只会填充本周期处理后仍无 SHM 所有权的 slot。配置为 0 时不会随机拉起；
 配置非零仍属于概率行为，波形上不保证某个指定 slot 或某个短窗口必然为 1。
+
+`external_busy_policy` 非空时优先于百分比随机模式。当前
+`vlm_reservation_directed_busy_policy` 用一组 inclusive cycle range 指定
+`<direction,delay,gid,sub_bank>`；cycle 表示 scheduler 本次处理完成后将要驱动到接口的
+`drive_cycle`，即 transaction cycle 的下一拍，而不是 monitor 已采样的 cycle。Policy
+只会填充仍空闲的 slot，不能覆盖已有 external 或 SHM ownership，也不读取 checker
+outcome。这样测试可以稳定构造 ownership 场景，同时保持默认随机 regression 行为不变。
 
 ## 8. Checker 职责
 
@@ -330,12 +341,15 @@ reservation/MEM request 是否保持为 0，见 `RSV-005`。
 
 ## 12. 相关测试
 
-`examples/vlm_reservation_compile/` 提供联合 elaboration、alignment、external busy 和
-`gid-contract` 定向入口，`ut_shm/tests/shm_unit_test.svh` 则在完整环境中使用该 agent。
-Alignment case 验证非对齐 read/write reservation 的地址保留和完整地址兑现；external-busy
-验证 plusarg/drive；gid-contract 使用严格 expected-report catcher 检查 target/other-gid
-external ownership、同周期双 write-port conflict、正常 MEM match、unexpected 和 address
-mismatch。2026-08-14 远端 `scripts/ubuntu/check_vlm_reservation_vcs.sh all` 全部通过。
+`examples/vlm_reservation_compile/` 提供联合 elaboration、alignment、随机/定向 external
+busy、`gid-contract` 和 `agent-metadata` 入口，`ut_shm/tests/shm_unit_test.svh` 则在完整环境中
+使用该 agent。Alignment case 验证非对齐 read/write reservation 的地址保留和完整地址
+兑现；external-busy 验证 plusarg/drive；directed-busy 验证 policy range、窗口前移、随机
+优先级和已有 ownership 保护；gid-contract 使用严格 expected-report catcher 检查
+target/other-gid external ownership、historical/current conflict、跨 BANK/方向合法对照，
+以及 gid 0/1 match、unexpected、missing 和 address mismatch；agent-metadata 检查 policy
+handle 传播和 unmatched MEM 的无效 gid/match metadata。2026-08-15 远端
+`scripts/ubuntu/check_vlm_reservation_vcs.sh all` 全部通过。
 这些组件结果不替代真实 RTL directed case 和功能覆盖闭环。
 
 ## 13. 调试观察点
@@ -345,7 +359,7 @@ mismatch。2026-08-14 远端 `scripts/ubuntu/check_vlm_reservation_vcs.sh all` �
 - `shm_records[direction][delay][bank]` 的 issue cycle、delay、gid、address 和 due cycle；
 - 同一 gid/sub-bank bit 下由哪些 bank record 做 OR；
 - 到期 record 与 MEM request 的完整地址，以及 resolver 返回的 gid/match status；
-- build log 中最终采用的 `EXTERNAL_BUSY_PERCENT`。
+- build log 中最终采用的 `EXTERNAL_BUSY_PERCENT`，以及是否配置 external busy policy。
 
 ## 14. 开发 contract
 
@@ -371,8 +385,9 @@ mismatch。2026-08-14 远端 `scripts/ubuntu/check_vlm_reservation_vcs.sh all` �
 - `RSV-005`：复位期间没有检查 DUT request/valid 必须为 0。
 - `ENV-001`：运行中 reset 未清理 scheduler record 和 busy 状态。
 - gid busy、record gid、resolver 和统一 interface/agent 已接入，并于 2026-08-13 随真实
-  RTL 集成 testcase 跑通；2026-08-14 已增加结构化 outcome 和部分 ownership、端口冲突、
-  resolver 失败路径组件测试。完整组合矩阵和真实 RTL directed case 仍按
+  RTL 集成 testcase 跑通；2026-08-15 已补齐 P0-1 ownership/resolver/agent metadata 组件
+  场景，并增加 P0-2 deterministic external busy policy。完整组合 coverage 和真实 RTL
+  directed case 仍按
   [SHM 定向验证开发计划](../../../development/shm-directed-verification-development-plan.md)
   继续实施。
 

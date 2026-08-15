@@ -40,6 +40,11 @@ ownership/resolver 组件测试通过，address/reservation 第一批 functional
 checker/assertion、诊断和 coverage 证据，不参与 scheduler 接纳或 RTL 输出控制。真实 RTL
 directed case 和本批 coverage bin 命中证据尚未完成；本批不要求全项目 coverage merge 或
 总百分比阈值。
+2026-08-15 完成 P0-1/P0-2 组件补强：地址/reference 测试补齐 wpid 3/4、VTRANS、M2V
+byte hazard 和 writeback 边界；reservation 测试补齐 historical pending、跨 BANK 共享、
+read/write 独立、missing MEM、gid 0/1 resolver 和 unmatched agent metadata。新增 optional
+external busy policy，可按 drive cycle、direction、delay、gid 和 sub-bank 定向占用；未配置
+policy 时保留原百分比随机模式。该证据仍不替代真实 RTL directed case。
 
 ## 1. 状态和优先级
 
@@ -91,9 +96,9 @@ directed case 和本批 coverage bin 命中证据尚未完成；本批不要求�
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
 |`COV-001`|P1|实现中|跨组件|第一批 address/reservation coverage 已接入；其余 testpoint coverage 与 bin 命中证据仍缺|
-|`DBANK-001`|P0|待验证|共享地址/shmins|地址公式、VTRANS gid 和 M2V hazard 组件测试通过；待真实 RTL 边界 case|
-|`DBANK-002`|P0|待验证|reference/expected model|相同 BADDR 跨 gid reference 隔离组件测试通过；待真实 RTL 定向 case|
-|`DBANK-004`|P0|待验证|VLM agent/scoreboard|ownership/resolver 组件测试通过；待完整冲突矩阵和真实 RTL 定向 case|
+|`DBANK-001`|P0|待验证|共享地址/shmins|三种 space 的 wpid 3/4、VTRANS gid 和完整 M2V byte-hazard 组件矩阵通过；待真实 RTL 边界 case|
+|`DBANK-002`|P0|待验证|reference/expected model|相同 BADDR 跨 gid、VTRANS 和 M2V wpid 3/4 reference 组件测试通过；待真实 RTL 定向 case|
+|`DBANK-004`|P0|待验证|VLM agent/scoreboard|P0-1 ownership/resolver/agent metadata 组件矩阵通过；待真实 RTL 定向 case|
 |`DBANK-005`|P1|实现中|test/coverage|定向发送层和第一批 coverage 已实现；真实 RTL case、LST 和 bin 命中证据仍缺|
 |`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 正向数据通路已通过 109-case RTL 回归，待 mask 边界与 X/Z 定向验证|
 |`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
@@ -170,7 +175,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   逻辑/物理 element 地址、使用 gid-aware byte key，并为 M2V 生成 byte-disjoint writeback
   BADDR；生成器和 validator 复用同一 byte-hazard 谓词。LOC/WRP/BLK、V2M/M2V 的正向
   主路径已通过 109-case 真实 RTL 回归；独立公式组件测试覆盖 BANK 0/15、warp 0/3/4/7、
-  laddr 首尾、VTRANS wpid 3/4 和 M2V exact-overlap 拒绝。
+  laddr 首尾和三种 space 的 wpid 3/4。VTRANS wpid 3/4 物理映射已通过；M2V 组件测试已
+  覆盖 exact/one-byte overlap 拒绝、adjacent/same-beat-disjoint/cross-gid 允许和 gid 内
+  WARP 首尾合法候选。
 - 目标：三种 space 输出 `<bank,absolute warp,laddr>`，公共 helper 统一生成 gid/BADDR；
   `creq_vaddr` 改为 16 bit 并携带 gid 内 WARP 基址；M2V 排除有效 read/write byte overlap。
 - 验收：地址公式测试覆盖 warp 0/3/4/7、SPACE_BLK 非零 group 和 WARP 首尾；三类
@@ -181,7 +188,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 现状：`wmap` 已用 flattened `<bank,gid>` storage index，`ref_banks` 已扩展为
   `[BANK_N][GID_N]`；reference M2V 直接使用 `creq_vaddr` 并从 wpid 取得 write gid；
   V2M/M2V/VTRANS 正向数据检查已通过 109-case 真实 RTL 回归；standalone reference 组件
-  测试已证明相同 bank/BADDR、不同 gid 的 V2M 写入和 M2V 读取互不覆盖。
+  测试已证明相同 bank/BADDR、不同 gid 的 V2M 写入和 M2V 读取互不覆盖，并验证 VTRANS
+  wpid 3/4 的 16×16 转置及 M2V wpid 3/4 的 writeback gid/BADDR。
 - 目标：全部 expected physical byte key 改为 `<bank,gid,BADDR>`；reference M2V 直接使用
   `creq_vaddr`，只从 wpid 得到 write gid。
 - 验收：相同 bank/BADDR、不同 gid 的数据隔离；V2M/VTRANS/M2V 的 wpid 3/4 定向
@@ -193,8 +201,11 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   match metadata，统一 agent 固定 metadata 后驱动 read response/发布 write，scoreboard
   只对 matched transaction 访问对应 gid memory；正常 reservation/MEM 兑现路径已通过
   109-case 真实 RTL 回归。Checker 现在额外返回逐请求 admission outcome 和逐 BANK MEM
-  match outcome；组件测试已覆盖 target-gid external busy、other-gid external allow、同周期
-  write-port conflict、正常 match、unexpected 和 address mismatch。Outcome 只供
+  match outcome；组件测试已覆盖 target-gid external busy、other-gid external allow、
+  other-gid historical pending、同周期 write-port conflict、different-bank shared slot、
+  read/write direction independence、gid 0/1 正常 match、unexpected、missing 和 address
+  mismatch。Agent-level subscriber 已证明 unmatched MEM 发布时 gid/match metadata 仍无效。
+  Outcome 只供
   assertion/checker、诊断和 coverage 使用，不控制 scheduler 或 RTL 输出。
 - 目标：busy ownership 使用 `[direction][delay][gid][subbank]`，MEM port record 保持
   `[direction][delay][bank]`；resolver 从唯一到期 record 恢复 gid，read driver复用同一
@@ -372,6 +383,12 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   request admission。
 - 验收：覆盖报告能追踪主要合法场景和错误注入场景；第一批不设置全项目 merge 或总
   百分比阈值，但目标 bin 必须有可回溯命中证据。
+
+P0-2 另外为 external busy 增加 optional policy object。定向 policy 以 inclusive
+drive-cycle range 和完整 `<direction,delay,gid,sub_bank>` 指定占用，并优先于
+`EXTERNAL_BUSY_PERCENT`；policy 为空时保留原百分比随机模式。Scheduler 和 agent-level
+组件测试已经验证单 cycle/range、窗口前移、已有 SHM slot 不被覆盖、优先级和 config
+handle 传播。该 policy 是可重复激励基础设施，不参与 checker 判定或 DUT 输出控制。
 
 ### `RSV-004` `input_error` 抑制粒度
 

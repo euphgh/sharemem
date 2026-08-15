@@ -6,6 +6,7 @@ package vlm_reservation_alignment_test_pkg;
 
   `include "uvm_macros.svh"
   `include "vlm_reservation_types.svh"
+  `include "vlm_reservation_external_busy_policy.svh"
   `include "vlm_reservation_scheduler.svh"
   `include "vlm_reservation_checker.svh"
 endpackage : vlm_reservation_alignment_test_pkg

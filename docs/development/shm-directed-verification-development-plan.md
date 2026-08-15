@@ -165,6 +165,22 @@ Outcome 是只读诊断和 coverage metadata，不得参与 scheduler 是否接�
 
 不在本批创建所有 SHM coverage。Mask、ack、FFD_CYC 和 reset 覆盖分别留给后续批次。
 
+### 4.5 可定向 external busy policy
+
+随机 `EXTERNAL_BUSY_PERCENT` 适合压力测试，但不能稳定构造指定 cycle、direction、delay、
+gid 和 sub-bank 的 ownership 场景。P0-2 在 reservation config 中增加可选 policy object：
+
+- policy 为空时完全保留现有百分比随机行为和 plusarg；
+- policy 非空时优先使用 policy，不再混入百分比随机结果；
+- directed policy 用 inclusive cycle range 和完整
+  `<direction,delay,gid,sub_bank>` 指定外部占用；
+- cycle 表示 scheduler 即将驱动到接口上的 `drive_cycle`，不是 monitor 当前采样的
+  transaction cycle；
+- policy 只填充 scheduler 更新后仍空闲的 slot，不能覆盖已有 external 或 SHM ownership；
+- policy 只控制环境 external busy，不读取 checker outcome，也不控制 DUT 输出。
+
+默认兼容性和优先级必须同时由 scheduler 级测试和 agent-level config 传播测试证明。
+
 ## 5. 第一批组件测试
 
 ### 5.1 地址和 M2V hazard 测试
@@ -256,6 +272,17 @@ PASS 条件是两个 reference memory 的目标 byte 均为独立 expected patte
 PASS 条件是每个 scenario 的结构化 outcome、scheduler 前/后状态、report ID 和 MEM
 metadata 全部匹配，并输出 `[VLM_GID_CONTRACT_TEST] ... PASS`。
 
+### 5.4 External busy policy 和 agent metadata 测试
+
+在 `examples/vlm_reservation_compile/` 增加两个 P0-1/P0-2 组件入口：
+
+- `directed_busy_policy_tb.sv`：验证单 cycle、inclusive range、窗口前移、百分比随机优先级
+  和已占用 slot 不被 policy 覆盖；
+- `agent_metadata_tb.sv`：通过完整 agent 验证 config 到 scheduler 的 policy handle 传播，
+  并检查 unmatched MEM 发布时保持 `gid_valid==0 && reservation_matched==0`。
+
+两个入口都必须使用场景 PASS marker，并由 `check_vlm_reservation_vcs.sh all` 统一执行。
+
 ## 6. 第一批逐文件修改清单
 
 | 顺序 | 文件 | 操作 |
@@ -272,7 +299,9 @@ metadata 全部匹配，并输出 `[VLM_GID_CONTRACT_TEST] ... PASS`。
 | 10 | `examples/vlm_reservation_compile/gid_contract_tb.sv` | 新增 ownership/resolver 组件测试 |
 | 11 | `scripts/ubuntu/check_*_vcs.sh` | 增加新 target、PASS marker 和 `all` 集成 |
 | 12 | `ver_common/uvc/shmins_agent/sequences/shm_directed_item_sequence.svh` 及 seq package | 为各 UT 定向 case 提供可复用发送层 |
-| 13 | `docs/ut_shm/verification-status.md` 及 testpoint/component 文档 | 记录实际证据和剩余缺口 |
+| 13 | `ver_common/uvc/vlm_reservation_agent/vlm_reservation_external_busy_policy.svh` 及 config/scheduler | 增加可定向 external busy policy |
+| 14 | `examples/vlm_reservation_compile/directed_busy_policy_tb.sv`、`agent_metadata_tb.sv` | 验证 policy 和 agent metadata |
+| 15 | `docs/ut_shm/verification-status.md` 及 testpoint/component 文档 | 记录实际证据和剩余缺口 |
 
 上表是依赖顺序，不是建议并行修改的文件集。尤其是 coverage 和组件测试必须消费
 checker 已经固定的结构化 outcome，不得先根据日志文本复制一套判定。
@@ -351,13 +380,29 @@ include 该列表。
 |---|---|
 |`scripts/ubuntu/check_shmins_sequence_vcs.sh all`|compile、copy、ordered lifecycle、dual-gid address 全部通过；0 error/fatal|
 |`scripts/ubuntu/check_shm_reference_vcs.sh`|相同 bank/BADDR、不同 gid 的 V2M/M2V reference 隔离通过；0 error/fatal|
-|`scripts/ubuntu/check_vlm_reservation_vcs.sh all`|compile、alignment、external busy、gid contract 全部通过|
+|`scripts/ubuntu/check_vlm_reservation_vcs.sh all`|compile、alignment、随机/定向 external busy、gid contract、agent metadata 全部通过|
 |`make smoke`|空 design 编译、elaboration、link 和 0-transaction smoke 通过；`UVM_CASE_PASS`，0 error/fatal|
 
 空 design 和组件测试只证明验证代码的 contract、连接和独立模型行为，不是 RTL 功能证据。
 阶段 E 的四个真实 RTL directed test 和 `p0_directed.lst` 尚未实现，因此第一批问题 ID
 仍不能关闭。本批 coverage 验收只要求目标 collector/bin/cross 可采样并能由定向场景命中；
 暂不要求全项目 coverage merge，也不设置总百分比阈值。
+
+### 7.2 2026-08-15 P0-1/P0-2 组件补强
+
+在阶段 E 之前，先完成两项组件基础设施补强：
+
+- P0-1 补齐了 LOC/WRP/BLK 的 wpid 3/4 地址映射、M2V exact/partial/adjacent/
+  same-beat-disjoint/cross-gid byte hazard、VTRANS wpid 3/4 转置、M2V wpid 3/4 reference
+  写回、historical pending conflict、different-bank shared slot、read/write direction
+  independence、missing MEM、gid 0/1 match 和 unmatched agent metadata；
+- P0-2 增加 optional external busy policy。null policy 保持百分比随机行为；directed policy
+  以完整 slot 和 drive-cycle range 构造可重复 busy，并优先于百分比随机配置。
+
+对应组件入口已经加入三个 `examples/` 测试脚本。2026-08-15 在远端 VCS
+`W-2024.09-SP1_Full64` 重新执行 SHMINS `all`、reference、reservation `all` 和
+`make smoke`，全部通过且最终 UVM error/fatal 为 0；空 design smoke 输出
+`UVM_CASE_PASS`。这些组件补强不改变阶段 E 四个真实 RTL directed test 的要求。
 
 ## 8. 第一批完成条件
 

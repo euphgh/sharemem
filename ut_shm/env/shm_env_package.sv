@@ -20,6 +20,7 @@ package shm_env_package;
   `include "shmins_mst_agent.svh"
 
   `include "vlm_reservation_types.svh"
+  `include "vlm_reservation_external_busy_policy.svh"
   `include "vlm_reservation_agent_config.svh"
   `include "vlm_reservation_scheduler.svh"
   `include "vlm_reservation_checker.svh"
