@@ -422,7 +422,26 @@ RTL 验收前不由 `shm.lst` include。
 
 2026-08-15 将源码同步到远端 VCS `W-2024.09-SP1_Full64` 后执行 `make compile`，四个
 test class 均完成 parse、elaboration 和 link。该结果只证明空 design 编译门禁通过；P0-3/
-P0-4 的真实 RTL 结果、目标 functional coverage bin 命中和 109-case 无回归仍待执行。
+P0-4 和 109-case 的首轮真实 RTL 执行已经完成；P0-4 因 DUT other-gid global blocking
+失败，目标 functional coverage bin 命中证据仍待收集。
+
+### 7.4 2026-08-15 首轮真实 RTL 结果
+
+用户在正式 design 环境执行四个 directed case，并重新运行原 `shm.lst`：
+
+|Case|结果|结论|
+|---|---|---|
+|`shm_dbank_wpid_boundary_test`|PASS|LOC/WRP/BLK 的 wpid/gid、wpnum 和地址边界通过|
+|`shm_dbank_gid_isolation_test`|PASS|相同 BANK/BADDR、不同 gid 的 V2M 数据保持隔离|
+|`shm_m2v_vaddr_boundary_test`|PASS|wpid 3/4 的 gid-local M2V `creq_vaddr` 首尾通过|
+|`shm_reservation_gid_ownership_test`|FAIL|`SHM_RESERVATION_OTHER_GID_NOT_COVERED`；波形确认 DUT 把 other-gid external busy 当成 BANK 全局阻塞|
+|原 `shm.lst` 109-case|PASS|新增 directed test 和 policy 没有破坏既有正向主回归|
+
+P0-3 的三项真实 RTL case 已取得通过证据。P0-4 的失败不是 testbench 随机性或 policy
+未生效：gid 0 write busy 覆盖所有 delay/sub-bank 时，本应可用的 gid 1 reservation 在 busy
+窗口内没有发出，直到 other-gid busy 解除后才继续。该行为与当前 `VLM-010` contract
+不一致，等待设计侧确认和修复。在此之前不把 `p0_directed.lst` 加入 `shm.lst`，也不关闭
+第一批双 gid ownership/coverage 验收。
 
 ## 8. 第一批完成条件
 

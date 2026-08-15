@@ -48,6 +48,11 @@ policy 时保留原百分比随机模式。该证据仍不替代真实 RTL direc
 同日完成 P0-3/P0-4 的四个真实 RTL test、根 TC 定义和独立 `p0_directed.lst`。远端
 VCS `make compile` 已完成所有新增 class 的 parse、elaboration 和 link；真实 design 运行、
 目标 coverage bin 命中和主列表无回归仍待验证，因此双 gid 问题尚不关闭。
+随后用户在正式 design 上完成首轮执行：三个 P0-3 case 和原 `shm.lst` 109-case 全部
+通过；P0-4 `shm_reservation_gid_ownership_test` 报告
+`SHM_RESERVATION_OTHER_GID_NOT_COVERED`。波形确认 DUT 在 gid 0 external write busy 时也
+阻塞目标 gid 1 的 reservation，即把 other-gid busy 当成 BANK 全局 busy。该问题等待与
+设计确认；当前 spec、checker 和 directed test 的 other-gid-allow contract 保持不变。
 
 ## 1. 状态和优先级
 
@@ -99,10 +104,10 @@ VCS `make compile` 已完成所有新增 class 的 parse、elaboration 和 link�
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
 |`COV-001`|P1|实现中|跨组件|第一批 address/reservation coverage 已接入；其余 testpoint coverage 与 bin 命中证据仍缺|
-|`DBANK-001`|P0|待验证|共享地址/shmins|三种 space 的 wpid/gid 边界和 M2V vaddr 定向 test 已编译；待真实 RTL 运行|
-|`DBANK-002`|P0|待验证|reference/expected model|相同 BADDR 跨 gid 数据隔离定向 test 已编译；待真实 RTL 运行|
-|`DBANK-004`|P0|待验证|VLM agent/scoreboard|external busy ownership 定向 test 已编译；待真实 RTL 运行|
-|`DBANK-005`|P1|待验证|test/coverage|四个 P0 定向 test、根 TC 和独立 LST 已实现；待真实 RTL、bin 命中和主列表无回归证据|
+|`DBANK-001`|P0|待验证|共享地址/shmins|wpid/gid 地址和 M2V vaddr 定向 case 已通过真实 RTL；待保存 coverage/关闭证据|
+|`DBANK-002`|P0|待验证|reference/expected model|相同 BADDR 跨 gid 数据隔离 case 已通过真实 RTL；待保存 coverage/关闭证据|
+|`DBANK-004`|P0|待实现|RTL/VLM reservation|真实 RTL 把 other-gid external busy 当成全局阻塞；等待设计确认和修复|
+|`DBANK-005`|P1|待验证|test/coverage|P0-3 三项及109-case通过；P0-4发现DUT ownership问题，目标bin和整组通过仍缺|
 |`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 正向数据通路已通过 109-case RTL 回归，待 mask 边界与 X/Z 定向验证|
 |`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
 |`SHMINS-005`|P2|待实现|shmins agent|256-bit 向量参数适配已通过；16-thread/4-bit 等硬编码仍在|
@@ -180,8 +185,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   主路径已通过 109-case 真实 RTL 回归；独立公式组件测试覆盖 BANK 0/15、warp 0/3/4/7、
   laddr 首尾和三种 space 的 wpid 3/4。VTRANS wpid 3/4 物理映射已通过；M2V 组件测试已
   覆盖 exact/one-byte overlap 拒绝、adjacent/same-beat-disjoint/cross-gid 允许和 gid 内
-  WARP 首尾合法候选。三种 space 的 wpid/gid 边界和 M2V vaddr 首尾真实 RTL test 已实现，
-  当前只有空 design 编译证据。
+  WARP 首尾合法候选。用户确认三种 space 的 wpid/gid 边界和 M2V vaddr 首尾 directed
+  case 已在真实 RTL 上通过；原 109-case 主列表同时无回归。
 - 目标：三种 space 输出 `<bank,absolute warp,laddr>`，公共 helper 统一生成 gid/BADDR；
   `creq_vaddr` 改为 16 bit 并携带 gid 内 WARP 基址；M2V 排除有效 read/write byte overlap。
 - 验收：地址公式测试覆盖 warp 0/3/4/7、SPACE_BLK 非零 group 和 WARP 首尾；三类
@@ -193,8 +198,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   `[BANK_N][GID_N]`；reference M2V 直接使用 `creq_vaddr` 并从 wpid 取得 write gid；
   V2M/M2V/VTRANS 正向数据检查已通过 109-case 真实 RTL 回归；standalone reference 组件
   测试已证明相同 bank/BADDR、不同 gid 的 V2M 写入和 M2V 读取互不覆盖，并验证 VTRANS
-  wpid 3/4 的 16×16 转置及 M2V wpid 3/4 的 writeback gid/BADDR。相同 BANK/BADDR、
-  不同 gid 的可区分数据 pattern 真实 RTL test 已实现，当前只有空 design 编译证据。
+  wpid 3/4 的 16×16 转置及 M2V wpid 3/4 的 writeback gid/BADDR。用户确认相同
+  BANK/BADDR、不同 gid 的可区分数据 pattern directed case 已在真实 RTL 上通过；原
+  109-case 主列表同时无回归。
 - 目标：全部 expected physical byte key 改为 `<bank,gid,BADDR>`；reference M2V 直接使用
   `creq_vaddr`，只从 wpid 得到 write gid。
 - 验收：相同 bank/BADDR、不同 gid 的数据隔离；V2M/VTRANS/M2V 的 wpid 3/4 定向
@@ -211,8 +217,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   read/write direction independence、gid 0/1 正常 match、unexpected、missing 和 address
   mismatch。Agent-level subscriber 已证明 unmatched MEM 发布时 gid/match metadata 仍无效。
   Outcome 只供
-  assertion/checker、诊断和 coverage 使用，不控制 scheduler 或 RTL 输出。P0-4 external
-  ownership 真实 RTL test 已实现，当前只有空 design 编译证据。
+  assertion/checker、诊断和 coverage 使用，不控制 scheduler 或 RTL 输出。P0-4 在真实
+  RTL 上报告 `SHM_RESERVATION_OTHER_GID_NOT_COVERED`；波形确认 gid 0 external busy 会
+  同时阻塞目标 gid 1 reservation。验证侧 policy 已生效，问题等待设计确认和 RTL 修复。
 - 目标：busy ownership 使用 `[direction][delay][gid][subbank]`，MEM port record 保持
   `[direction][delay][bank]`；resolver 从唯一到期 record 恢复 gid，read driver复用同一
   match result，scoreboard actual memory增加gid，未匹配 MEM 不更新可信模型。
@@ -223,9 +230,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 - 现状：现有 109 个 case 已在真实 design 上全部通过，证明统一双 gid 环境可以承载当前
   正向矩阵。第一批 address/reservation coverage collector、定向 topology item 发送层和
-  三类组件测试已经实现。P0-3/P0-4 又实现四个真实 RTL test，并由根 TC 和独立
-  `p0_directed.lst` 组织；远端空 design 编译通过，但这些 case 尚未在真实 design 上运行，
-  也没有保存目标 bin 命中证据。
+  三类组件测试已经实现。P0-3/P0-4 的四个真实 RTL test 由根 TC 和独立
+  `p0_directed.lst` 组织；P0-3 三项和原 109-case 主列表已通过，P0-4 ownership case
+  稳定暴露 DUT other-gid global blocking。目标 bin 命中证据和整组 PASS 仍未完成。
 - 目标：实现 `TP-ADDR-009`、`TP-MEM-005`、`TP-RSV-007/008` 以及更新后的 M2V、LOC、
   WRP、BLK testpoint；coverage 至少交叉 direction、gid、subbank、busy source和match结果。
 - 验收：开发计划阶段 7 的定向 case 全部通过，主 regression 无新增 error，并保存可重复

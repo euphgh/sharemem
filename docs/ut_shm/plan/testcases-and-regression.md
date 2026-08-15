@@ -236,7 +236,7 @@ case_name : RUN=1 SEED=num
 
 当前 109 个 case 已通过真实 RTL 回归，证明新的物理 BANK 组织和缩减后的 creq 向量
 带宽可以承载完整正向矩阵。以下第一批双 gid 定向组已经实现并加入根 TC 与独立
-`p0_directed.lst`，但尚未加入 `shm.lst`，也尚未保存真实 RTL 运行和 coverage 证据：
+`p0_directed.lst`，但尚未加入 `shm.lst`。首轮真实 RTL 已执行，coverage 证据尚未闭环：
 
 |Case 组|主要 testpoint|
 |---|---|
@@ -255,6 +255,11 @@ case_name : RUN=1 SEED=num
 真实 RTL 单独运行、目标 bin 命中且 109-case 无回归后，才能决定是否由 `shm.lst`
 include。具体依赖和验收顺序见
 [SHM 定向验证开发计划](../../development/shm-directed-verification-development-plan.md)。
+
+2026-08-15 首轮正式 design 结果：三个 P0-3 case 全部通过，原 `shm.lst` 109-case
+无回归；P0-4 ownership case 报告 `SHM_RESERVATION_OTHER_GID_NOT_COVERED`。波形确认
+DUT 在 gid 0 external write busy 时也阻塞 gid 1 reservation。该列表继续独立运行，待
+设计确认和修复 ownership 行为、整组通过并取得目标 coverage 证据后再考虑加入主列表。
 
 ## 9. 维护规则
 
