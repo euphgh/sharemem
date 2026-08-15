@@ -23,7 +23,7 @@ class shm_address_coverage extends uvm_subscriber #(shm_wtrans_item);
       int unsigned laddr,
       int unsigned wpnum);
     option.per_instance = 1;
-    cp_direction: coverpoint direction { bins m2v = {0}; bins v2m = {1}; }
+    cp_direction: coverpoint direction { bins v2m = {SHM_V2M}; bins m2v = {SHM_M2V}; }
     cp_space: coverpoint space { bins loc = {0}; bins wrp = {1}; bins blk = {2}; }
     cp_warp: coverpoint absolute_warp {
       bins low_first = {0};

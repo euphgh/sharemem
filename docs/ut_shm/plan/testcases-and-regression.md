@@ -13,9 +13,10 @@ case = UVM_TESTNAME + effective plusargs
 run  = case + seed
 ```
 
-当前全部 case 最终使用 `shm_unit_test`。`v2m_unit_test`、`m2v_unit_test` 等名称是 TC
+109-case 普通矩阵最终使用 `shm_unit_test`。`v2m_unit_test`、`m2v_unit_test` 等名称是 TC
 中的派生 case，不是 `uvm_test` class。它们通过继承公共参数并追加方向参数，减少每个
-叶子 case 的重复配置。
+叶子 case 的重复配置。P0 双 gid 定向组则直接使用四个独立 UVM test class，不继承
+`shm_unit_test` 的随机 transaction 配置。
 
 测试源码按是否依赖真实 design 分目录：只有必须实例化并检查真实 DUT 行为的 UVM test
 放在 `ut_shm/tests/`；sequence item、agent、checker 或 memory model 等不依赖真实 design
@@ -84,7 +85,11 @@ shm_unit_test
 │   └── v2m_<instruction>_<space>_dtyp<width>_atyp<width>
 ├── m2v_unit_test
 │   └── m2v_<instruction>_<space>_dtyp<width>_atyp<width>
-└── v2m_vtrans_test
+├── v2m_vtrans_test
+├── shm_dbank_wpid_boundary_test
+├── shm_dbank_gid_isolation_test
+├── shm_m2v_vaddr_boundary_test
+└── shm_reservation_gid_ownership_test
 ```
 
 公共参数当前为：
@@ -213,7 +218,8 @@ case_name : RUN=1 SEED=num
 |---|---|---:|
 |[`v2m.lst`](../../../ut_shm/regression/v2m.lst)|普通 V2M 矩阵，加 VTRANS|55|
 |[`m2v.lst`](../../../ut_shm/regression/m2v.lst)|普通 M2V 矩阵|54|
-|[`shm.lst`](../../../ut_shm/regression/shm.lst)|include 前两份列表|109|
+|[`shm.lst`](../../../ut_shm/regression/shm.lst)|include 前两份普通列表|109|
+|[`p0_directed.lst`](../../../ut_shm/regression/p0_directed.lst)|P0-3/P0-4 双 gid 定向组|4|
 
 普通 V2M 和 M2V regression 都包含：
 
@@ -229,7 +235,8 @@ case_name : RUN=1 SEED=num
 ## 8. 双 gid 迁移新增 case 组
 
 当前 109 个 case 已通过真实 RTL 回归，证明新的物理 BANK 组织和缩减后的 creq 向量
-带宽可以承载完整正向矩阵。该列表仍不覆盖以下双 gid 边界和失败路径，需要增加定向组：
+带宽可以承载完整正向矩阵。以下第一批双 gid 定向组已经实现并加入根 TC 与独立
+`p0_directed.lst`，但尚未加入 `shm.lst`，也尚未保存真实 RTL 运行和 coverage 证据：
 
 |Case 组|主要 testpoint|
 |---|---|
@@ -243,9 +250,11 @@ case_name : RUN=1 SEED=num
 |MEM 从唯一到期 record 恢复 gid|`TP-MEM-005`、`TP-RSV-008`|
 |相同 bank/BADDR、不同 gid 的数据隔离|`TP-MEM-005`|
 
-这些 case 在统一 interface/agent、reference 和 scoreboard 完成前不得加入主 regression，
-以免把未实现导致的固定失败混入旧基线。具体开发依赖见
-[双 gid 接口重构开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)。
+其中 P0-3 由 `shm_dbank_wpid_boundary_test`、`shm_dbank_gid_isolation_test` 和
+`shm_m2v_vaddr_boundary_test` 承担；P0-4 由 `shm_reservation_gid_ownership_test` 承担。
+真实 RTL 单独运行、目标 bin 命中且 109-case 无回归后，才能决定是否由 `shm.lst`
+include。具体依赖和验收顺序见
+[SHM 定向验证开发计划](../../development/shm-directed-verification-development-plan.md)。
 
 ## 9. 维护规则
 

@@ -37,3 +37,5 @@ INCLUDE: m2v/ev_warp.tc
 INCLUDE: m2v/vec_blk.tc
 INCLUDE: m2v/es_blk.tc
 INCLUDE: m2v/ev_blk.tc
+
+INCLUDE: p0_directed.tc

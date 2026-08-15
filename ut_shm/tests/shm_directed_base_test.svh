@@ -1,0 +1,250 @@
+`ifndef INC_SHM_DIRECTED_BASE_TEST_SVH
+`define INC_SHM_DIRECTED_BASE_TEST_SVH
+
+//------------------------------------------------------------------------------
+// @brief Provides deterministic single-element builders for real-DUT tests.
+//
+// Derived tests use the production contiguous item, address mapper, validator,
+// driver, reference, and scoreboard. The builder fixes every address-affecting
+// field and never relies on a random seed to reach a directed boundary.
+//------------------------------------------------------------------------------
+class shm_directed_base_test extends shm_base_test;
+
+  //----------------------------------------------------------------------------
+  // @brief Constructs a directed SHM test.
+  //
+  // @param name UVM component instance name.
+  // @param parent Parent component that owns this test.
+  //----------------------------------------------------------------------------
+  extern function new(string name = "shm_directed_base_test", uvm_component parent = null);
+
+  //----------------------------------------------------------------------------
+  // @brief Encodes one legal logical address into the selected space MADDR.
+  //
+  // @param space Address-space mapping to encode.
+  // @param inv_size Interleave-size encoding in the range 0 through 12.
+  // @param bank Logical BANK index.
+  // @param warp_offs Group-relative WARP offset; used only by SPACE_BLK.
+  // @param laddr Legal WARP-local byte address.
+  // @param wpnum Number of WARP entries encoded by SPACE_BLK.
+  // @return MADDR implementing the requested logical address.
+  //----------------------------------------------------------------------------
+  extern protected function longint unsigned encode_directed_maddr(
+      creq_space_e space,
+      int unsigned inv_size,
+      int unsigned bank,
+      int unsigned warp_offs,
+      int unsigned laddr,
+      int unsigned wpnum);
+
+  //----------------------------------------------------------------------------
+  // @brief Builds and validates one deterministic contiguous transaction.
+  //
+  // @param item_name UVM object instance name.
+  // @param rw V2M or M2V direction.
+  // @param space Address-space mapping.
+  // @param wpid Absolute WARP selector or BLK group selector.
+  // @param wpnum Number of WARP entries encoded by SPACE_BLK.
+  // @param inv_size Interleave-size encoding.
+  // @param thread_idx Sole active thread and LOC BANK.
+  // @param maddr Sole active element MADDR.
+  // @param requested_vaddr Exact M2V BADDR, or -1 for automatic generation.
+  // @param data_byte V2M byte payload used by the data-isolation tests.
+  // @return Fully packed and validated production topology item.
+  //----------------------------------------------------------------------------
+  extern protected function shmins_contiguous_sequence_item build_single_byte_item(
+      string item_name,
+      creq_rw_e rw,
+      creq_space_e space,
+      int unsigned wpid,
+      int unsigned wpnum,
+      int unsigned inv_size,
+      int unsigned thread_idx,
+      longint unsigned maddr,
+      longint signed requested_vaddr,
+      byte unsigned data_byte);
+
+  //----------------------------------------------------------------------------
+  // @brief Checks the production mapper result against explicit logical fields.
+  //
+  // @param item Directed item containing one active element.
+  // @param thread_idx Active thread index.
+  // @param expected_bank Expected logical BANK.
+  // @param expected_warp Expected absolute WARP.
+  // @param expected_laddr Expected WARP-local byte address.
+  //----------------------------------------------------------------------------
+  extern protected function void check_single_byte_mapping(
+      shmins_contiguous_sequence_item item,
+      int unsigned thread_idx,
+      int unsigned expected_bank,
+      int unsigned expected_warp,
+      int unsigned expected_laddr);
+
+  //----------------------------------------------------------------------------
+  // @brief Sends one prepared item through the production SHMINS driver.
+  //
+  // @param item Fully validated topology item.
+  //----------------------------------------------------------------------------
+  extern protected task send_directed_item(shmins_sequence_item item);
+
+  `uvm_component_utils(shm_directed_base_test)
+endclass : shm_directed_base_test
+
+function shm_directed_base_test::new(string name = "shm_directed_base_test", uvm_component parent = null);
+  super.new(name, parent);
+endfunction : new
+
+function longint unsigned shm_directed_base_test::encode_directed_maddr(
+    creq_space_e space,
+    int unsigned inv_size,
+    int unsigned bank,
+    int unsigned warp_offs,
+    int unsigned laddr,
+    int unsigned wpnum);
+  longint unsigned interleave_bytes;
+  longint unsigned interleave_index;
+  longint unsigned interleave_offset;
+
+  if (inv_size > 12 || bank >= BANK_N || laddr >= WARP_STEP || !(wpnum inside {1, 2, 4}) ||
+      warp_offs >= wpnum) begin
+    `uvm_fatal("SHM_DIRECTED_MADDR_ARGUMENT",
+               $sformatf("space=%0d inv=%0d bank=%0d warp_offs=%0d laddr=%0d wpnum=%0d",
+                         space, inv_size, bank, warp_offs, laddr, wpnum))
+  end
+
+  interleave_bytes = longint'(1) << (inv_size + 2);
+  interleave_index = laddr / interleave_bytes;
+  interleave_offset = laddr % interleave_bytes;
+  case (space)
+    SPACE_LOC: return laddr;
+    SPACE_WRP: return interleave_index * interleave_bytes * BANK_N +
+                      bank * interleave_bytes + interleave_offset;
+    SPACE_BLK: return interleave_index * interleave_bytes * BANK_N * wpnum +
+                      warp_offs * interleave_bytes * BANK_N + bank * interleave_bytes +
+                      interleave_offset;
+    default: begin
+      `uvm_fatal("SHM_DIRECTED_MADDR_SPACE", $sformatf("unsupported space %0d", space))
+      return 0;
+    end
+  endcase
+endfunction : encode_directed_maddr
+
+function shmins_contiguous_sequence_item shm_directed_base_test::build_single_byte_item(
+    string item_name,
+    creq_rw_e rw,
+    creq_space_e space,
+    int unsigned wpid,
+    int unsigned wpnum,
+    int unsigned inv_size,
+    int unsigned thread_idx,
+    longint unsigned maddr,
+    longint signed requested_vaddr,
+    byte unsigned data_byte);
+  shmins_contiguous_sequence_item item;
+  int unsigned warp_base;
+
+  if (thread_idx >= THD_N || wpid >= WARP_N || maddr >= (longint'(1) << MADDR_W)) begin
+    `uvm_fatal("SHM_DIRECTED_ITEM_ARGUMENT",
+               $sformatf("thread=%0d wpid=%0d maddr=0x%0h", thread_idx, wpid, maddr))
+  end
+
+  item = shmins_contiguous_sequence_item::type_id::create(item_name);
+  item.creq_rw = rw;
+  item.creq_dtype = DTYP_8;
+  item.creq_atype_w = ATYP_32;
+  item.creq_atype_s = ATYP_U;
+  item.creq_atype_g = GAUTO_1B;
+  item.creq_itype = LDST_S;
+  item.creq_ack_en = 1'b1;
+  item.creq_inv_size = inv_size;
+  item.creq_space = space;
+  item.creq_info = '0;
+  item.creq_id = '0;
+  item.creq_wpid = wpid;
+  item.creq_wpnum = wpnum;
+  item.creq_tmsk = '0;
+  item.creq_tmsk[thread_idx] = 1'b1;
+  item.creq_base = '0;
+  item.creq_base[MADDR_W-1:0] = maddr[MADDR_W-1:0];
+  item.delay_cycle = 0;
+  item.elem_cnt_max = item.data_elem_max();
+
+  foreach (item.creq_prio[index]) begin
+    item.creq_prio[index] = '0;
+    item.creq_len[index] = '0;
+    item.elem_num[index] = '0;
+    item.creq_vmsk[index] = '0;
+    item.creq_vdat[index] = '0;
+  end
+  item.creq_len[thread_idx] = 1;
+  item.elem_num[thread_idx] = 1;
+  item.creq_vmsk[thread_idx][0] = 1'b1;
+  item.creq_vdat[thread_idx][7:0] = data_byte;
+
+  foreach (item.elem_maddr[index, elem_idx]) begin
+    item.start_maddr[index] = 0;
+    item.elem_maddr[index][elem_idx] = 0;
+    item.offs_elem[index][elem_idx] = 0;
+  end
+  item.start_maddr[thread_idx] = maddr;
+  item.elem_maddr[thread_idx][0] = maddr;
+
+  if (!item.populate_element_addresses()) begin
+    `uvm_fatal("SHM_DIRECTED_ADDRESS_BACKFILL",
+               $sformatf("%s could not map MADDR 0x%0h", item_name, maddr))
+  end
+
+  warp_base = (wpid % WARP_PER_GID) * WARP_STEP;
+  item.creq_vaddr = shm_baddr_t'(warp_base);
+  if (rw == SHM_M2V) begin
+    if (requested_vaddr >= 0) begin
+      item.creq_vaddr = shm_baddr_t'(requested_vaddr);
+      if (!item.legal_m2v_writeback_address(item.creq_vaddr)) begin
+        `uvm_fatal("SHM_DIRECTED_M2V_VADDR",
+                   $sformatf("%s vaddr 0x%0h is illegal for MADDR 0x%0h",
+                             item_name, requested_vaddr, maddr))
+      end
+    end else if (!item.generate_m2v_writeback_address()) begin
+      `uvm_fatal("SHM_DIRECTED_M2V_GENERATE", $sformatf("%s could not generate vaddr", item_name))
+    end
+  end
+
+  item.pack_offsets();
+  item.validate_transaction();
+  item.item_to_rtl();
+  return item;
+endfunction : build_single_byte_item
+
+function void shm_directed_base_test::check_single_byte_mapping(
+    shmins_contiguous_sequence_item item,
+    int unsigned thread_idx,
+    int unsigned expected_bank,
+    int unsigned expected_warp,
+    int unsigned expected_laddr);
+  shm_logical_addr_t logical_addr;
+  shm_physical_addr_t physical_addr;
+
+  logical_addr = item.elem_logical_addr[thread_idx][0];
+  physical_addr = item.elem_physical_addr[thread_idx][0];
+  if (int'(logical_addr.bank_id) != expected_bank || int'(logical_addr.warp_id) != expected_warp ||
+      int'(logical_addr.laddr) != expected_laddr || int'(physical_addr.bank_id) != expected_bank ||
+      int'(physical_addr.gid) != expected_warp / WARP_PER_GID ||
+      int'(physical_addr.baddr) != (expected_warp % WARP_PER_GID) * WARP_STEP + expected_laddr) begin
+    `uvm_fatal("SHM_DIRECTED_MAPPING",
+               $sformatf({"expected bank=%0d warp=%0d laddr=0x%0h, got logical <%0d,%0d,0x%0h> ",
+                          "physical <%0d,%0d,0x%0h>"},
+                         expected_bank, expected_warp, expected_laddr, logical_addr.bank_id,
+                         logical_addr.warp_id, logical_addr.laddr, physical_addr.bank_id,
+                         physical_addr.gid, physical_addr.baddr))
+  end
+endfunction : check_single_byte_mapping
+
+task shm_directed_base_test::send_directed_item(shmins_sequence_item item);
+  shm_directed_item_sequence item_sequence;
+
+  item_sequence = shm_directed_item_sequence::type_id::create({item.get_name(), "_sequence"});
+  item_sequence.set_request(item);
+  item_sequence.start(shm_env.shmins_mst_agt.sequencer);
+endtask : send_directed_item
+
+`endif // INC_SHM_DIRECTED_BASE_TEST_SVH

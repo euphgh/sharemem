@@ -1,0 +1,4 @@
+shm_dbank_wpid_boundary_test        : RUN=1
+shm_dbank_gid_isolation_test        : RUN=1
+shm_m2v_vaddr_boundary_test         : RUN=1
+shm_reservation_gid_ownership_test  : RUN=1

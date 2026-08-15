@@ -355,9 +355,9 @@ checker 已经固定的结构化 outcome，不得先根据日志文本复制一�
 - `shm_m2v_vaddr_boundary_test`；
 - `shm_reservation_gid_ownership_test`。
 
-每个 test 先单独运行和固定失败 seed，然后加入 `p0_directed.lst`。待所有目标 coverage
-bin 命中、无未解释 UVM error/fatal、原 109-case 主列表无回归后，再由 `shm.lst`
-include 该列表。
+四个 test 先作为 `p0_directed.lst` 的独立条目建立，但必须逐项运行并保存失败 seed，不能
+只用整组返回值代替单项诊断。待所有目标 coverage bin 命中、无未解释 UVM error/fatal、
+原 109-case 主列表无回归后，再由 `shm.lst` include 该列表。
 
 ### 7.1 2026-08-14 第一批基础设施实测状态
 
@@ -403,6 +403,26 @@ include 该列表。
 `W-2024.09-SP1_Full64` 重新执行 SHMINS `all`、reference、reservation `all` 和
 `make smoke`，全部通过且最终 UVM error/fatal 为 0；空 design smoke 输出
 `UVM_CASE_PASS`。这些组件补强不改变阶段 E 四个真实 RTL directed test 的要求。
+
+### 7.3 2026-08-15 P0-3/P0-4 真实 RTL test 就绪
+
+阶段 E 的 test 源码和独立执行组织已经实现：
+
+|项目|实现内容|
+|---|---|
+|P0-3 地址边界|`shm_dbank_wpid_boundary_test` 定向覆盖 LOC/WRP/BLK、wpid 3/4、绝对 WARP 0/3/4/7、wpnum 1/2/4 和 WARP-local 首尾地址|
+|P0-3 gid 数据隔离|`shm_dbank_gid_isolation_test` 对相同 BANK/BADDR、不同 gid 写入可区分 byte pattern|
+|P0-3 M2V 写回边界|`shm_m2v_vaddr_boundary_test` 定向覆盖 wpid 3/4 在各自 gid 内的首尾合法 `creq_vaddr`|
+|P0-4 ownership|`shm_reservation_gid_ownership_test` 用 directed external busy policy 同时证明 other-gid external busy 允许、target-gid external busy 阻塞|
+
+四个 test 共用 `shm_directed_base_test`。该基类以独立整数公式编码目标 MADDR，再通过正式
+contiguous item、validator、driver、reference、scoreboard 和 reservation agent 观察真实
+DUT 行为。定义已加入根 TC，运行项放在独立的 `ut_shm/regression/p0_directed.lst`；在真实
+RTL 验收前不由 `shm.lst` include。
+
+2026-08-15 将源码同步到远端 VCS `W-2024.09-SP1_Full64` 后执行 `make compile`，四个
+test class 均完成 parse、elaboration 和 link。该结果只证明空 design 编译门禁通过；P0-3/
+P0-4 的真实 RTL 结果、目标 functional coverage bin 命中和 109-case 无回归仍待执行。
 
 ## 8. 第一批完成条件
 

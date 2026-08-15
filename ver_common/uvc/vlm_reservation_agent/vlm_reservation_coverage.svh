@@ -31,6 +31,9 @@ class vlm_reservation_coverage extends uvm_component;
   // Number of accepted reservation requests sampled.
   longint unsigned accepted_request_count;
 
+  // Number of accepted requests observed while the opposite gid had external ownership.
+  longint unsigned accepted_with_other_gid_external_count;
+
   // Number of MEM requests successfully resolved to a gid.
   longint unsigned matched_mem_request_sample_count;
 
@@ -119,6 +122,7 @@ function vlm_reservation_coverage::new(string name = "vlm_reservation_coverage",
   dly_zero_sample_count       = 0;
   input_error_cycle_count     = 0;
   accepted_request_count      = 0;
+  accepted_with_other_gid_external_count = 0;
   matched_mem_request_sample_count = 0;
   reservation_admission_cg = new();
   mem_match_cg = new();
@@ -169,6 +173,9 @@ function void vlm_reservation_coverage::sample_cycle(
                                         outcome.pending_bank_due_conflict, outcome.current_bank_due_conflict);
         if (outcome.accepted) begin
           accepted_request_count++;
+          if (other_gid_external) begin
+            accepted_with_other_gid_external_count++;
+          end
         end
         if (outcome.target_busy) begin
           external_block_count++;
