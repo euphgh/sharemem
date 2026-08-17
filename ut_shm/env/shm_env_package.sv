@@ -17,6 +17,7 @@ package shm_env_package;
   `include "shmins_mst_sequencer.svh"
   `include "shmins_mst_driver.svh"
   `include "shmins_monitor.svh"
+  `include "shmins_request_coverage.svh"
   `include "shmins_mst_agent.svh"
 
   `include "vlm_reservation_types.svh"

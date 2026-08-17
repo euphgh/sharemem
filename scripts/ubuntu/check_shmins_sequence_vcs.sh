@@ -14,7 +14,8 @@ usage() {
   copy     编译并运行 sequence-item copy/compare 组件测试
   lifecycle 编译并运行 ordered ack-grace lifecycle 组件测试
   dual-gid-address 编译并运行双 gid 地址与 M2V byte-hazard 组件测试
-  all      依次执行 compile、copy、lifecycle 和 dual-gid-address
+  mask-monitor 编译并运行 thread-mask monitor/XZ 组件测试
+  all      依次执行 compile、copy、lifecycle、dual-gid-address 和 mask-monitor
   clean    删除本 example 的 build 目录
 
 环境变量：
@@ -36,7 +37,7 @@ case "$target" in
         usage
         exit 0
         ;;
-    compile | copy | lifecycle | dual-gid-address | all | clean)
+    compile | copy | lifecycle | dual-gid-address | mask-monitor | all | clean)
         ;;
     *)
         printf '错误：未知目标：%s\n' "$target" >&2
@@ -53,6 +54,8 @@ sequence_dir="$repo_root/ver_common/uvc/shmins_agent/sequences"
 shmins_agent_dir="$repo_root/ver_common/uvc/shmins_agent"
 memory_agent_dir="$repo_root/ver_common/uvc/vlm_memory_agent"
 environment_dir="$repo_root/ut_shm/env"
+common_example_dir="$repo_root/examples/common"
+mask_monitor_dir="$repo_root/examples/shmins_monitor_compile"
 collection_dir="$repo_root/ut_shm/util/sv-collection/libs"
 utility_package="$repo_root/ut_shm/util/shm_util_package.sv"
 collection_package="$collection_dir/collection_pkg.sv"
@@ -227,6 +230,39 @@ run_dual_gid_address_test() {
     )
 }
 
+run_mask_monitor_test() {
+    local simv="$mask_monitor_dir/build/simv"
+    local monitor_tb="$mask_monitor_dir/mask_monitor_tb.sv"
+
+    if ! command -v -- "$vcs_bin" >/dev/null 2>&1; then
+        printf '错误：找不到 VCS 可执行文件：%s\n' "$vcs_bin" >&2
+        exit 2
+    fi
+    if [[ ! -f "$collection_package" || ! -f "$utility_package" ||
+          ! -f "$clock_interface" || ! -f "$shmins_interface" ||
+          ! -f "$sequence_item_package" || ! -f "$monitor_tb" ]]; then
+        printf '错误：缺少 SHMINS mask-monitor 测试输入\n' >&2
+        exit 2
+    fi
+
+    mkdir -p -- "$mask_monitor_dir/build"
+    printf 'Ubuntu VCS：编译并运行 SHMINS thread-mask monitor 组件测试\n'
+    (
+        cd -- "$mask_monitor_dir/build"
+        "$vcs_bin" -full64 -sverilog -ntb_opts "$uvm_version" -timescale=1ns/1ps \
+            "+incdir+$collection_dir" "+incdir+$repo_root/ut_shm/util" \
+            "+incdir+$sequence_dir" "+incdir+$shmins_agent_dir" \
+            "+incdir+$memory_agent_dir" "+incdir+$environment_dir" \
+            "+incdir+$common_example_dir" \
+            "$collection_package" "$utility_package" "$clock_interface" \
+            "$shmins_interface" "$sequence_item_package" "$monitor_tb" "$@" \
+            -top shmins_mask_monitor_tb -o "$simv" -l compile.log
+        "$simv" -l test.log
+        check_uvm_test_log test.log \
+            '[SHMINS_MASK_MONITOR_TEST] thread-mask monitor component matrix: PASS'
+    )
+}
+
 case "$target" in
     compile)
         compile_empty_design "$@"
@@ -240,14 +276,19 @@ case "$target" in
     dual-gid-address)
         run_dual_gid_address_test "$@"
         ;;
+    mask-monitor)
+        run_mask_monitor_test "$@"
+        ;;
     all)
         compile_empty_design "$@"
         run_copy_test "$@"
         run_lifecycle_test "$@"
         run_dual_gid_address_test "$@"
+        run_mask_monitor_test "$@"
         ;;
     clean)
         rm -rf -- "$build_dir"
+        rm -rf -- "$mask_monitor_dir/build"
         printf '已删除：%s\n' "$build_dir"
         ;;
 esac

@@ -73,6 +73,29 @@ class shmins_monitor extends uvm_monitor;
     //-------------------------------------------------------------------------
     extern task monitor_reset_epoch();
 
+    //-------------------------------------------------------------------------
+    // @brief Checks four-state values interpreted for active threads.
+    //
+    // Inactive payload is intentionally ignored. One report is emitted for
+    // each offending thread and field, while dependent fields are skipped when
+    // length or element-mask state is unknown.
+    //
+    // @param transaction Fully sampled request with creq_typ already decoded.
+    //-------------------------------------------------------------------------
+    extern protected function void check_active_payload_xz(shmins_sequence_item transaction);
+
+    //-------------------------------------------------------------------------
+    // @brief Checks one topology-selected packed offset for X/Z.
+    //
+    // @param transaction Sampled request containing packed offsets.
+    // @param thread_idx Thread containing the offset.
+    // @param offset_idx Offset element selected by the request topology.
+    // @return 1 when the selected encoded offset contains X/Z.
+    //-------------------------------------------------------------------------
+    extern protected function bit packed_offset_has_xz(shmins_sequence_item transaction,
+                                                        int unsigned thread_idx,
+                                                        int unsigned offset_idx);
+
     // UVM Factory Registration
     //---------------------------------------------------------------------
     `uvm_component_utils_begin(shmins_monitor)
@@ -195,14 +218,7 @@ task shmins_monitor::monitor_signals();
         shmins_trans.creq_tmsk  = shmins_mon_vif.mon_cb.creq_tmsk  ;
         shmins_trans.creq_base  = shmins_mon_vif.mon_cb.creq_base  ;
 
-        if ($isunknown(shmins_trans.creq_tmsk)) begin
-            `uvm_error("SHMINS_TMSK_XZ", $sformatf("creq_tmsk contains X/Z: %b", shmins_trans.creq_tmsk))
-        end
-        else if (shmins_trans.creq_tmsk == '0) begin
-            `uvm_error("SHMINS_TMSK_ZERO", "creq_tmsk must enable at least one thread")
-        end
-
-        for (int th_idx=0; th_idx<16; th_idx++) begin
+        for (int th_idx = 0; th_idx < THD_N; th_idx++) begin
             shmins_trans.creq_prio[th_idx] = shmins_mon_vif.mon_cb.creq_prio[th_idx];
             shmins_trans.creq_len [th_idx] = shmins_mon_vif.mon_cb.creq_len [th_idx];
             shmins_trans.creq_vmsk[th_idx] = shmins_mon_vif.mon_cb.creq_vmsk[th_idx];
@@ -211,6 +227,17 @@ task shmins_monitor::monitor_signals();
         end
 
         shmins_trans.rtl_to_item();
+        if ($isunknown(shmins_trans.creq_tmsk)) begin
+            `uvm_error("SHMINS_TMSK_XZ", $sformatf("creq_tmsk contains X/Z: %b", shmins_trans.creq_tmsk))
+        end
+        else if (shmins_trans.creq_tmsk == '0) begin
+            `uvm_error("SHMINS_TMSK_ZERO", "creq_tmsk must enable at least one thread")
+            continue;
+        end
+        else begin
+            check_active_payload_xz(shmins_trans);
+        end
+
         shmins_trans.accept_cycle = clk_vif.cycle_count;
         shmins_trans.transaction_uid = next_transaction_uid;
         shmins_trans.reset_epoch = reset_epoch;
@@ -219,5 +246,102 @@ task shmins_monitor::monitor_signals();
         shmins_cnt++;
     end
 endtask
+
+function void shmins_monitor::check_active_payload_xz(shmins_sequence_item transaction);
+    for (int unsigned thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
+        bit offset_xz;
+        bit vdata_xz;
+        bit vmsk_xz;
+        bit has_active_element;
+        int unsigned element_count;
+
+        if (transaction.creq_tmsk[thread_idx] !== 1'b1) begin
+            continue;
+        end
+        if ($isunknown(transaction.creq_prio[thread_idx])) begin
+            `uvm_error("SHMINS_ACTIVE_PAYLOAD_XZ",
+                       $sformatf("thread %0d field creq_prio contains X/Z: %b",
+                                 thread_idx, transaction.creq_prio[thread_idx]))
+        end
+        if ($isunknown(transaction.creq_len[thread_idx])) begin
+            `uvm_error("SHMINS_ACTIVE_PAYLOAD_XZ",
+                       $sformatf("thread %0d field creq_len contains X/Z: %b",
+                                 thread_idx, transaction.creq_len[thread_idx]))
+            continue;
+        end
+        if (transaction.data_byte_w() == 0) begin
+            continue;
+        end
+
+        element_count = transaction.thread_elem_cnt(thread_idx);
+        if (element_count > transaction.max_elem_cnt()) begin
+            element_count = transaction.max_elem_cnt();
+        end
+        offset_xz = 1'b0;
+        vdata_xz = 1'b0;
+        vmsk_xz = 1'b0;
+        has_active_element = 1'b0;
+
+        for (int unsigned elem_idx = 0; elem_idx < element_count; elem_idx++) begin
+            if ($isunknown(transaction.creq_vmsk[thread_idx][elem_idx])) begin
+                vmsk_xz = 1'b1;
+                continue;
+            end
+            if (transaction.creq_vmsk[thread_idx][elem_idx] !== 1'b1) begin
+                continue;
+            end
+
+            has_active_element = 1'b1;
+            if (transaction.creq_itype == LDSTE_V &&
+                packed_offset_has_xz(transaction, thread_idx, elem_idx)) begin
+                offset_xz = 1'b1;
+            end
+            if (transaction.creq_rw == SHM_V2M) begin
+                for (int unsigned byte_lane = 0; byte_lane < transaction.data_byte_w(); byte_lane++) begin
+                    int unsigned byte_idx = elem_idx * transaction.data_byte_w() + byte_lane;
+                    if ($isunknown(transaction.creq_vdat[thread_idx][byte_idx])) begin
+                        vdata_xz = 1'b1;
+                    end
+                end
+            end
+        end
+
+        if (has_active_element && transaction.creq_itype inside {LDST_S, LDST_V, LDSTE_S} &&
+            packed_offset_has_xz(transaction, thread_idx, 0)) begin
+            offset_xz = 1'b1;
+        end
+        if (vmsk_xz) begin
+            `uvm_error("SHMINS_ACTIVE_PAYLOAD_XZ",
+                       $sformatf("thread %0d field creq_vmsk contains X/Z in the length-bounded range",
+                                 thread_idx))
+        end
+        if (offset_xz) begin
+            `uvm_error("SHMINS_ACTIVE_PAYLOAD_XZ",
+                       $sformatf("thread %0d field creq_offs contains X/Z in a topology-selected slice",
+                                 thread_idx))
+        end
+        if (vdata_xz) begin
+            `uvm_error("SHMINS_ACTIVE_PAYLOAD_XZ",
+                       $sformatf("thread %0d field creq_vdat contains X/Z in an active V2M byte",
+                                 thread_idx))
+        end
+    end
+endfunction : check_active_payload_xz
+
+function bit shmins_monitor::packed_offset_has_xz(shmins_sequence_item transaction,
+                                                   int unsigned thread_idx,
+                                                   int unsigned offset_idx);
+    logic [VEC_W-1:0] packed_offsets;
+
+    if (thread_idx >= THD_N || offset_idx >= transaction.offs_elem_max()) begin
+        return 1'b0;
+    end
+    packed_offsets = transaction.creq_offs(thread_idx);
+    case (transaction.offs_bit_w())
+        16: return $isunknown(packed_offsets[offset_idx * 16 +: 16]);
+        32: return $isunknown(packed_offsets[offset_idx * 32 +: 32]);
+        default: return 1'b0;
+    endcase
+endfunction : packed_offset_has_xz
 
 `endif // INC_SHMINS_MONITOR_SVH

@@ -233,8 +233,8 @@ Reservation 到实际 MEM 的匹配键和 busy 规则由
 这里描述的是当前数据通路，不表示所有 DUT spec 都已实现。当前需要在后续组件修改中
 处理的边界包括：
 
-- `creq_tmsk` 数据链已经贯通，但尚缺 inactive payload X/Z、稀疏 mask 和 DUT 输出
-  抑制的远端定向验证；
+- `creq_tmsk` 数据链已经贯通；全零 sample 由 monitor 报告后丢弃，inactive payload X/Z
+  组件测试已通过，稀疏 mask 和 DUT 输出抑制的真实 RTL directed tests 已实现但尚未运行；
 - MEM read 服务尚未按 `FFD_CYC` 建立截止周期快照；
 - 各组件能避开初始 reset 期间的采样，但运行中 reset 对 reference item、scoreboard
   outstanding、memory read response 和 reservation scheduler state 的清理尚未统一；

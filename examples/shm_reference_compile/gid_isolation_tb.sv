@@ -176,6 +176,63 @@ package shm_reference_gid_test_pkg;
     endfunction : check_m2v_wpid
 
     //----------------------------------------------------------------------------
+    // @brief Verifies that inactive thread payload X/Z is never interpreted.
+    //
+    // @param unknown_value X or Z value assigned to every inactive payload bit.
+    //----------------------------------------------------------------------------
+    virtual function void check_inactive_payload_xz(logic unknown_value);
+      shmins_contiguous_sequence_item item;
+      shm_wtrans_item published_item;
+      int unsigned previous_count;
+
+      item = shmins_contiguous_sequence_item::type_id::create(
+          unknown_value === 1'bx ? "inactive_payload_x" : "inactive_payload_z");
+      if (!item.randomize() with {
+            creq_rw == SHM_V2M;
+            creq_dtype == DTYP_8;
+            creq_atype_w == ATYP_32;
+            creq_atype_s == ATYP_U;
+            creq_atype_g == GAUTO_1B;
+            creq_itype == LDST_S;
+            creq_space == SPACE_LOC;
+            creq_wpid == 0;
+            creq_tmsk == 16'h0001;
+            elem_num[0] == 1;
+            creq_vmsk[0] == VEC_BYTE_N'(1);
+          }) begin
+        `uvm_fatal("SHM_REFERENCE_INACTIVE_RANDOMIZE", "failed to randomize inactive-payload item")
+      end
+      for (int unsigned thread_idx = 1; thread_idx < THD_N; thread_idx++) begin
+        item.creq_prio[thread_idx] = {PRIO_W{unknown_value}};
+        item.creq_len[thread_idx] = {8{unknown_value}};
+        item.creq_vmsk[thread_idx] = {VEC_BYTE_N{unknown_value}};
+        item.set_creq_offs(thread_idx, {VEC_W{unknown_value}});
+        item.creq_vdat[thread_idx] = {VEC_W{unknown_value}};
+      end
+
+      previous_count = sink.items.size();
+      reference_model.write_shmins_reference(item);
+      if (sink.items.size() != previous_count + 1) begin
+        `uvm_fatal("SHM_REFERENCE_INACTIVE_COUNT", "reference did not publish inactive-payload item")
+      end
+      published_item = sink.items[previous_count];
+      if (published_item.baddr_2d_array[0].size() != 1 ||
+          published_item.wstrb_2d_array[0].size() != 1) begin
+        `uvm_fatal("SHM_REFERENCE_ACTIVE_ARRAY", "active thread did not retain its one-byte access")
+      end
+      for (int unsigned thread_idx = 1; thread_idx < THD_N; thread_idx++) begin
+        if (published_item.baddr_2d_array[thread_idx].size() != 0 ||
+            published_item.bid_2d_array[thread_idx].size() != 0 ||
+            published_item.gid_2d_array[thread_idx].size() != 0 ||
+            published_item.logical_addr_2d_array[thread_idx].size() != 0 ||
+            published_item.wstrb_2d_array[thread_idx].size() != 0) begin
+          `uvm_fatal("SHM_REFERENCE_INACTIVE_ARRAY",
+                     $sformatf("inactive thread %0d produced derived reference state", thread_idx))
+        end
+      end
+    endfunction : check_inactive_payload_xz
+
+    //----------------------------------------------------------------------------
     // @brief Runs equal-BADDR V2M writes and M2V reads in gid zero and gid one.
     //
     // @param phase UVM run phase controlling the test objection.
@@ -259,6 +316,8 @@ package shm_reference_gid_test_pkg;
       check_vtrans_wpid(3);
       check_vtrans_wpid(4);
       check_m2v_wpid(3);
+      check_inactive_payload_xz(1'bx);
+      check_inactive_payload_xz(1'bz);
 
       `uvm_info("SHM_REFERENCE_GID_TEST", "reference gid-isolation component test: PASS", UVM_LOW)
       phase.drop_objection(this);

@@ -14,6 +14,8 @@ class shmins_mst_agent extends uvm_agent;
     shmins_mst_sequencer   sequencer;
     shmins_mst_driver      driver;
     shmins_monitor         monitor;
+    // Passive request-mask and VTRANS coverage attached to monitor output.
+    shmins_request_coverage coverage;
 
     extern function        new(string name= "shmins_mst_agent", uvm_component parent);
     extern virtual function void build_phase(uvm_phase phase);
@@ -49,6 +51,7 @@ function void shmins_mst_agent::build_phase(uvm_phase phase);
     // Construct Agent Monitors
     if (cfg.shmins_mon_is_active == UVM_ACTIVE) begin
         monitor = shmins_monitor::type_id::create("monitor", this);
+        coverage = shmins_request_coverage::type_id::create("coverage", this);
     end
 
     // Construct Agent Driver-Sequencers
@@ -75,6 +78,7 @@ function void shmins_mst_agent::connect_phase(uvm_phase phase);
     //---------------------------------------------------------------------
     if (monitor != null) begin
         monitor.shmins_mon_vif = shmins_vif;
+        monitor.shmins_analysis_port.connect(coverage.analysis_export);
     end
 
     if (driver != null && sequencer != null) begin

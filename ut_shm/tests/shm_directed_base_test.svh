@@ -65,6 +65,26 @@ class shm_directed_base_test extends shm_base_test;
       byte unsigned data_byte);
 
   //----------------------------------------------------------------------------
+  // @brief Builds one legal byte transaction with retained inactive sentinels.
+  //
+  // The item is first generated with all threads active so every thread owns a
+  // legal, byte-unique address and payload. The final tmsk is then narrowed
+  // without clearing inactive fields, allowing the DUT test to detect accesses
+  // incorrectly issued for masked threads.
+  //
+  // @param item_name UVM object instance name and matrix-cell label.
+  // @param rw V2M or M2V request direction.
+  // @param space LOC, WRP, or BLK address space.
+  // @param target_tmsk Known non-zero final thread mask.
+  // @return Fully validated contiguous item retaining inactive sentinels.
+  //----------------------------------------------------------------------------
+  extern protected function shmins_contiguous_sequence_item build_masked_byte_item(
+      string item_name,
+      creq_rw_e rw,
+      creq_space_e space,
+      logic [THD_N-1:0] target_tmsk);
+
+  //----------------------------------------------------------------------------
   // @brief Checks the production mapper result against explicit logical fields.
   //
   // @param item Directed item containing one active element.
@@ -214,6 +234,60 @@ function shmins_contiguous_sequence_item shm_directed_base_test::build_single_by
   item.item_to_rtl();
   return item;
 endfunction : build_single_byte_item
+
+function shmins_contiguous_sequence_item shm_directed_base_test::build_masked_byte_item(
+    string item_name,
+    creq_rw_e rw,
+    creq_space_e space,
+    logic [THD_N-1:0] target_tmsk);
+  shmins_contiguous_sequence_item item;
+
+  if ($isunknown(target_tmsk) || target_tmsk == '0) begin
+    `uvm_fatal("SHM_DIRECTED_MASK_ARGUMENT",
+               $sformatf("%s target tmsk must be known and non-zero: %b", item_name, target_tmsk))
+  end
+
+  item = shmins_contiguous_sequence_item::type_id::create(item_name);
+  item.m2v_unique_enable = 1'b1;
+  if (!item.randomize() with {
+        creq_rw == local::rw;
+        creq_dtype == DTYP_8;
+        creq_atype_w == ATYP_32;
+        creq_atype_s == ATYP_U;
+        creq_atype_g == GAUTO_1B;
+        creq_itype == LDST_S;
+        creq_space == local::space;
+        creq_wpid == 0;
+        creq_wpnum == (local::space == SPACE_BLK ? 4 : 1);
+        creq_inv_size == 0;
+        creq_ack_en == 1'b1;
+        creq_tmsk == '1;
+        delay_cycle == 0;
+        foreach (elem_num[thread_idx]) elem_num[thread_idx] == 1;
+        foreach (creq_vmsk[thread_idx]) creq_vmsk[thread_idx] == VEC_BYTE_N'(1);
+      }) begin
+    `uvm_fatal("SHM_DIRECTED_MASK_RANDOMIZE",
+               $sformatf("%s failed to generate full-mask sentinel item", item_name))
+  end
+
+  for (int unsigned thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
+    item.creq_vdat[thread_idx] = '0;
+    item.creq_vdat[thread_idx][0] = byte'(8'h40 + thread_idx);
+    for (int unsigned previous_thread = 0; previous_thread < thread_idx; previous_thread++) begin
+      if (item.make_physical_byte_key(item.elem_physical_addr[thread_idx][0]) ==
+          item.make_physical_byte_key(item.elem_physical_addr[previous_thread][0])) begin
+        `uvm_fatal("SHM_DIRECTED_MASK_SENTINEL_OVERLAP",
+                   $sformatf("%s threads %0d and %0d generated the same physical byte",
+                             item_name, previous_thread, thread_idx))
+      end
+    end
+  end
+
+  item.creq_tmsk = target_tmsk;
+  item.validate_transaction();
+  item.item_to_rtl();
+  return item;
+endfunction : build_masked_byte_item
 
 function void shm_directed_base_test::check_single_byte_mapping(
     shmins_contiguous_sequence_item item,

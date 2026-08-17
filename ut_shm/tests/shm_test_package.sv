@@ -14,4 +14,6 @@ package shm_test_package;
     `include "shm_dbank_gid_isolation_test.svh"
     `include "shm_m2v_vaddr_boundary_test.svh"
     `include "shm_reservation_gid_ownership_test.svh"
+    `include "shm_tmsk_directed_test.svh"
+    `include "shm_vtrans_full_mask_test.svh"
 endpackage : shm_test_package

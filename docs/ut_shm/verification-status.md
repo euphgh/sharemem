@@ -53,6 +53,12 @@ VCS `make compile` 已完成所有新增 class 的 parse、elaboration 和 link�
 `SHM_RESERVATION_OTHER_GID_NOT_COVERED`。波形确认 DUT 在 gid 0 external write busy 时也
 阻塞目标 gid 1 的 reservation，即把 other-gid busy 当成 BANK 全局 busy。该问题等待与
 设计确认；当前 spec、checker 和 directed test 的 other-gid-allow contract 保持不变。
+同日完成 `SHMINS-001` thread-mask 定向验证的组件与激励基础设施：monitor 对全零 tmsk
+报告后直接丢弃，不向 production analysis port 发布；active-thread payload 局部 X/Z
+检查和 request mask/VTRANS coverage 已接入。Monitor、sequence copy/VTRANS 和 reference
+组件测试在远端 VCS 通过，两个真实 RTL directed test、TC 和独立 LST 已编写，并通过
+空 design `make compile`。真实 RTL 的 24-cell normal mask、4-cell VTRANS、coverage 命中和
+109-case 无回归证据尚未执行。
 
 ## 1. 状态和优先级
 
@@ -103,15 +109,15 @@ VCS `make compile` 已完成所有新增 class 的 parse、elaboration 和 link�
 |---|---:|---|---|---|
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
-|`COV-001`|P1|实现中|跨组件|第一批 address/reservation coverage 已接入；其余 testpoint coverage 与 bin 命中证据仍缺|
+|`COV-001`|P1|实现中|跨组件|address/reservation 和 request mask/VTRANS coverage 已接入；其余 coverage 与 bin 证据仍缺|
 |`DBANK-001`|P0|待验证|共享地址/shmins|wpid/gid 地址和 M2V vaddr 定向 case 已通过真实 RTL；待保存 coverage/关闭证据|
 |`DBANK-002`|P0|待验证|reference/expected model|相同 BADDR 跨 gid 数据隔离 case 已通过真实 RTL；待保存 coverage/关闭证据|
 |`DBANK-004`|P0|待实现|RTL/VLM reservation|真实 RTL 把 other-gid external busy 当成全局阻塞；等待设计确认和修复|
 |`DBANK-005`|P1|待验证|test/coverage|P0-3 三项及109-case通过；P0-4发现DUT ownership问题，目标bin和整组通过仍缺|
-|`SHMINS-001`|P0|待验证|shmins agent|`creq_tmsk` 正向数据通路已通过 109-case RTL 回归，待 mask 边界与 X/Z 定向验证|
+|`SHMINS-001`|P0|待验证|shmins agent|组件矩阵及 directed tests 已完成，待真实 RTL 28-cell、coverage 和主列表回归|
 |`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
 |`SHMINS-005`|P2|待实现|shmins agent|256-bit 向量参数适配已通过；16-thread/4-bit 等硬编码仍在|
-|`SHMINS-006`|P1|待实现|shmins monitor|active creq payload 缺少系统性的 X/Z 检查|
+|`SHMINS-006`|P1|实现中|shmins monitor|active-thread payload 局部 X/Z 检查已实现；公共字段和完整字段矩阵仍缺|
 |`SHMINS-008`|P1|待验证|shmins monitor/lifecycle|有序 grace 组件测试已通过，待 clocked timeout 触发边界验证|
 |`SHMINS-009`|P1|实现中|shmins/lifecycle|ack 完备 checker 已实现待验证；credit/release 上溢仍缺|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
@@ -259,8 +265,10 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 - 现状：`shm_address_coverage` 已只读采样 reference transaction 的 direction、space、
   absolute warp、gid、laddr、wpnum 和 M2V read/write gid；`vlm_reservation_coverage` 已采样
-  direction、bank、gid、subbank、delay、ownership、admission 和 MEM match outcome。
-  Mask、ack、FFD_CYC、reset 等其他 testpoint 尚无对应 functional coverage。
+  direction、bank、gid、subbank、delay、ownership、admission 和 MEM match outcome；
+  `shmins_request_coverage` 已采样 normal/VTRANS、direction、space、tmsk class/population、
+  active thread、payload X/Z 和 VTRANS dtype/itype。Ack、FFD_CYC、reset 等其他 testpoint
+  尚无对应 functional coverage，新增 request coverage 也尚缺真实 RTL bin 命中证据。
 - 影响：case 运行和 checker 通过不能证明 spec 场景实际发生，所有 testpoint 都缺少
   功能覆盖关闭证据。
 - 目标依据：[Testpoints](plan/testpoints.md)和
@@ -273,13 +281,17 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 - 现状：tb top、interface、transaction、copy、factory field、driver 和 monitor 已贯通
   `THD_N` bit `creq_tmsk`。普通请求约束非全零，VTRANS 约束全 1；monitor 报告 X/Z 和
-  全零值，reference 为非 active thread 创建空的地址/BANK/strobe 数组，不解释 inactive
-  payload，也不生成对应读写期望。正向主路径已通过 benchmark consumer 检查和
-  109-case 真实 RTL 回归，尚未执行稀疏 mask、inactive payload X/Z 等独立定向场景。
+  全零值，并在全零报告后丢弃事务，不分配 UID、不发布到 production analysis port。
+  Reference 为非 active thread 创建空的地址/BANK/strobe 数组，不解释 inactive payload，
+  也不生成对应读写期望。`MON-MASK-001`～`010`、四个 VTRANS sequence cell 和 reference
+  inactive X/Z 组件测试已通过；24-cell normal 与 4-cell VTRANS 真实 RTL tests 已编写并
+  通过空 design 编译。正向主路径此前已通过 109-case 真实 RTL 回归，但新 directed tests
+  尚未在真实 RTL 上执行。
 - 影响：代码路径已具备 mask 行为，但在稀疏 mask、inactive payload X/Z 和 DUT 意外
   输出场景验证完成前，不能确认功能关闭。
 - 目标依据：[creq/ack 接口](spec/creq-ack-interface.md)。
-- 验收：覆盖非全零普通 mask、inactive thread X/Z、全零非法请求和 VTRANS 全 1。
+- 验收：覆盖非全零普通 mask、inactive thread X/Z、全零非法请求和 VTRANS 全 1；保存
+  24-cell normal、4-cell VTRANS、目标 coverage 和 109-case 无回归证据。
 
 ### `SHMINS-004` Unit sequence 配置丢失
 
@@ -303,7 +315,10 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 ### `SHMINS-006` creq 四态检查
 
-- 现状：monitor 只用 `creq_vld===1` 选择事务，没有按 active payload 逐字段报告 X/Z。
+- 现状：monitor 已先检查 tmsk，再按 active thread 检查 priority、length、有效 vmsk、
+  topology 实际使用的 offset slice，以及 V2M 有效 data byte；inactive payload X/Z 和
+  `creq_vld!=1` 时 payload 不检查。组件测试已覆盖 inactive X/Z、active length X、tmsk X
+  和 valid 0。公共控制字段及各 active payload 字段的完整 X/Z 矩阵仍未覆盖。
 - 影响：非法输入可能进入 reference，错误被延迟或转化成难以定位的数据差异。
 - 目标依据：`CREQ-002`。
 - 验收：为公共字段、active thread payload 和 inactive thread payload 分别注入 X/Z，

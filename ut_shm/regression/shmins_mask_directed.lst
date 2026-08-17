@@ -1,0 +1,2 @@
+shm_tmsk_directed_test      : RUN=1
+shm_vtrans_full_mask_test   : RUN=1

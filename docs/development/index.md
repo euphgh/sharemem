@@ -12,9 +12,9 @@
 - [SHM 双 gid BANK 接口重构开发计划](shm-dual-bank-interface-refactor-plan.md)：建立
   MADDR→逻辑地址→物理地址两层模型，合并 VLM interface/agent，并按依赖顺序迁移
   sequence、reference、reservation、memory 和 scoreboard。
-- [SHM 定向验证开发计划](shm-directed-verification-development-plan.md)：在 109-case 正向
-  基线之上，分批实现双 gid、FFD_CYC、thread mask 和 runtime reset 定向验证，并细化
-  第一批双 gid 基础设施、组件测试、coverage 和真实 RTL case。
+- [SHMINS thread-mask 定向验证开发计划](shm-directed-verification-development-plan.md)：
+  细化 `SHMINS-001` 的 monitor/XZ 组件测试、普通请求 24-cell mask 矩阵、VTRANS
+  全 mask 矩阵、coverage 和真实 RTL 验收条件。
 
 规范对新增代码和本次实际修改的代码生效。现有 legacy 代码不要因为无关的
 功能修改而整文件重排；后续 refactor 时再逐步收敛。

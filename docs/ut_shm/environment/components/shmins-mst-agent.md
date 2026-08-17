@@ -128,8 +128,15 @@ transaction 提前完成或提前收到 ack 只更新状态，当前不单独报
 ## 7. X/Z 和错误边界
 
 Agent/driver 缺少 config 或 vif 时分别使用 `SHMINS_NO_CFG`、`SHMINS_NO_VIF` fatal。
-Monitor 当前只严格判断 `creq_vld`，没有按 active/inactive thread 规则检查 payload
-四态，见 `SHMINS-006`。
+Monitor 先检查 `creq_tmsk`：含 X/Z 时报告并停止 per-thread 分类，全零时报告后直接丢弃，
+不分配 UID，也不写 production analysis port。tmsk 合法时，monitor 只检查 active thread
+实际参与解释的 priority、length、vmsk、offset slice 和 V2M data byte；inactive payload
+允许 X/Z。公共控制字段和完整字段矩阵仍由 `SHMINS-006` 跟踪。
+
+Agent 在 monitor 存在时创建并连接 `shmins_request_coverage`。该 subscriber 只读采样
+normal/VTRANS、direction、space、mask class/population、active thread、payload X/Z 和
+VTRANS dtype/itype；全零事务只允许由组件 harness 直接采样 coverage，不经过 production
+monitor 数据流。
 
 Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计字段；contiguous override
 额外复制 `start_maddr`。`compare_item()` 使用 UVM 注册字段比较，不再无条件 fatal。
@@ -150,7 +157,8 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 
 `ut_shm/tests/shm_unit_test.svh` 通过 `shmins_mst_unit_sequence` 覆盖当前集成激励入口，
 可用 plusarg 改变 transaction 数量、normal domain 和 VTRANS 比例。当前没有独立的
-credit/release、ack 完整性、四态输入或 reset 静默测试；transaction copy 组件测试位于
+credit/release、ack 完整性或 reset 静默测试；thread-mask 和局部四态组件测试位于
+`examples/shmins_monitor_compile/`，transaction copy/VTRANS 组件测试位于
 `examples/shmins_sequence_compile/`。Strided item 已为 V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
 生成 element-0 mask，V2M/M2V 共 24 个叶子 case 已随扩容后的 109-case 主列表
 通过真实 DUT regression，`SHMINS-007` 已关闭。其余缺口由验证实现状态中的
@@ -175,7 +183,8 @@ credit/release、ack 完整性、四态输入或 reset 静默测试；transactio
 
 - `SHMINS-012`：topology-based 正式 sequence item、benchmark、consumer 和真实 RTL 集成
   已于 2026-08-13 验证完成并关闭。
-- `SHMINS-001`：`creq_tmsk` 正向数据链已通过 109-case 真实 RTL 回归，等待 mask 边界定向验证。
+- `SHMINS-001`：组件矩阵和 28 个 directed cell 已实现并通过空 design 编译，等待真实
+  RTL 运行、coverage 命中及 109-case 无回归证据。
 - `SHMINS-002/011`：transaction copy/compare 已通过 reference consumer 交叉测试及
   `examples/shmins_sequence_compile/copy_tb.sv` 的四 topology 正反例，2026-08-13 关闭。
 - `SHMINS-003`：过程式 MADDR 生成、12 KiB/空洞检查和两层映射已按 group-relative BLK
@@ -184,7 +193,7 @@ credit/release、ack 完整性、四态输入或 reset 静默测试；transactio
 - `SHMINS-004`：RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case 真实 RTL 回归；
   ATYPE_S/G 仍等待 testcase 配置到 monitor 的端到端定向验证。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。
-- `SHMINS-006`：缺少 active payload X/Z 检查。
+- `SHMINS-006`：active-thread payload 局部 X/Z 检查已实现；公共字段和完整字段矩阵仍缺。
 - `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 和 V2M/M2V 24 个 case
   已随 109-case 主列表通过真实 RTL regression，2026-08-14 关闭。
 - `SHMINS-008`：固定 ack timeout 已移除，改为 scoreboard observed 后可配置 grace；

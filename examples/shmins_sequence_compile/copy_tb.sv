@@ -161,26 +161,44 @@ package shmins_transaction_copy_test_pkg;
     indexed_source.item_to_rtl();
     check_item_copy(indexed_source, indexed_copy, "indexed");
 
-    vtrans_source = shmins_vtrans_sequence_item::type_id::create("vtrans_source");
-    vtrans_copy = shmins_vtrans_sequence_item::type_id::create("vtrans_copy");
-    if (!vtrans_source.randomize() with {
-          creq_dtype == DTYP_16;
-          creq_atype_w == ATYP_16;
-          creq_atype_s == ATYP_S;
-          creq_atype_g == GAUTO_DW;
-          creq_itype == LDST_S;
-          creq_wpid == 0;
-          creq_id == 8'hc3;
-          creq_ack_en == 1'b1;
-          delay_cycle == 9;
-        }) begin
-      `uvm_fatal("SHMINS_COPY_VTRANS_RANDOMIZE", "failed to randomize VTRANS source")
-    end
-    vtrans_source.item_to_rtl();
-    check_item_copy(vtrans_source, vtrans_copy, "vtrans");
+    for (int unsigned dtype_idx = 0; dtype_idx < 2; dtype_idx++) begin
+      creq_dtype_e vtrans_dtype = dtype_idx == 0 ? DTYP_8 : DTYP_16;
+      for (int unsigned itype_idx = 0; itype_idx < 2; itype_idx++) begin
+        creq_itype_e vtrans_itype = itype_idx == 0 ? LDST_S : LDST_V;
+        string label = $sformatf("vtrans_dtype%0d_itype%0d", vtrans_dtype, vtrans_itype);
 
-    if (checked_item_count != 4) begin
-      `uvm_fatal("SHMINS_COPY_COUNT", $sformatf("expected 4 checked items, observed %0d", checked_item_count))
+        vtrans_source = shmins_vtrans_sequence_item::type_id::create({label, "_source"});
+        vtrans_copy = shmins_vtrans_sequence_item::type_id::create({label, "_copy"});
+        if (!vtrans_source.randomize() with {
+              creq_dtype == local::vtrans_dtype;
+              creq_atype_w == ATYP_32;
+              creq_atype_s == ATYP_U;
+              creq_atype_g == GAUTO_1B;
+              creq_itype == local::vtrans_itype;
+              creq_wpid == 0;
+              creq_id == 8'hc3;
+              creq_ack_en == 1'b1;
+              delay_cycle == 9;
+            }) begin
+          `uvm_fatal("SHMINS_COPY_VTRANS_RANDOMIZE", $sformatf("failed to randomize %s", label))
+        end
+        foreach (vtrans_source.elem_num[thread_idx]) begin
+          int unsigned expected_length = vtrans_dtype == DTYP_8 ? 16 : 32;
+          if (vtrans_source.creq_tmsk !== '1 || vtrans_source.elem_num[thread_idx] != 16 ||
+              vtrans_source.creq_len[thread_idx] != expected_length ||
+              vtrans_source.creq_vmsk[thread_idx] !== '1) begin
+            `uvm_fatal("SHMINS_COPY_VTRANS_MASK",
+                       $sformatf("%s thread %0d does not satisfy the VTRANS full-mask contract",
+                                 label, thread_idx))
+          end
+        end
+        vtrans_source.item_to_rtl();
+        check_item_copy(vtrans_source, vtrans_copy, label);
+      end
+    end
+
+    if (checked_item_count != 7) begin
+      `uvm_fatal("SHMINS_COPY_COUNT", $sformatf("expected 7 checked items, observed %0d", checked_item_count))
     end
 
     `uvm_info("SHMINS_COPY_TEST", "transaction copy and compare component test: PASS", UVM_LOW)
