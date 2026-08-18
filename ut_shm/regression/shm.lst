@@ -1,2 +1,4 @@
 INCLUDE : m2v.lst
 INCLUDE : v2m.lst
+INCLUDE : p0_directed.lst
+INCLUDE : shm_tmsk_directed_test
