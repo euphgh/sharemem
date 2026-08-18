@@ -26,7 +26,7 @@ package shm_util_package;
     parameter PRIO_W          = 4                     ;
     parameter FFD_CYC         = 1                     ; //feedforward cycle
     parameter RPORT_DLY       = 5                     ;
-    parameter VTAB_D          = 6+RPORT_DLY-FFD_CYC+1+1+1; // current default: 12
+    parameter VTAB_D          = 6+RPORT_DLY-FFD_CYC+1+1+1; // current default: 13
     parameter ID_W            = 8                     ;
     parameter THD_N           = 16                    ;
     parameter BANK_N          = THD_N                 ;

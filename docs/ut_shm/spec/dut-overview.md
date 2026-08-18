@@ -74,11 +74,11 @@ ut_shm 从 `shm_util_package` 取值，并在 `shm_tb_top` 实例化 DUT 时显�
 |`GID_N`|2|每个逻辑 bank 对应的物理 BANK 数量；当前由接口的一位 gid 编码|
 |`WARP_PER_GID`|4|每个物理 BANK 承载的 WARP 数量|
 |`WARP_STEP`|12 KiB|同一 gid 内相邻 WARP 地址区域的步长|
-|`OTF_N`|4|creq 初始 credit 数|
+|`OTF_N`|8|creq 初始 credit 数|
 |`PRIO_W`|4|线程优先级宽度；当前 RTL 端口固定写成 4 bit|
 |`FFD_CYC`|1|MEM 读可见的前向写窗口；当前值表示读可见同周期写|
-|`RPORT_DLY`|4|MEM 读请求到读数据返回的固定周期数|
-|`VTAB_D`|12|reservation busy 窗口深度，表达式为 `6+RPORT_DLY-FFD_CYC+1+1+1`|
+|`RPORT_DLY`|5|MEM 读请求到读数据返回的固定周期数|
+|`VTAB_D`|13|reservation busy 窗口深度，表达式为 `6+RPORT_DLY-FFD_CYC+1+1+1`|
 |`ID_W`|8|creq 和 ack ID 宽度|
 |`MADDR_W`|21|统一地址宽度|
 |`BADDR_W`|16|gid 内地址以及 `creq_vaddr` 的宽度，等于 `MADDR_W-$clog2(BANK_N)-1`|

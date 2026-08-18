@@ -12,8 +12,8 @@
 |`GID_N`|2|每个逻辑 bank 对应的物理 BANK 数量|
 |`BADDR_W`|16|一个 gid 内的字节地址宽度|
 |`FFD_CYC`|1|读请求可见的前向写周期数|
-|`RPORT_DLY`|4|MEM 读请求到读数据返回的固定周期数|
-|`VTAB_D`|12|reservation busy 窗口深度|
+|`RPORT_DLY`|5|MEM 读请求到读数据返回的固定周期数|
+|`VTAB_D`|13|reservation busy 窗口深度|
 |`VLM_SUB_BANK_N`|4|每个 gid 的 reservation sub-bank 数量|
 |`WRITE_PORT_N`|2|每个逻辑 bank 的写 reservation 端口数|
 
@@ -115,8 +115,8 @@ strobe 对应的 byte 会更新读结果；同一 byte 在可见窗口内被多�
 |1|`T0`|包含 `T0` 接受的写，返回新值|
 |2|`T0+1`|还包含下一周期接受的写|
 
-例如，当前 `FFD_CYC=1`、`RPORT_DLY=4` 时，`T0` 的 read 在 `T0+4` 返回，并包含
-`T0` 及之前的写；`T0+1`～`T0+3` 的写不能进入这笔返回数据。
+例如，当前 `FFD_CYC=1`、`RPORT_DLY=5` 时，`T0` 的 read 在 `T0+5` 返回，并包含
+`T0` 及之前的写；`T0+1`～`T0+4` 的写不能进入这笔返回数据。
 
 ### 2.5 同周期读写
 
