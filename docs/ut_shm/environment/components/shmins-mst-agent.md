@@ -91,12 +91,16 @@ SPACE_LOC、16 个 element、全 element mask 和全 thread mask。Normal 配置
 Driver 在 `main_phase` 中：
 
 1. 把 creq 输出初始化为 0；
-2. 等待 `rst_n===1`，创建容量为 `OTF_N` 的 semaphore；
-3. 每笔 item 先取得一个 credit，再从 sequencer 取请求；
-4. 编码 `creq_typ`，用递增计数生成 `creq_id`；
-5. 将 `creq_vld` 和 payload 驱动一个时钟周期；
-6. 根据 `delay_cycle` 插入下一笔请求前的空闲周期；
-7. 独立线程观察 `creq_rls`，每个有效周期归还一个 semaphore token。
+2. 等待 `rst_n===1`，把显式可用 credit 计数恢复为 `OTF_N`；
+3. 每个 `mst_cb` 周期先采样 `creq_rls`，归还 credit 并检查计数不得超过 `OTF_N`；
+4. 消耗尚未结束的 `delay_cycle`，并在没有 credit 时保持 `creq_vld==0`；
+5. 使用非阻塞 `try_next_item()` 查询 sequencer，没有可用 item 时不等待；
+6. 对取得的 item 编码 `creq_typ`，用递增计数生成 `creq_id`；
+7. 在当前 clocking event 后驱动请求，使 DUT 在下一个采样沿接收；
+8. 消耗一个 credit，并根据 `delay_cycle` 插入下一笔请求前的完整空闲周期。
+
+`delay_cycle==0` 允许 `creq_vld` 连续保持为 1，此时每个采样沿接收不同请求；大于 0
+时，该值表示相邻两笔 accepted creq 之间完整的 `creq_vld==0` 周期数。
 
 Credit 与 ack 相互独立。Driver 不等待 ack 才发送下一笔，也不把 ack 当作 credit
 release。
@@ -146,7 +150,7 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 ## 8. 调试观察点
 
 - `drv_tr_cnt`：driver 已发送事务数量和自动分配 ID 的来源；
-- semaphore 是否耗尽、`creq_rls` 是否按预期归还 credit；
+- `credit_cnt` 是否耗尽、`creq_rls` 是否按预期归还 credit，以及是否报告上溢；
 - `shmins_cnt`：monitor 采样事务数量；
 - lifecycle direction queue：transaction UID、队列位置、方向、ID、ack/data completion、
   grace 状态和 cycle；
@@ -199,7 +203,7 @@ credit/release、ack 完整性或 reset 静默测试；thread-mask 和局部四�
 - `SHMINS-008`：固定 ack timeout 已移除，改为 scoreboard observed 后可配置 grace；
   2026-08-14 空 design VCS 编译通过，待长延迟 ack 定向验证。
 - `SHMINS-009`：ack enable、unexpected、duplicate、wrong-direction、wrong-ID 的 lifecycle
-  checker 已实现但待定向验证；credit/release 上溢检查仍未实现。
+  checker 和 driver credit/release 上溢检查已实现但待定向正负例验证。
 - `SHMINS-010`：复位期间 release/ack 静默没有检查。
 - `ENV-001`：运行中 reset 未取消 driver/monitor pending 状态。
 - 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 正向主路径已通过 109-case 真实 RTL 回归；

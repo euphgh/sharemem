@@ -1,9 +1,14 @@
 `ifndef INC_SHMINS_MST_DRIVER_SVH
 `define INC_SHMINS_MST_DRIVER_SVH
 
-//-----------------------------------------------------------------------------
-// Class: shmins_mst_driver
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// @brief Drives credit-controlled SHMINS requests on clocking-block boundaries.
+//
+// The driver schedules at most one request per cycle, consumes one credit for
+// every scheduled request, and restores credits from sampled creq_rls pulses.
+// Request checking and architectural result comparison remain monitor and
+// scoreboard responsibilities.
+//------------------------------------------------------------------------------
 
 import shm_util_package::*;
 
@@ -12,10 +17,15 @@ class shmins_mst_driver extends uvm_driver #(shmins_sequence_item);
     // Data Members
     //---------------------------------------------------------------------
     int unsigned shmins_agent_id;
-    bit[31:0]    drv_tr_cnt = 0;
 
-    int          credit_cnt = 0;
-    semaphore    credit_sem;
+    // Number of requests scheduled by this driver since construction.
+    bit [31:0] drv_tr_cnt = 0;
+
+    // Number of currently available DUT request credits.
+    int unsigned credit_cnt = 0;
+
+    // Number of complete idle request cycles remaining before another issue.
+    int unsigned delay_cnt = 0;
 
     // Interface Instantiation
     //---------------------------------------------------------------------
@@ -34,8 +44,47 @@ class shmins_mst_driver extends uvm_driver #(shmins_sequence_item);
 
     // User Defined APIs
     //---------------------------------------------------------------------
-    extern task reset_signals();
-    extern task drive_signals(shmins_sequence_item trans);
+
+    //------------------------------------------------------------------------------
+    // @brief Drives all request outputs to their reset values without waiting.
+    //------------------------------------------------------------------------------
+    extern function void reset_signals();
+
+    //------------------------------------------------------------------------------
+    // @brief Restores one credit when creq_rls is sampled and checks overflow.
+    //
+    // @pre Called once after each mst_cb event.
+    //------------------------------------------------------------------------------
+    extern protected function void process_credit_release();
+
+    //------------------------------------------------------------------------------
+    // @brief Consumes one configured idle cycle when an inter-request delay is active.
+    //
+    // @return 1 when request issue must be skipped for the current scheduler cycle.
+    //------------------------------------------------------------------------------
+    extern protected function bit consume_delay_cycle();
+
+    //------------------------------------------------------------------------------
+    // @brief Reports whether the driver currently owns a request credit.
+    //
+    // @return 1 when a request may be scheduled; otherwise 0.
+    //------------------------------------------------------------------------------
+
+    //------------------------------------------------------------------------------
+    // @brief Assigns one request payload to the SHMINS clocking-block outputs.
+    //
+    // @param transaction Encoded request to present at the next DUT sampling edge.
+    //------------------------------------------------------------------------------
+    extern protected function void drive_signals(shmins_sequence_item transaction);
+
+    //------------------------------------------------------------------------------
+    // @brief Records, encodes, drives, and accounts for one sequencer request.
+    //
+    // @param transaction Request returned by try_next_item().
+    // @pre transaction is non-null and credit_available() returns 1.
+    // @post One credit is consumed and the configured inter-request delay is armed.
+    //------------------------------------------------------------------------------
+    extern protected function void issue_request(shmins_sequence_item transaction);
 
         // UVM Factory Registration
     //---------------------------------------------------------------------
@@ -51,9 +100,14 @@ endclass: shmins_mst_driver
 //-----------------------------------------------------------------------------
 function shmins_mst_driver::new(string name = "shmins_mst_driver", uvm_component parent);
     super.new(name, parent);
-    credit_sem = new(1);
 endfunction: new
 
+//------------------------------------------------------------------------------
+// @brief Runs the cycle-based request, delay, and credit scheduler.
+//
+// The only clock wait is at the top of the loop. All helper functions schedule
+// outputs for the next sampling edge without consuming simulation time.
+//------------------------------------------------------------------------------
 task shmins_mst_driver::main_phase(uvm_phase phase);
     super.main_phase(phase);
     `uvm_info(get_type_name(), "In main_phase...!!", UVM_DEBUG);
@@ -61,35 +115,39 @@ task shmins_mst_driver::main_phase(uvm_phase phase);
     // Reset
     reset_signals();
     wait(shmins_mst_vif.rst_n === 1'b1);
-    credit_sem = new(OTF_N);
+    delay_cnt = 0;
+    credit_cnt = OTF_N;
 
-    @(shmins_mst_vif.mst_cb);
+    forever begin
+        @(shmins_mst_vif.mst_cb);
+        process_credit_release();
 
-    fork
-        forever begin
-            // Credit
-            credit_sem.get(1);
-            seq_item_port.get_next_item(req);
-            `uvm_info(get_type_name(), {"req item\n",req.sprint()}, UVM_HIGH)
-            drv_tr_cnt++;
+        // Drives creq_vld low by default
+        shmins_mst_vif.mst_cb.creq_vld <= 1'b0;
 
-            void'(begin_tr(req, "shmins_mst_driver"));
-            req.item_to_rtl();
-            req.creq_id = drv_tr_cnt[ID_W-1:0];
-            drive_signals(req);
-            end_tr(req);
-            seq_item_port.item_done(req);
+        if (consume_delay_cycle()) begin
+            continue;
         end
-        forever begin
-            @(shmins_mst_vif.mst_cb);
-            if (shmins_mst_vif.mon_cb.creq_rls === 1'b1) begin
-                credit_sem.put(1);
-            end
+
+        // Wait when no credit is available
+        if (credit_cnt == 0) begin
+            continue;
         end
-    join
+
+        // UVM defines try_next_item() as a task, so it cannot be wrapped in a
+        // function. It does not wait for an item and returns null when none is
+        // currently available from the sequencer.
+        req = null;
+        seq_item_port.try_next_item(req);
+        if (req == null) begin
+            continue;
+        end
+
+        issue_request(req);
+    end
 endtask: main_phase
 
-task shmins_mst_driver::reset_signals();
+function void shmins_mst_driver::reset_signals();
     shmins_mst_vif.mst_cb.creq_vld   <= '0;
     shmins_mst_vif.mst_cb.creq_id    <= '0;
     shmins_mst_vif.mst_cb.creq_wpid  <= '0;
@@ -105,40 +163,64 @@ task shmins_mst_driver::reset_signals();
     shmins_mst_vif.mst_cb.creq_vdat  <= '0;
 
     `uvm_info(get_type_name(), "Reset shmins_mst_interface...!!", UVM_DEBUG);
-endtask: reset_signals
+endfunction: reset_signals
 
-//-----------------------------------------------------------------------------
-// User Defined
-// Task: drive_signals
-//-----------------------------------------------------------------------------
-// Driver SHMINS Master Output
-//-----------------------------------------------------------------------------
-task shmins_mst_driver::drive_signals(shmins_sequence_item trans);
-
-    // Send Ins
-    shmins_mst_vif.mst_cb.creq_vld   <= 1'b1           ;
-    shmins_mst_vif.mst_cb.creq_id    <= trans.creq_id  ;
-    shmins_mst_vif.mst_cb.creq_wpid  <= trans.creq_wpid;
-    shmins_mst_vif.mst_cb.creq_wpnum <= trans.creq_wpnum;
-    shmins_mst_vif.mst_cb.creq_typ   <= trans.creq_typ ;
-    shmins_mst_vif.mst_cb.creq_vaddr <= trans.creq_vaddr;
-    shmins_mst_vif.mst_cb.creq_tmsk  <= trans.creq_tmsk;
-    shmins_mst_vif.mst_cb.creq_base  <= trans.creq_base ;
-
-    for (int th_idx=0; th_idx<16; th_idx++) begin
-        shmins_mst_vif.mst_cb.creq_prio[th_idx] <= trans.creq_prio[th_idx];
-        shmins_mst_vif.mst_cb.creq_len [th_idx] <= trans.creq_len [th_idx];
-        shmins_mst_vif.mst_cb.creq_vmsk[th_idx] <= trans.creq_vmsk[th_idx];
-        shmins_mst_vif.mst_cb.creq_offs[th_idx] <= trans.creq_offs(th_idx);
-        shmins_mst_vif.mst_cb.creq_vdat[th_idx] <= trans.creq_vdat[th_idx];
+function void shmins_mst_driver::process_credit_release();
+    if (shmins_mst_vif.mon_cb.creq_rls !== 1'b1) begin
+        return;
     end
 
-    @(shmins_mst_vif.mst_cb);
-    shmins_mst_vif.mst_cb.creq_vld <= 1'b0;
+    if (credit_cnt == OTF_N) begin
+        `uvm_error("SHMINS_CREDIT_OVERFLOW", "Received shmins release while all credits are available")
+        return;
+    end
 
-    // delay for next trans
-    repeat(trans.delay_cycle) @(shmins_mst_vif.mst_cb);
+    credit_cnt++;
+endfunction: process_credit_release
 
-endtask: drive_signals
+function bit shmins_mst_driver::consume_delay_cycle();
+    if (delay_cnt == 0) begin
+        return 1'b0;
+    end
+
+    delay_cnt--;
+    return 1'b1;
+endfunction: consume_delay_cycle
+
+function void shmins_mst_driver::drive_signals(shmins_sequence_item transaction);
+    `uvm_info(get_type_name(), "Driving shmins trans valid", UVM_HIGH)
+
+    // Send Ins
+    shmins_mst_vif.mst_cb.creq_vld   <= 1'b1;
+    shmins_mst_vif.mst_cb.creq_id    <= transaction.creq_id;
+    shmins_mst_vif.mst_cb.creq_wpid  <= transaction.creq_wpid;
+    shmins_mst_vif.mst_cb.creq_wpnum <= transaction.creq_wpnum;
+    shmins_mst_vif.mst_cb.creq_typ   <= transaction.creq_typ;
+    shmins_mst_vif.mst_cb.creq_vaddr <= transaction.creq_vaddr;
+    shmins_mst_vif.mst_cb.creq_tmsk  <= transaction.creq_tmsk;
+    shmins_mst_vif.mst_cb.creq_base  <= transaction.creq_base;
+
+    for (int th_idx = 0; th_idx < THD_N; th_idx++) begin
+        shmins_mst_vif.mst_cb.creq_prio[th_idx] <= transaction.creq_prio[th_idx];
+        shmins_mst_vif.mst_cb.creq_len [th_idx] <= transaction.creq_len [th_idx];
+        shmins_mst_vif.mst_cb.creq_vmsk[th_idx] <= transaction.creq_vmsk[th_idx];
+        shmins_mst_vif.mst_cb.creq_offs[th_idx] <= transaction.creq_offs(th_idx);
+        shmins_mst_vif.mst_cb.creq_vdat[th_idx] <= transaction.creq_vdat[th_idx];
+    end
+endfunction: drive_signals
+
+function void shmins_mst_driver::issue_request(shmins_sequence_item transaction);
+    `uvm_info(get_type_name(), {"req item\n", transaction.sprint()}, UVM_HIGH)
+    drv_tr_cnt++;
+    void'(begin_tr(transaction, "shmins_mst_driver"));
+    transaction.item_to_rtl();
+    transaction.creq_id = drv_tr_cnt[ID_W-1:0];
+    drive_signals(transaction);
+    end_tr(transaction);
+
+    delay_cnt = transaction.delay_cycle;
+    credit_cnt--;
+    seq_item_port.item_done(transaction);
+endfunction: issue_request
 
 `endif //INC_SHMINS_MST_DRIVER_SVH
