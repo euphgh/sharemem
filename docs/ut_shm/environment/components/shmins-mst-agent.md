@@ -187,8 +187,8 @@ credit/release、ack 完整性或 reset 静默测试；thread-mask 和局部四�
 
 - `SHMINS-012`：topology-based 正式 sequence item、benchmark、consumer 和真实 RTL 集成
   已于 2026-08-13 验证完成并关闭。
-- `SHMINS-001`：组件矩阵和 28 个 directed cell 已实现并通过空 design 编译，等待真实
-  RTL 运行、coverage 命中及 109-case 无回归证据。
+- `SHMINS-001`：组件矩阵、24个 normal mask cell 和4个 VTRANS cell 已在最新真实
+  design 上通过，原109-case主列表通过结论继续有效；等待目标 coverage bin/cross归档。
 - `SHMINS-002/011`：transaction copy/compare 已通过 reference consumer 交叉测试及
   `examples/shmins_sequence_compile/copy_tb.sv` 的四 topology 正反例，2026-08-13 关闭。
 - `SHMINS-003`：过程式 MADDR 生成、12 KiB/空洞检查和两层映射已按 group-relative BLK
@@ -197,7 +197,8 @@ credit/release、ack 完整性或 reset 静默测试；thread-mask 和局部四�
 - `SHMINS-004`：RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case 真实 RTL 回归；
   ATYPE_S/G 仍等待 testcase 配置到 monitor 的端到端定向验证。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。
-- `SHMINS-006`：active-thread payload 局部 X/Z 检查已实现；公共字段和完整字段矩阵仍缺。
+- `SHMINS-006`：active-thread payload 局部 X/Z 检查已实现；inactive/masked don’t-care X
+  的组件和30笔真实 RTL矩阵已规划，公共字段和完整非法字段矩阵仍缺。
 - `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 和 V2M/M2V 24 个 case
   已随 109-case 主列表通过真实 RTL regression，2026-08-14 关闭。
 - `SHMINS-008`：固定 ack timeout 已移除，改为 scoreboard observed 后可配置 grace；
@@ -207,6 +208,7 @@ credit/release、ack 完整性或 reset 静默测试；thread-mask 和局部四�
 - `SHMINS-010`：复位期间 release/ack 静默没有检查。
 - `ENV-001`：运行中 reset 未取消 driver/monitor pending 状态。
 - 双 gid 地址结构、`creq_vaddr` 和 M2V byte-overlap 正向主路径已通过 109-case 真实 RTL 回归；
-  gid 边界、数据隔离和冲突/失败路径仍由 verification status 中的双 gid 迁移项跟踪。
+  第一批 gid边界、数据隔离和 ownership directed LST也已通过，coverage和未覆盖失败路径仍由
+  verification status 跟踪。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

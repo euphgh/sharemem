@@ -59,6 +59,12 @@ VCS `make compile` 已完成所有新增 class 的 parse、elaboration 和 link�
 组件测试在远端 VCS 通过，两个真实 RTL directed test、TC 和独立 LST 已编写，并通过
 空 design `make compile`。真实 RTL 的 24-cell normal mask、4-cell VTRANS、coverage 命中和
 109-case 无回归证据尚未执行。
+2026-08-18 用户确认最新真实 design 上 `p0_directed.lst` 和 `shmins_mask_directed.lst`
+均已全部通过：此前失败的 reservation other-gid ownership case 现已通过，普通 mask 的
+24 个 cell 和 VTRANS 的 4 个 cell 也全部通过。原 109-case `shm.lst` 通过结论继续有效。
+这补齐两组新增 LST 的真实 RTL case 证据，但本次没有提供可回溯的目标 coverage bin/cross
+报告，因此 coverage-dependent 条目继续保持待验证。下一批开发转向 inactive thread、
+masked element、未使用 offset 和 M2V data 的合法 don’t-care X 定向验证。
 
 ## 1. 状态和优先级
 
@@ -112,12 +118,12 @@ VCS `make compile` 已完成所有新增 class 的 parse、elaboration 和 link�
 |`COV-001`|P1|实现中|跨组件|address/reservation 和 request mask/VTRANS coverage 已接入；其余 coverage 与 bin 证据仍缺|
 |`DBANK-001`|P0|待验证|共享地址/shmins|wpid/gid 地址和 M2V vaddr 定向 case 已通过真实 RTL；待保存 coverage/关闭证据|
 |`DBANK-002`|P0|待验证|reference/expected model|相同 BADDR 跨 gid 数据隔离 case 已通过真实 RTL；待保存 coverage/关闭证据|
-|`DBANK-004`|P0|待实现|RTL/VLM reservation|真实 RTL 把 other-gid external busy 当成全局阻塞；等待设计确认和修复|
-|`DBANK-005`|P1|待验证|test/coverage|P0-3 三项及109-case通过；P0-4发现DUT ownership问题，目标bin和整组通过仍缺|
-|`SHMINS-001`|P0|待验证|shmins agent|组件矩阵及 directed tests 已完成，待真实 RTL 28-cell、coverage 和主列表回归|
+|`DBANK-004`|P0|待验证|RTL/VLM reservation|other-gid ownership case 已在最新 RTL 通过；待保存实现/coverage 闭环证据|
+|`DBANK-005`|P1|待验证|test/coverage|`p0_directed.lst` 四项及109-case主列表均通过；目标bin证据仍缺|
+|`SHMINS-001`|P0|待验证|shmins agent|真实 RTL 28-cell及109-case均通过；目标mask/VTRANS coverage证据仍缺|
 |`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
 |`SHMINS-005`|P2|待实现|shmins agent|256-bit 向量参数适配已通过；16-thread/4-bit 等硬编码仍在|
-|`SHMINS-006`|P1|实现中|shmins monitor|active-thread payload 局部 X/Z 检查已实现；公共字段和完整字段矩阵仍缺|
+|`SHMINS-006`|P1|实现中|shmins monitor|局部 checker 已实现；正在规划 inactive/masked don’t-care X 系统矩阵|
 |`SHMINS-008`|P1|待验证|shmins monitor/lifecycle|有序 grace 组件测试已通过，待 clocked timeout 触发边界验证|
 |`SHMINS-009`|P1|待验证|shmins/lifecycle|ack 完备 checker 和 credit/release 上溢检查已实现，待定向正负例|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
@@ -222,10 +228,10 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   other-gid historical pending、同周期 write-port conflict、different-bank shared slot、
   read/write direction independence、gid 0/1 正常 match、unexpected、missing 和 address
   mismatch。Agent-level subscriber 已证明 unmatched MEM 发布时 gid/match metadata 仍无效。
-  Outcome 只供
-  assertion/checker、诊断和 coverage 使用，不控制 scheduler 或 RTL 输出。P0-4 在真实
-  RTL 上报告 `SHM_RESERVATION_OTHER_GID_NOT_COVERED`；波形确认 gid 0 external busy 会
-  同时阻塞目标 gid 1 reservation。验证侧 policy 已生效，问题等待设计确认和 RTL 修复。
+  Outcome 只供 assertion/checker、诊断和 coverage 使用，不控制 scheduler 或 RTL 输出。
+  首轮 P0-4 曾报告 `SHM_RESERVATION_OTHER_GID_NOT_COVERED`，波形确认当时 RTL 把 other-gid
+  external busy 当成全局阻塞。2026-08-18 用户确认同一 ownership case 已在最新真实 design
+  上通过，说明当前 RTL 已满足该定向场景；尚缺对应实现版本和目标 coverage 的归档证据。
 - 目标：busy ownership 使用 `[direction][delay][gid][subbank]`，MEM port record 保持
   `[direction][delay][bank]`；resolver 从唯一到期 record 恢复 gid，read driver复用同一
   match result，scoreboard actual memory增加gid，未匹配 MEM 不更新可信模型。
@@ -237,8 +243,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 现状：现有 109 个 case 已在真实 design 上全部通过，证明统一双 gid 环境可以承载当前
   正向矩阵。第一批 address/reservation coverage collector、定向 topology item 发送层和
   三类组件测试已经实现。P0-3/P0-4 的四个真实 RTL test 由根 TC 和独立
-  `p0_directed.lst` 组织；P0-3 三项和原 109-case 主列表已通过，P0-4 ownership case
-  稳定暴露 DUT other-gid global blocking。目标 bin 命中证据和整组 PASS 仍未完成。
+  `p0_directed.lst` 组织。2026-08-18 用户确认四项均在最新真实 design 上通过，原
+  109-case 主列表通过结论继续有效；目标 bin/cross 命中证据仍未归档。
 - 目标：实现 `TP-ADDR-009`、`TP-MEM-005`、`TP-RSV-007/008` 以及更新后的 M2V、LOC、
   WRP、BLK testpoint；coverage 至少交叉 direction、gid、subbank、busy source和match结果。
 - 验收：开发计划阶段 7 的定向 case 全部通过，主 regression 无新增 error，并保存可重复
@@ -284,11 +290,11 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   全零值，并在全零报告后丢弃事务，不分配 UID、不发布到 production analysis port。
   Reference 为非 active thread 创建空的地址/BANK/strobe 数组，不解释 inactive payload，
   也不生成对应读写期望。`MON-MASK-001`～`010`、四个 VTRANS sequence cell 和 reference
-  inactive X/Z 组件测试已通过；24-cell normal 与 4-cell VTRANS 真实 RTL tests 已编写并
-  通过空 design 编译。正向主路径此前已通过 109-case 真实 RTL 回归，但新 directed tests
-  尚未在真实 RTL 上执行。
-- 影响：代码路径已具备 mask 行为，但在稀疏 mask、inactive payload X/Z 和 DUT 意外
-  输出场景验证完成前，不能确认功能关闭。
+  inactive X/Z 组件测试已通过。2026-08-18 用户确认 `shmins_mask_directed.lst` 在最新
+  真实 design 上全部通过，即 24-cell normal 和 4-cell VTRANS 均通过；原 109-case
+  主列表通过结论继续有效。本次尚未提供目标 mask/VTRANS coverage 报告。
+- 影响：mask 和 VTRANS 的组件、定向系统及主列表正向证据已具备；在目标 coverage
+  bin/cross 归档前仍不能按既定关闭条件完成闭环。
 - 目标依据：[creq/ack 接口](spec/creq-ack-interface.md)。
 - 验收：覆盖非全零普通 mask、inactive thread X/Z、全零非法请求和 VTRANS 全 1；保存
   24-cell normal、4-cell VTRANS、目标 coverage 和 109-case 无回归证据。
@@ -318,7 +324,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 现状：monitor 已先检查 tmsk，再按 active thread 检查 priority、length、有效 vmsk、
   topology 实际使用的 offset slice，以及 V2M 有效 data byte；inactive payload X/Z 和
   `creq_vld!=1` 时 payload 不检查。组件测试已覆盖 inactive X/Z、active length X、tmsk X
-  和 valid 0。公共控制字段及各 active payload 字段的完整 X/Z 矩阵仍未覆盖。
+  和 valid 0。下一批已规划 inactive thread 全 payload X、masked element data/indexed
+  offset X、未使用 packed slice X、length 外 payload X 和 M2V data X 的组件与30笔真实
+  RTL矩阵；公共控制字段及各非法 active payload 字段的完整 X/Z 矩阵仍未覆盖。
 - 影响：非法输入可能进入 reference，错误被延迟或转化成难以定位的数据差异。
 - 目标依据：`CREQ-002`。
 - 验收：为公共字段、active thread payload 和 inactive thread payload 分别注入 X/Z，

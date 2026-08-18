@@ -46,15 +46,19 @@ scoreboard 和 topology-based sequence item 已完成主路径迁移。新增 te
 [双 gid 接口重构开发计划](../../development/shm-dual-bank-interface-refactor-plan.md)的
 稳定 contract。
 
-- 当前 testcase 最终都运行 `shm_unit_test`，通过 plusargs 选择 V2M、M2V、VTRANS、
-  instruction、space、DTYPE 和 ATYPE。
+- 109-case普通矩阵最终运行 `shm_unit_test`，通过 plusargs 选择 V2M、M2V、VTRANS、
+  instruction、space、DTYPE 和 ATYPE；双 gid 和 mask/VTRANS directed 组使用独立 UVM test。
 - `ut_shm/regression/shm.lst` 当前选择 109 个 case：54 个普通 V2M、54 个普通 M2V
   和 1 个 VTRANS。当前 109 个 case 已在 `VEC_W=256` 的真实 design 上全部通过；其中
   新增的 24 个 `LDSTE_S + WRP/BLK` case 已完成系统验证。
-- 当前没有任何有效 functional covergroup 或 coverpoint。所有 testpoint 的 functional
-  coverage 状态均为“未实现”，case 或 checker 不能替代 coverage。
+- `p0_directed.lst` 的四个双 gid test 和 `shmins_mask_directed.lst` 的28个 mask/VTRANS
+  cell 也已在最新真实 design 上全部通过；目标 functional coverage 结果尚未归档。
+- 当前已接入 address、reservation 和 request mask/VTRANS 的第一批 functional
+  covergroup；其余 testpoint coverage 和目标 bin/cross 闭环仍不完整，case 或 checker
+  不能替代 coverage。
 - 当前 sequence 已使用 topology-based 过程式地址生成，并完成地址空洞和 BLK
-  group-relative MADDR 约束；`creq_tmsk`、wpid/gid 边界和其他随机字段仍缺定向 case。
+  group-relative MADDR 约束；`creq_tmsk` 和 wpid/gid 第一批边界已有定向 case，合法
+  don’t-care X、其他随机字段和完整 coverage仍待补。
   完整限制见
   [Testcase 与 regression](testcases-and-regression.md#5-当前激励能力和限制)。
 

@@ -350,10 +350,9 @@ target/other-gid external ownership、historical/current conflict、跨 BANK/方
 以及 gid 0/1 match、unexpected、missing 和 address mismatch；agent-metadata 检查 policy
 handle 传播和 unmatched MEM 的无效 gid/match metadata。2026-08-15 远端
 `scripts/ubuntu/check_vlm_reservation_vcs.sh all` 全部通过。
-这些组件结果不替代真实 RTL directed case 和功能覆盖闭环。2026-08-15 的正式 design
-P0-4 case 使用同一 directed policy 后报告 `SHM_RESERVATION_OTHER_GID_NOT_COVERED`；波形
-确认 DUT 在 gid 0 external write busy 时没有发出本应允许的 gid 1 reservation，而是在
-other-gid busy 解除后继续。该结果证明定向场景能够暴露 ownership 差异，等待设计确认。
+这些组件结果不替代真实 RTL directed case 和功能覆盖闭环。2026-08-15 的首轮正式 design
+P0-4 case 曾使用同一 directed policy 暴露 other-gid global blocking；2026-08-18 用户确认
+该 case 已在最新 design 上通过。当前仍需归档对应目标 coverage bin/cross。
 
 ## 13. 调试观察点
 
@@ -389,10 +388,7 @@ other-gid busy 解除后继续。该结果证明定向场景能够暴露 ownersh
 - `ENV-001`：运行中 reset 未清理 scheduler record 和 busy 状态。
 - gid busy、record gid、resolver 和统一 interface/agent 已接入，并于 2026-08-13 随真实
   RTL 集成 testcase 跑通；2026-08-15 已补齐 P0-1 ownership/resolver/agent metadata 组件
-  场景，并增加 P0-2 deterministic external busy policy。首个真实 RTL ownership case 已
-  执行并确认 DUT 对 other-gid external busy 做全局阻塞；设计结论、RTL 修复和完整组合
-  coverage 仍按
-  [SHM 定向验证开发计划](../../../development/shm-directed-verification-development-plan.md)
-  继续实施。
+  场景，并增加 P0-2 deterministic external busy policy。最新真实 RTL ownership case 已
+  通过；完整组合 coverage 仍由 verification status 和 reservation testpoint 继续跟踪。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

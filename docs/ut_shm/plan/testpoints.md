@@ -28,10 +28,11 @@ spec 要求的激励、观察和 coverage，再记录当前 sequence、checker �
 |受限支持|只有满足额外合法性条件的子场景有定义，其余行为未定义|
 
 当前已实现第一批双 gid 的 address/reference 和 reservation functional coverage 基础，
-P0-3/P0-4 的四个真实 RTL directed test 也已进入根 TC 和独立 LST。P0-3 三项和原
-109-case 主列表已在正式 design 上通过；P0-4 波形确认 DUT 把 other-gid external busy
-当成全局阻塞。目标 bin 命中证据和其他 testpoint covergroup 仍不完整，因此本文仍没有
-testpoint 可标记为“已闭环”。本批暂不要求全项目 coverage merge 或总百分比阈值。
+P0-3/P0-4 的四个真实 RTL directed test 也已进入根 TC 和独立 LST。2026-08-18 用户确认
+`p0_directed.lst` 和 `shmins_mask_directed.lst` 均在最新正式 design 上全部通过，原
+109-case 主列表通过结论继续有效。目标 bin 命中证据和其他 testpoint covergroup 仍不完整，
+因此本文仍没有 testpoint 可标记为“已闭环”。本批暂不要求全项目 coverage merge 或总
+百分比阈值。
 
 ## 2. Testpoint 总览
 
@@ -41,7 +42,7 @@ testpoint 可标记为“已闭环”。本批暂不要求全项目 coverage mer
 |数据路径|`TP-DATA-001`～`004`|双 gid主路径、gid隔离和M2V边界真实RTL通过；完整coverage仍缺|
 |地址模型|`TP-ADDR-001`～`009`|BLK公式/回归、双gid物理公式和wpid边界真实RTL通过；完整coverage仍缺|
 |MEM|`TP-MEM-001`～`005`|统一 monitor、gid resolver 和模型正向主路径已通过 109-case 真实 RTL 回归；FFD_CYC 和定向负例未完成|
-|Reservation|`TP-RSV-001`～`008`|组件/checker已接入；真实RTL ownership case确认other-gid global blocking，待RTL修复与coverage|
+|Reservation|`TP-RSV-001`～`008`|组件/checker已接入；最新RTL ownership directed case通过，完整coverage仍缺|
 |Reset|`TP-RST-001`～`002`|初始 reset 可避开未知采样，运行中 reset 没有统一取消状态|
 
 ## 3. Creq 与 ack
@@ -49,11 +50,11 @@ testpoint 可标记为“已闭环”。本批暂不要求全项目 coverage mer
 |ID|Spec 与验证目标|所需激励|观察点与 checker|目标 coverage|当前 case|状态与缺口|
 |---|---|---|---|---|---|---|
 |`TP-CREQ-001`|[`CREQ-001`](../spec/creq-ack-interface.md#8-复位与检查规则)、`CREQ-005`：只在持有 credit 时接收请求，每笔有效 creq 消耗一个 credit，每拍 release 最多归还一个且总数不超过 `OTF_N`；release 与 ack 独立|连续发送至少 `OTF_N+1` 笔请求，覆盖 credit 用尽、release 早于/晚于 ack、连续 release 和无在途 release|观察 `creq_vld/creq_rls`、driver `credit_cnt` 和 outstanding 请求；driver 已限制自身发送并检查过量 release，仍需独立正负例验证，见 `SHMINS-009`|credit occupancy `0..OTF_N`、stall、release/ack 相对顺序及交叉|所有普通 case 都经过 credit driver，但公共 64～128 周期间隔不形成定向压力|激励和上溢检查已实现；coverage、credit 压力及正负例 case 缺失；总体部分实现|
-|`TP-CREQ-002`|[`CREQ-002`](../spec/creq-ack-interface.md#8-复位与检查规则)：valid 时公共字段和 active-thread payload 已知，inactive-thread payload 可为 X/Z；valid 为 0 时 payload 不检查|分别向公共字段、active thread 和 inactive thread 注入 X/Z，并覆盖 valid 0/1|shmins interface 和 monitor；monitor 按 active mask 局部检查，见 `SHMINS-006`|字段类别 × active/inactive × known/XZ × valid|monitor 组件已覆盖 inactive X/Z、active length X、tmsk X 和 valid 0；reference 组件已覆盖 inactive X/Z|active/inactive 局部检查和 coverage 已实现；公共字段及完整 active 字段矩阵仍缺；总体部分实现|
-|`TP-CREQ-003`|[`CREQ-007`](../spec/creq-ack-interface.md#8-复位与检查规则)及 thread-mask 语义：普通请求 `creq_tmsk!=0`，inactive thread 不产生地址、MEM/reservation 或写回；VTRANS 必须全 1|定向生成单 thread、多 thread、稀疏 mask、全 1、全 0非法输入和 inactive payload X/Z|monitor 检查 X/Z；全零报告后丢弃，不发布到 production 下游；reference 为 inactive thread 建立空派生数组，实际额外 MEM/VLM 输出由后级 checker 比对；见 `SHMINS-001`|tmsk population、thread index、direction、space、VTRANS 和全零非法 bin|组件 `MON-MASK-001`～`010` 和四个 VTRANS sequence cell 已通过；24-cell normal 与4-cell VTRANS RTL tests 已编写并通过空 design 编译|组件和激励基础设施已具备；真实 RTL 28-cell、目标 bin 命中及109-case无回归仍缺；总体部分实现|
-|`TP-CREQ-004`|[`CREQ-004`](../spec/creq-ack-interface.md#8-复位与检查规则)及 mask/尾部 byte：length 以 Byte 计、与 DTYPE 对齐，只有 tmsk/vmsk/length 共同选择的 byte 形成访问；当前每个 thread 的 data、offset 和 mask 容量分别为 256 bit、256 bit 和 32 bit|覆盖 DTYPE 8/16/32、length 0/最小/32 Byte/非整元素非法值、稀疏 vmsk、最高有效 mask bit 和 element 尾部 byte|monitor transaction、reference 的 byte `wmap`、MEM strobe 和 scoreboard；reference 已支持 tmsk/length/vmsk，copy 和 active-element 消费边界已修复|DTYPE × length class × vmsk pattern × highest element × beat crossing × direction|256-bit 接口适配后的 109-case RTL 回归固定覆盖 DTYPE，length/vmsk 由 seed 随机；没有宽度边界定向 case|缩减带宽的正向主路径已通过全列表；coverage 缺失、边界 case 部分；总体部分实现|
+|`TP-CREQ-002`|[`CREQ-002`](../spec/creq-ack-interface.md#8-复位与检查规则)：valid 时公共字段和 active-thread interpreted payload 已知；inactive、masked、length外和direction未使用payload可为X/Z；valid为0时payload不检查|分别向公共字段、active interpreted payload、inactive thread、masked element、未使用 offset 和 M2V data 注入 X/Z，并覆盖 valid 0/1|shmins interface 和 monitor；monitor 按 tmsk、length、mask、topology 和 direction 局部检查，见 `SHMINS-006`|字段类别 × interpreted/ignored × known/XZ × valid；ignored原因|现有组件覆盖 inactive X/Z、active length X、tmsk X 和 valid 0；don’t-care X utility、driver保真、masked/indexed/M2V矩阵已写入开发计划但尚未实现|局部 checker 已实现；完整非法矩阵及30笔合法don’t-care X RTL case待实现；总体部分实现|
+|`TP-CREQ-003`|[`CREQ-007`](../spec/creq-ack-interface.md#8-复位与检查规则)及 thread-mask 语义：普通请求 `creq_tmsk!=0`，inactive thread 不产生地址、MEM/reservation 或写回；VTRANS 必须全 1|定向生成单 thread、多 thread、稀疏 mask、全 1、全 0非法输入和 inactive payload X/Z|monitor 检查 X/Z；全零报告后丢弃，不发布到 production 下游；reference 为 inactive thread 建立空派生数组，实际额外 MEM/VLM 输出由后级 checker 比对；见 `SHMINS-001`|tmsk population、thread index、direction、space、VTRANS 和全零非法 bin|组件 `MON-MASK-001`～`010` 和四个 VTRANS sequence cell 已通过；2026-08-18 用户确认24-cell normal与4-cell VTRANS真实RTL LST全部通过|组件、真实RTL 28-cell和109-case证据已具备；目标 bin/cross归档及inactive全X系统矩阵仍缺；总体可运行未闭环|
+|`TP-CREQ-004`|[`CREQ-004`](../spec/creq-ack-interface.md#8-复位与检查规则)及 mask/尾部 byte：length 以 Byte 计、与 DTYPE 对齐，只有 tmsk/vmsk/length 共同选择的 byte 形成访问；当前每个 thread 的 data、offset 和 mask 容量分别为 256 bit、256 bit 和 32 bit|覆盖 DTYPE 8/16/32、length 0/最小/32 Byte/非整元素非法值、稀疏 vmsk、最高有效 mask bit、element 尾部 byte及masked/length外payload X|monitor transaction、reference 的 byte `wmap`、MEM strobe 和 scoreboard；reference 必须在decode/data read前过滤masked或length外element|DTYPE × length class × vmsk pattern × highest element × beat crossing × direction；ignored payload X原因|256-bit接口适配后的109-case回归固定覆盖DTYPE，length/vmsk由seed随机；masked-element X的12-cell矩阵已规划但未实现|缩减带宽正向主路径已通过；coverage、边界和don’t-care X case待补；总体部分实现|
 |`TP-CREQ-005`|[Payload 语义](../spec/creq-ack-interface.md#4-payload-语义与合法性)：priority 只影响 MEM 调度顺序，不改变地址、数据和最终结果|相同 creq 数据使用不同 priority，覆盖多笔并发、地址重叠和调度次序变化|观察 creq priority、MEM 兑现次序和 scoreboard 最终状态；reference 不能按 priority 改期望|priority class × overlap × observed order × final result|priority 随机但无 plusarg、定向 case或 coverage；公共间隔也弱化并发|激励部分、检查部分、coverage 缺失、case 缺失；总体部分实现|
-|`TP-ACK-001`|[`ACK-001`](../spec/creq-ack-interface.md#8-复位与检查规则)、`ACK-002`：ack disable 不得 ack；enable 时按方向、正确 ID exactly-once，done/有效 ID 已知；无协议最大延迟|V2M、M2V、VTRANS 分别覆盖 ack on/off、多个 outstanding ID、重复/错误方向/错误 ID/XZ 负例，以及 ack 与 release 的所有顺序|Monitor 发布带 cycle/reset epoch 的 raw ack；lifecycle checker 关联 accepted creq 和 scoreboard completion，检查 disabled/unexpected/duplicate/wrong-direction/wrong-ID。固定 200-cycle timeout 已移除；V2M/M2V 各自按接收顺序退休，可选 grace 只在实际数据全部 observed 且事务成为本方向队头后起算；年轻事务提前 ack 暂不报告乱序；credit 上溢仍缺，见 `SHMINS-008/009`|direction × ack_en × outcome × ack/release order × latency class|普通 case 中 `creq_ack_en` 随机；组件测试已覆盖慢前序/快后序、ack-disabled 前序、方向独立和年轻事务提前 ack；尚无 ack 协议负例及 clocked grace timeout case|ordered lifecycle 正向组件测试已通过；负例、clocked timeout、激励和 coverage 仍缺；总体部分实现|
+|`TP-ACK-001`|[`ACK-001`](../spec/creq-ack-interface.md#8-复位与检查规则)、`ACK-002`：ack disable 不得 ack；enable 时按方向、正确 ID exactly-once，done/有效 ID 已知；无协议最大延迟|V2M、M2V、VTRANS 分别覆盖 ack on/off、多个 outstanding ID、重复/错误方向/错误 ID/XZ 负例，以及 ack 与 release 的所有顺序|Monitor 发布带 cycle/reset epoch 的 raw ack；lifecycle checker 关联 accepted creq 和 scoreboard completion，检查 disabled/unexpected/duplicate/wrong-direction/wrong-ID。固定200-cycle timeout已移除；V2M/M2V各自按接收顺序退休，可选grace只在实际数据全部observed且事务成为本方向队头后起算；年轻事务提前ack暂不报告乱序；driver credit上溢检查已实现待负例，见`SHMINS-008/009`|direction × ack_en × outcome × ack/release order × latency class|普通 case 中 `creq_ack_en` 随机；组件测试已覆盖慢前序/快后序、ack-disabled 前序、方向独立和年轻事务提前 ack；尚无 ack 协议负例及 clocked grace timeout case|ordered lifecycle 正向组件测试已通过；负例、clocked timeout、激励和 coverage 仍缺；总体部分实现|
 
 ## 4. 数据路径和架构顺序
 
@@ -98,7 +99,7 @@ testpoint 可标记为“已闭环”。本批暂不要求全项目 coverage mer
 |`TP-RSV-004`|[`MEM-005`](../spec/mem-vlm-interface.md#6-检查规则)、`VLM-006/012`：reservation 与到期 MEM 双向一一对应；record额外携带gid供MEM继承|两个gid正常兑现、missing、unexpected、提前、延后、重复和地址错误|checker错误族、matched counter、resolver gid/match status；局部抑制仍见`RSV-004`|match outcome × direction × bank × gid × timing × address relation|109-case正常路径通过；组件测试覆盖gid 0/1 matched、missing、unexpected和address mismatch，结构化outcome和coverage已接入|P0-1正常/主要负例组件证据已具备；提前/延后/重复、RTL定向和bin命中仍缺|
 |`TP-RSV-005`|[`VLM-003`](../spec/mem-vlm-interface.md#6-检查规则)、`VLM-007`：read/write reservation 均允许非对齐，并由完全相同的 MEM 完整地址兑现|read/write、两个 write port、低 5 bit 为 0/非零，以及只改变低位的 mismatch|reservation checker 完整地址比较；scheduler 保留所有地址位|direction × port × address-low-bits × match result|reservation 定向例覆盖非对齐地址原样兑现和低位 mismatch|激励和检查已有、coverage 缺失；总体部分实现|
 |`TP-RSV-006`|[`VLM-008`](../spec/mem-vlm-interface.md#6-检查规则)：不同bank可共享同direction/delay/gid/subbank slot；read/write独立|至少两个bank共享完整slot，同bank read/write同due及ownership对照|checker按gid/subbank跨bank OR reduction|bank multiplicity × direction × delay × gid × subbank × shared|组件测试已定向覆盖different-bank shared slot和同bank read/write同due合法|跨bank归约及direction独立组件证据已具备；完整组合、RTL定向和coverage仍缺|
-|`TP-RSV-007`|[`VLM-010`](../spec/mem-vlm-interface.md#6-检查规则)：other-gid external busy允许，other-gid同bank/due DUT record阻塞|对同一候选交替构造两种busy所有者，并覆盖不同bank对照|scheduler ownership与checker target/pending判定|direction × candidate gid × other-gid source × same/different bank × outcome|P0-1组件矩阵通过；真实RTL波形确认DUT把other-gid external busy当成全局阻塞|定向case已发现RTL contract违例；待设计确认/修复、bin证据和other-gid SHM RTL场景|
+|`TP-RSV-007`|[`VLM-010`](../spec/mem-vlm-interface.md#6-检查规则)：other-gid external busy允许，other-gid同bank/due DUT record阻塞|对同一候选交替构造两种busy所有者，并覆盖不同bank对照|scheduler ownership与checker target/pending判定|direction × candidate gid × other-gid source × same/different bank × outcome|P0-1组件矩阵通过；2026-08-18用户确认ownership真实RTL case在最新design通过|external ownership定向正向证据已具备；target bin归档和other-gid SHM RTL场景仍缺|
 |`TP-RSV-008`|[`VLM-012`](../spec/mem-vlm-interface.md#6-检查规则)：到期record为MEM恢复唯一gid|两个gid相同地址正常兑现，及unexpected/missing/address mismatch|resolver result、memory transaction metadata和可信模型是否更新|direction × gid × match outcome × address relation|P0-1 resolver/metadata组件矩阵和相同BADDR双gid正常兑现真实RTL case通过|正常双gid系统证据已具备；bin证据和resolver负例RTL场景仍缺|
 
 ## 8. Reset
@@ -115,16 +116,16 @@ testpoint 可标记为“已闭环”。本批暂不要求全项目 coverage mer
 - V2M/M2V 矩阵能固定 direction、ITYPE、SPACE、DTYPE 和 ATYPE_W；第一批 address 和
   reservation coverage 已接入，但尚无真实 RTL directed run 的目标 bin 命中证据，且
   length、mask、ack、priority 等仍无 coverage。
-- 原 VTRANS case 只有一个随机组合；新增四个 dtype/itype 定向 cell 已编译，等待真实 RTL
-  运行和 coverage 命中证据。
+- 原 VTRANS case 只有一个随机组合；新增四个 dtype/itype 定向 cell 已在真实 RTL 通过，
+  等待 coverage 命中证据。
 - V2M/M2V `LDSTE_S + SPACE_WRP/BLK` 的 24 个 case 已进入 regression，并随
   109-case 主列表通过真实 RTL 运行；本批 address collector 已接入，但对应 target cross
   尚未形成可保存的命中证据。
 
 ### 9.2 Spec 有要求，但当前没有定向 case
 
-- credit 压力、ack 错误、完整四态输入、priority、地址空洞、非零 WARP group；thread-mask
-  定向 tests 已实现但尚未获得真实 RTL 运行证据；
+- credit 压力、ack 错误、完整四态非法输入、priority、地址空洞、非零 WARP group；
+  thread-mask 定向 tests 已通过真实 RTL，inactive/masked don’t-care X 系统 case 待实现；
 - FFD_CYC、流水 read、同拍 read/write；
 - reservation 完整冲突矩阵、跨 BANK 共享 slot 和真实 RTL 负向匹配；纯 checker 组件已
   覆盖部分 ownership/current-conflict/unexpected/address-mismatch 场景；

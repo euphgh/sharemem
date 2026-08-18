@@ -15,8 +15,8 @@ run  = case + seed
 
 109-case 普通矩阵最终使用 `shm_unit_test`。`v2m_unit_test`、`m2v_unit_test` 等名称是 TC
 中的派生 case，不是 `uvm_test` class。它们通过继承公共参数并追加方向参数，减少每个
-叶子 case 的重复配置。P0 双 gid 定向组则直接使用四个独立 UVM test class，不继承
-`shm_unit_test` 的随机 transaction 配置。
+叶子 case 的重复配置。P0 双 gid和 mask/VTRANS 定向组直接使用独立 UVM test class，
+不继承 `shm_unit_test` 的随机 transaction 配置。
 
 测试源码按是否依赖真实 design 分目录：只有必须实例化并检查真实 DUT 行为的 UVM test
 放在 `ut_shm/tests/`；sequence item、agent、checker 或 memory model 等不依赖真实 design
@@ -89,7 +89,9 @@ shm_unit_test
 ├── shm_dbank_wpid_boundary_test
 ├── shm_dbank_gid_isolation_test
 ├── shm_m2v_vaddr_boundary_test
-└── shm_reservation_gid_ownership_test
+├── shm_reservation_gid_ownership_test
+├── shm_tmsk_directed_test
+└── shm_vtrans_full_mask_test
 ```
 
 公共参数当前为：
@@ -220,6 +222,7 @@ case_name : RUN=1 SEED=num
 |[`m2v.lst`](../../../ut_shm/regression/m2v.lst)|普通 M2V 矩阵|54|
 |[`shm.lst`](../../../ut_shm/regression/shm.lst)|include 前两份普通列表|109|
 |[`p0_directed.lst`](../../../ut_shm/regression/p0_directed.lst)|P0-3/P0-4 双 gid 定向组|4|
+|[`shmins_mask_directed.lst`](../../../ut_shm/regression/shmins_mask_directed.lst)|普通 mask 24-cell 与 VTRANS 4-cell 定向组|2 tests / 28 cells|
 
 普通 V2M 和 M2V regression 都包含：
 
@@ -236,7 +239,7 @@ case_name : RUN=1 SEED=num
 
 当前 109 个 case 已通过真实 RTL 回归，证明新的物理 BANK 组织和缩减后的 creq 向量
 带宽可以承载完整正向矩阵。以下第一批双 gid 定向组已经实现并加入根 TC 与独立
-`p0_directed.lst`，但尚未加入 `shm.lst`。首轮真实 RTL 已执行，coverage 证据尚未闭环：
+`p0_directed.lst`，但尚未加入 `shm.lst`。最新真实 RTL 整组已通过，coverage 证据尚未闭环：
 
 |Case 组|主要 testpoint|
 |---|---|
@@ -252,14 +255,17 @@ case_name : RUN=1 SEED=num
 
 其中 P0-3 由 `shm_dbank_wpid_boundary_test`、`shm_dbank_gid_isolation_test` 和
 `shm_m2v_vaddr_boundary_test` 承担；P0-4 由 `shm_reservation_gid_ownership_test` 承担。
-真实 RTL 单独运行、目标 bin 命中且 109-case 无回归后，才能决定是否由 `shm.lst`
-include。具体依赖和验收顺序见
-[SHM 定向验证开发计划](../../development/shm-directed-verification-development-plan.md)。
+2026-08-15 首轮正式 design 中三个 P0-3 case 通过，P0-4 暴露了 other-gid global
+blocking；2026-08-18 用户确认 `p0_directed.lst` 已在最新 design 上四项全部通过。原
+109-case `shm.lst` 通过结论继续有效。取得并归档目标 coverage 证据后，再决定是否由
+`shm.lst` include。
 
-2026-08-15 首轮正式 design 结果：三个 P0-3 case 全部通过，原 `shm.lst` 109-case
-无回归；P0-4 ownership case 报告 `SHM_RESERVATION_OTHER_GID_NOT_COVERED`。波形确认
-DUT 在 gid 0 external write busy 时也阻塞 gid 1 reservation。该列表继续独立运行，待
-设计确认和修复 ownership 行为、整组通过并取得目标 coverage 证据后再考虑加入主列表。
+同日用户确认 `shmins_mask_directed.lst` 也在最新 design 上全部通过，即
+`shm_tmsk_directed_test` 的 24 个 normal cell 和 `shm_vtrans_full_mask_test` 的4个 VTRANS
+cell 均通过。该列表仍独立于主列表，等待目标 mask/VTRANS bin/cross 归档。
+
+下一批 case 开发转向合法 don’t-care X，具体矩阵和实施顺序见
+[SHMINS don’t-care X 定向验证开发计划](../../development/shm-directed-verification-development-plan.md)。
 
 ## 9. 维护规则
 

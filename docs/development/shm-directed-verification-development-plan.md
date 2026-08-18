@@ -1,386 +1,315 @@
-# SHMINS thread-mask 定向验证开发计划
+# SHMINS don’t-care X 定向验证开发计划
 
-本文根据 [验证实现状态](../ut_shm/verification-status.md)、
+本文根据 [creq/ack 接口规范](../ut_shm/spec/creq-ack-interface.md)、
 [Testpoints](../ut_shm/plan/testpoints.md)和
-[creq/ack 接口规范](../ut_shm/spec/creq-ack-interface.md)，规定第三批
-`SHMINS-001` thread-mask 定向验证的实现顺序、测试矩阵和判定标准。
+[验证实现状态](../ut_shm/verification-status.md)，规定 SHMINS 合法 don’t-care payload
+注入 X 的实现顺序、组件测试、真实 RTL 矩阵和判定标准。
 
-此前双 gid P0 的实现结果和未决 DUT ownership 问题由
-[验证实现状态](../ut_shm/verification-status.md)继续跟踪，不在本文重复保留。本文只描述
-当前 `SHMINS-001` 开发，不改变 DUT contract，也不把非法输入的 DUT 行为定义成新规范。
+此前双 gid `p0_directed.lst` 和 thread-mask/VTRANS `shmins_mask_directed.lst` 已全部在最新
+真实 design 上通过；对应实现过程不再保留在本文。Coverage bin/cross 是否闭环仍由状态和
+testpoint 文档独立跟踪，不能仅凭 LST 通过推断全部 coverage 已命中。
 
 ## 1. 目标与范围
 
-本批需要为以下行为提供可重复证据：
+本批验证 DUT、driver、monitor 和 reference 只解释协议选中的 payload：
 
-1. 普通请求支持单 thread 0、单 thread 15、稀疏 mask 和全 mask；
-2. inactive thread 不生成 MADDR、reservation、MEM 或 M2V 写回；
-3. inactive thread 的 `creq_prio/len/vmsk/offs/vdat` 可以包含 X/Z；
-4. `creq_tmsk=='0` 被 monitor 准确报告为非法输入；
-5. VTRANS 必须使用全 thread mask、全 element mask 和固定 element 数；
-6. coverage 能区分 mask 类型、thread 边界、方向、space 和 VTRANS 组合。
+1. `creq_tmsk[t]==0` 时，thread `t` 的全部 per-thread payload 可以为 X；
+2. active thread 中被已知 `creq_vmsk[t][k]==0` 屏蔽的 element data 可以为 X；
+3. `LDSTE_V` 被屏蔽 element 的独立 offset slice 可以为 X；
+4. contiguous/strided 未使用的 packed offset slice 可以为 X，但共享 offset/stride 必须已知；
+5. length 范围外的 mask、data 和未使用 offset slice 可以为 X；
+6. M2V 不解释 `creq_vdat`，因此 active thread 的输入 data 可以为 X；
+7. X 不得污染 reference、reservation、MEM、M2V writeback 或 scoreboard 最终结果。
 
-本批主要关闭 `SHMINS-001` 和 `TP-CREQ-003`。为证明 inactive payload 的 X/Z 是被
-选择性忽略，而不是 monitor 完全不检查 payload，本批同时实现 `SHMINS-006` 所需的
-active/inactive thread 局部检查基础，但不因此自动关闭完整 `SHMINS-006` 或 `COV-001`。
+本批主要推进 `SHMINS-006`、`TP-CREQ-002` 和 `TP-CREQ-004`，并为已有
+`SHMINS-001/TP-CREQ-003` 补充真实 DUT 的 inactive-payload X 证据。
 
 以下内容不属于本批：
 
-- `FFD_CYC` read snapshot；
-- 运行中 reset；
-- ack、credit 和 priority 压力；
-- length/vmsk 所有边界组合；
-- 向真实 DUT 注入全零 tmsk 或 X/Z payload；
+- 向 DUT 发送全零或含 X/Z 的 `creq_tmsk`；
+- 向 DUT 发送公共控制字段、active priority/length、有效 mask、有效 offset 或有效 V2M data
+  含 X/Z 的非法请求；
+- 用 X 表示 length 范围内 element 是否有效；该范围的 `creq_vmsk` bit 必须已知；
+- 运行中 reset、ack/credit 负例、MEM/VLM 接口四态矩阵；
 - 全项目 coverage merge 或总百分比阈值。
 
-## 2. 验证分层与共同规则
+非法输入只在 `examples/` 组件 harness 中用于 checker 边界验证，不作为 DUT 功能 case。
 
-### 2.1 组件测试与真实 RTL 测试的边界
+## 2. 合法 X contract
 
-- monitor report、全零非法输入、tmsk X/Z、active payload X/Z 和 inactive payload X/Z
-  放在 `examples/`；
-- reference 对 inactive thread 派生数组的抑制也在 `examples/` 独立验证；
-- 只有合法 mask 的 DUT 访问抑制和 VTRANS 数据转置放在 `ut_shm/tests/`；
-- 空 design 只能作为编译、连接和 elaboration 证据，不能作为 DUT 行为证据；
-- 新真实 RTL case 先进入独立 directed LST，不直接加入 `shm.lst`。
+### 2.1 Inactive thread
 
-### 2.2 定向激励规则
-
-定向场景必须显式固定 tmsk、方向、space、dtype、itype、length 和 element mask。随机器只
-生成满足这些固定条件的合法地址，不允许依赖 seed 恰好命中目标 mask。
-
-普通 mask 的真实 RTL 测试先以全 thread active 生成合法 payload、offset 和 MADDR，再把
-最终 `creq_tmsk` 缩小到目标 mask。这样 inactive thread 仍保留合法且可区分的 sentinel
-payload；如果 DUT 错误执行 inactive thread，checker 可以观察到额外访问。修改 mask 后
-必须重新执行最终 validator，但不能重新生成或清除 inactive payload。
-
-### 2.3 预期负例规则
-
-组件负例复用 `examples/common/shm_expected_report_catcher.svh`。每个负例必须同时满足：
-
-- 指定 report ID 出现准确次数；
-- 没有未声明的 `UVM_ERROR/UVM_FATAL`；
-- 缺失 report 或 report 次数过多都使测试失败；
-- 测试输出独立场景 PASS marker；
-- 脚本检查进程返回值和最终 PASS marker。
-
-全零 tmsk 是 monitor 协议检查，不作为真实 DUT case。Monitor 报告一次
-`SHMINS_TMSK_ZERO` 后必须立即丢弃该 sample，不分配 transaction UID、不递增已发布事务
-计数，也不写入 production analysis port。因此 reference、scoreboard、lifecycle checker 和
-production coverage 都不能收到全零事务。全零 coverage bin 只能由组件 harness 直接调用
-coverage subscriber 采样，不得依赖生产数据流发布非法事务。
-
-## 3. 行为 contract 与判定边界
-
-### 3.1 普通请求
-
-当 `creq_vld==1` 时，普通请求必须满足：
+当 `creq_tmsk[t]===1'b0` 时，以下字段全部是 don’t-care，可以整体置 X：
 
 ```text
-creq_tmsk 已知且 creq_tmsk != '0
+creq_prio[t]
+creq_len[t]
+creq_vmsk[t]
+creq_offs[t]
+creq_vdat[t]
 ```
 
-只有 `creq_tmsk[t]===1'b1` 的 thread 才能形成有效地址和数据访问。inactive thread 的
-payload 是 don't-care，允许包含 X/Z，monitor 和 reference 都不能解释这些值。
+该 thread 不得形成 MADDR、logical/physical address、reservation、MEM 访问或 M2V 写回。
+`elem_num`、`elem_maddr` 和地址回填数组是 verification object 内部生成态，不在 RTL 接口上，
+不注入 X。
 
-### 3.2 Active payload 四态检查
+### 2.2 Active thread 的 element 选择
 
-monitor 先检查 `creq_tmsk`。tmsk 未知时只报告 tmsk 错误，不继续按未知 mask 分类
-thread。tmsk 已知后，检查 active thread 实际参与解释的字段：
+`creq_len[t]` 和 dtype 决定 length-bounded element 范围；范围内的 `creq_vmsk[t][k]` 必须
+已知。只有 mask bit 为 1 的 element 形成访问。
 
-- `creq_prio[t]` 和 `creq_len[t]`；
-- 有效 element 范围内的 `creq_vmsk[t]`；
-- 对当前 itype 和 active element 实际使用的 offset slice；
-- V2M 中由 length 和 vmsk 选中的有效 `creq_vdat[t]` byte。
+|地址拓扑|mask=0 element data|mask=0 element offset|必须保持已知的 offset|
+|---|---|---|---|
+|`LDST_S/LDST_V` contiguous|允许 X|没有 per-element offset；未使用 packed slice 允许 X|`offset[0]`|
+|`LDSTE_S` strided|允许 X|没有 per-element offset；未使用 packed slice 允许 X|`stride=offset[0]`|
+|`LDSTE_V` indexed|允许 X|对应独立 offset slice 允许 X|所有 mask=1 element 的 slice|
 
-M2V 不解释 `creq_vdat`，inactive thread 不检查任何上述 per-thread payload。active
-payload X/Z 使用稳定 report ID `SHMINS_ACTIVE_PAYLOAD_XZ`，消息必须包含 thread、字段和
-有效 slice。公共控制字段的完整四态矩阵仍由 `SHMINS-006` 后续工作跟踪。
+只要一个 active thread 仍有至少一个有效 element，contiguous 的起始 offset 和 strided 的
+stride 就参与全部有效地址计算，不能因为某个 element 被 mask 而将共享 slice 置 X。
 
-### 3.3 VTRANS
+### 2.3 Direction 和 length 外 payload
 
-VTRANS 正例必须同时满足：
+- V2M 只解释有效 element 对应的 `D` 个 data byte；masked element data 允许 X；
+- M2V 不解释 `creq_vdat`，active 和 inactive thread 的 data 都允许 X；
+- length 范围外的 mask bit、data byte 和不被当前 topology 选择的 packed offset slice允许 X；
+- `creq_vld==0` 时整个 payload 都是 don’t-care，但该规则继续由 monitor 组件测试覆盖，不发送
+  成真实 DUT transaction。
+
+## 3. 激励构造规则
+
+### 3.1 两阶段构造
+
+每笔真实 RTL X transaction 必须按以下顺序构造：
 
 ```text
-creq_tmsk == '1
-foreach thread: elem_num == 16
-foreach thread: creq_vmsk == '1
-DTYP_8 : creq_len == 16 Byte
-DTYP_16: creq_len == 32 Byte
+1. randomize/generate 全部已知且合法的 topology item
+2. pack_offsets()
+3. validate_transaction()
+4. 只对本计划定义的 don’t-care pin slice 注入 X
+5. 不再 pack、randomize 或重新生成地址，直接通过 directed sequence 发送
 ```
 
-本批不向 DUT 发送违反上述规则的 VTRANS。sequence item 约束和 monitor 组件检查负责
-证明输入限制，真实 RTL case 负责证明全 mask 下的转置数据正确。
+注入发生在最终合法性验证之后，因为 validator 的职责是验证语义请求，X utility 的职责是
+把语义上未被消费的 RTL pin slice 替换为四态值。注入后调用 `pack_offsets()` 会覆盖目标 X，
+必须禁止。
 
-## 4. 组件测试矩阵
+### 3.2 可复用 utility
 
-组件测试建议新增到：
+在 `ver_common/uvc/shmins_agent/sequences/` 增加无时间消耗的四态激励 utility，至少提供：
 
 ```text
-examples/shmins_monitor_compile/
+poison_inactive_threads()
+poison_masked_element_data()
+poison_indexed_masked_offsets()
+poison_unused_offset_slices()
+poison_out_of_length_payload()
+poison_m2v_vdata()
 ```
 
-Harness 直接驱动 `shmins_interface`，连接 production monitor、一个 transaction
-subscriber 和必要的 coverage/reference 组件，不实例化真实 DUT。
+Utility 接受 `1'bx` 或 `1'bz`，但首批真实 RTL case 固定使用 X。每个 API 必须检查 thread、
+element、length、itype 和 offset width，拒绝修改任何被解释的 slice。Utility 不修改内部
+`offs_elem/elem_maddr/elem_physical_addr`，也不调用 generator 或 validator。
 
-### 4.1 Monitor 与四态矩阵
+## 4. 验证环境消费边界修改
 
-除表中明确注入的字段外，公共字段和 active payload 均使用合法已知值。
+### 4.1 Driver 和 monitor
 
-|场景 ID|`creq_vld`|请求类型|`creq_tmsk`|注入内容|预期 report|transaction/reference 判定|
-|---|---:|---|---:|---|---|---|
-|`MON-MASK-001`|1|普通|`16'h0001`|无|无|发布一次；只有 thread 0 active|
-|`MON-MASK-002`|1|普通|`16'h8000`|无|无|发布一次；只有 thread 15 active|
-|`MON-MASK-003`|1|普通|`16'h8421`|无|无|发布一次；active thread 为 0、5、10、15|
-|`MON-MASK-004`|1|普通|`16'hffff`|无|无|发布一次；16 个 thread active|
-|`MON-MASK-005`|1|普通|`16'h0000`|无|一次 `SHMINS_TMSK_ZERO`|monitor 丢弃；不分配 UID、不发布；无额外 error|
-|`MON-MASK-006`|1|普通|含 X/Z|只修改 tmsk|一次 `SHMINS_TMSK_XZ`|不继续报告 per-thread payload 错误|
-|`MON-MASK-007`|1|普通|`16'h0001`|thread 1～15 payload 全 X|无|sample 保留四态值；inactive 派生数组为空|
-|`MON-MASK-008`|1|普通|`16'h0001`|thread 1～15 payload 全 Z|无|sample 保留四态值；inactive 派生数组为空|
-|`MON-MASK-009`|1|普通|`16'h0001`|active thread 0 的 `creq_len` 含 X|一次 `SHMINS_ACTIVE_PAYLOAD_XZ`|证明 active/inactive 检查边界有效|
-|`MON-MASK-010`|0|任意|X/Z|全部 payload X/Z|无|monitor 不采样、不发布、不检查 payload|
+Driver 必须按四态赋值把 transaction payload 原样驱动到 interface。Monitor 应继续：
 
-`MON-MASK-007/008` 送入 `shm_wtrans_item::init_from()` 后还必须检查：
+- 跳过 inactive thread 的全部 payload 检查；
+- 只检查 length 范围内的 mask bit；
+- 只检查 topology 实际选择的 offset slice；
+- 只检查 V2M 有效 element 的有效 data byte；
+- M2V 不检查 `creq_vdat`。
 
-- thread 0 按 length/vmsk 生成期望地址；
-- thread 1～15 的 BADDR、BANK、gid、logical address 和 strobe 动态数组长度均为 0；
-- reference 不读取 inactive thread 的 offset、length、mask 或 data；
-- 整个组件测试没有 UVM error/fatal。
+不得为了让 X case 通过而关闭或降级 `SHMINS_ACTIVE_PAYLOAD_XZ`。
 
-### 4.2 VTRANS sequence-item 矩阵
+### 4.2 Reference
 
-|场景 ID|dtype|itype|预期 tmsk|预期 length/thread|预期 vmsk/thread|判定|
-|---|---|---|---:|---:|---:|---|
-|`SEQ-VTRANS-001`|`DTYP_8`|`LDST_S`|`16'hffff`|16 Byte|全 1|randomize、validate、copy 通过|
-|`SEQ-VTRANS-002`|`DTYP_8`|`LDST_V`|`16'hffff`|16 Byte|全 1|randomize、validate、copy 通过|
-|`SEQ-VTRANS-003`|`DTYP_16`|`LDST_S`|`16'hffff`|32 Byte|全 1|randomize、validate、copy 通过|
-|`SEQ-VTRANS-004`|`DTYP_16`|`LDST_V`|`16'hffff`|32 Byte|全 1|randomize、validate、copy 通过|
+Reference 必须在读取 don’t-care 值之前完成过滤：
 
-这些场景可以加入现有 `examples/shmins_sequence_compile/`，不需要复制完整 sequence-item
-编译环境。
+1. inactive thread 在分配/计算 element 地址前跳过；
+2. indexed masked element 在 `decode_packed_offset()` 前跳过；
+3. masked V2M element 在读取 `creq_vdat` 前跳过；
+4. contiguous/strided 只在存在有效 element 时解码共享 offset/stride；
+5. length 外 element 不分配有效 address/strobe，也不读取 data/offset。
 
-## 5. Functional coverage
+不能依赖把 X 赋给 two-state 临时变量后变为 0 来“通过”测试。组件测试必须证明过滤发生在
+decode/data read 之前，且派生数组和 `wmap` 只包含有效 byte。
 
-新增可复用的 `shmins_request_coverage` subscriber，放在
-`ver_common/uvc/shmins_agent/`，由 `shmins_mst_agent` 在 monitor 存在时创建并连接。
-Coverage 只读消费 monitor transaction，不重新计算地址或决定 transaction 合法性。
+### 4.3 Coverage 分类
 
-### 5.1 Coverpoint
-
-- request kind：normal、VTRANS；
-- direction：V2M、M2V；
-- space：LOC、WRP、BLK；
-- tmsk class：unknown、zero、single、sparse、full；
-- tmsk population：0、1、2～15、16；
-- active thread index：0、15、middle；
-- inactive payload X/Z：none、X、Z；
-- active payload X/Z：none、present；
-- VTRANS dtype：DTYP_8、DTYP_16；
-- VTRANS itype：LDST_S、LDST_V。
-
-### 5.2 Required cross
+现有 active/inactive thread 粗粒度 X/Z 分类不足以区分合法 don’t-care X 和非法 interpreted
+X。Coverage 至少拆分为：
 
 ```text
-normal direction × space × legal tmsk class
-single-thread index × direction
-VTRANS dtype × VTRANS itype × full tmsk
-tmsk class × inactive payload X/Z category
+interpreted_payload_xz
+inactive_thread_payload_xz
+masked_element_data_xz
+masked_indexed_offset_xz
+out_of_length_payload_xz
+m2v_unused_vdata_xz
 ```
 
-Illegal/unknown tmsk 由组件测试命中；真实 RTL case 只负责 normal legal cross 和 VTRANS
-cross。本批要求保存这些目标 bin/cross 的命中证据，但不要求全项目 coverage merge。
+真实 RTL 正例要求 `interpreted_payload_xz==KNOWN`，并命中对应 ignored/don’t-care X bin。
+Coverage 只观察，不改变 checker、reference 或 DUT 输出。
 
-## 6. 真实 RTL 普通 mask 测试矩阵
+## 5. 组件测试矩阵
 
-新增 `shm_tmsk_directed_test`。所有 transaction 固定：
+组件测试不实例化真实 DUT，全部位于 `examples/`。
 
-```text
-creq_info    = normal
-creq_itype   = LDST_S
-creq_dtype   = DTYP_8
-creq_atype_w = ATYP_32
-creq_atype_s = ATYP_U
-creq_atype_g = GAUTO_1B
-elem_num[t]  = 1
-creq_len[t]  = 1 Byte
-creq_vmsk[t] = bit 0 only
-```
+### 5.1 Utility 和 driver/monitor
 
-每笔 transaction 先以 `creq_tmsk=='1` 生成 16 个 thread 的合法地址和互异数据
-signature，再把 mask 改为下表目标值并执行最终 validator。M2V 生成阶段开启 byte-level
-uniqueness，确保 sentinel read 地址和 writeback 地址满足既有 hazard contract。
+|场景 ID|场景|预期|
+|---|---|---|
+|`X-UTIL-001`|inactive thread 五类 payload 全 X|只修改目标 thread；active payload不变|
+|`X-UTIL-002`|contiguous/strided masked data 与未使用 offset slice X|共享 `offset[0]` 保持已知|
+|`X-UTIL-003`|indexed masked data/offset X|mask=1 element data/offset 保持已知|
+|`X-UTIL-004`|length 外 mask/data/offset X|length-bounded payload保持已知|
+|`X-UTIL-005`|M2V active `creq_vdat` 全 X|地址、mask 和控制字段不变|
+|`X-DRV-001`|连续发送 inactive-thread X 和 indexed masked-element X|monitor 收到两笔且四态值原样保留|
+|`X-DRV-002`|上述两笔使用 `delay_cycle=0/1`|accept cycle 分别背靠背/包含一个空闲周期|
 
-### 6.1 Mask 定义
+`X-DRV-001/002` 同时作为 cycle-based SHMINS driver 的首个有 transaction 组件证据。
 
-|Mask ID|值|active thread|用途|
-|---|---:|---|---|
-|`M0`|`16'h0001`|0|最低 thread 边界|
-|`M15`|`16'h8000`|15|最高 thread 边界|
-|`MS`|`16'h8421`|0、5、10、15|跨低、中、高 index 的稀疏模式|
-|`MF`|`16'hffff`|0～15|普通请求全 mask|
+### 5.2 Monitor 正负边界
 
-### 6.2 24 笔 transaction 矩阵
+每个非法场景单独驱动，使用 expected-report catcher 检查一次且仅一次
+`SHMINS_ACTIVE_PAYLOAD_XZ`：
 
-下表每个 cell 分别执行 `M0/M15/MS/MF` 四笔 transaction，不允许按 seed 抽样。
+|场景 ID|注入位置|合法性|
+|---|---|---|
+|`X-MON-001`|inactive thread 全 X/Z|合法，无 report|
+|`X-MON-002`|active masked V2M data X/Z|合法，无 report|
+|`X-MON-003`|active indexed masked offset X/Z|合法，无 report|
+|`X-MON-004`|active length-bounded mask bit X/Z|非法，精确一个 report|
+|`X-MON-005`|active contiguous/strided shared offset X/Z|非法，精确一个 report|
+|`X-MON-006`|active indexed mask=1 offset X/Z|非法，精确一个 report|
+|`X-MON-007`|active V2M mask=1 data byte X/Z|非法，精确一个 report|
+|`X-MON-008`|M2V active data 全 X/Z|合法，无 report|
 
-|方向|SPACE_LOC|SPACE_WRP|SPACE_BLK|小计|
-|---|---|---|---|---:|
-|V2M|`M0/M15/MS/MF`|`M0/M15/MS/MF`|`M0/M15/MS/MF`|12|
-|M2V|`M0/M15/MS/MF`|`M0/M15/MS/MF`|`M0/M15/MS/MF`|12|
-|总计|8|8|8|24|
+### 5.3 Reference
 
-每笔 transaction 名称必须包含方向、space 和 mask ID，例如
-`v2m_loc_m0`、`m2v_blk_ms`，使 timeout、scoreboard 和波形日志可以直接定位矩阵 cell。
+|场景 ID|输入|判定|
+|---|---|---|
+|`X-REF-001`|inactive thread payload 全 X/Z|inactive 派生数组为空|
+|`X-REF-002`|V2M masked data X/Z|`wmap` 只含 mask=1 byte，reference memory不被污染|
+|`X-REF-003`|indexed masked offset X/Z|不解码、不映射 masked element|
+|`X-REF-004`|contiguous/strided unused offset X/Z|共享已知 offset 正常产生有效地址|
+|`X-REF-005`|M2V data 全 X/Z|read 和 writeback expected 与已知 data 基线一致|
 
-Test 必须逐笔发送并在每笔之后调用 `shm_env.wait_for_idle()`，不能把 24 笔全部并发发出后
-只检查最终汇总。发送前后分别保存 request coverage 和
-`shm_address_coverage.sampled_active_byte_count`，用计数增量判定当前 cell；这样一旦失败，
-日志、coverage counter 和 scoreboard pending state 都只对应一笔 transaction。
+## 6. 真实 RTL 测试矩阵
 
-### 6.3 每笔 transaction 的判定标准
+新增独立 `shm_payload_dontcare_x_test`，每个 cell 逐笔发送并在下一笔前调用
+`shm_env.wait_for_idle()`。首轮不修改已经通过的 `shm_tmsk_directed_test`，以保留全已知
+payload 基线。
 
-每笔普通 mask transaction 必须同时满足：
+### 6.1 Inactive-thread X：18 笔
 
-1. monitor 采样到的 tmsk 等于目标值；
-2. reference active-thread 数等于 `$countones(creq_tmsk)`；
-3. reference active-byte 数等于 `$countones(creq_tmsk)`，因为每个 active thread 只有一个 byte；
-4. inactive thread 的派生数组为空；
-5. DUT 不产生 expected wmap 之外的 reservation、MEM 或 M2V 写回；
-6. V2M 的每个 active signature byte 写入正确物理地址；
-7. M2V 的每个 active read byte 和 writeback byte与 reference 一致；
-8. transaction 能被 scoreboard 和 lifecycle checker 完整退休；
-9. 没有未预期 UVM error/fatal；
-10. 对应 direction × space × mask-class coverage bin 命中。
+|维度|取值|
+|---|---|
+|direction|V2M、M2V|
+|space|LOC、WRP、BLK|
+|tmsk|`16'h0001`、`16'h8000`、`16'h8421`|
+|inactive payload|所有 inactive thread 的 prio/len/vmsk/offs/vdat 全 X|
 
-第 5 项是 inactive 抑制的主要 DUT 判据。生成阶段保留的 inactive sentinel payload 必须与
-active expected 地址可区分；如果 DUT 忽略 tmsk，额外访问必须表现为 unexpected
-reservation/MEM、额外 writeback 或 scoreboard 数据差异，不能被 active expected byte
-吸收。
+总数为 `2 × 3 × 3 = 18`。全 mask 没有 inactive thread，不进入该矩阵。
 
-## 7. 真实 RTL VTRANS 矩阵
+### 6.2 Active masked-element X：12 笔
 
-新增 `shm_vtrans_full_mask_test`，发送以下四笔 transaction：
+|维度|取值|
+|---|---|
+|direction|V2M、M2V|
+|topology|contiguous、strided、indexed|
+|atype width|16、32|
+|space|LOC|
+|dtype|DTYP_8|
+|active thread|thread 0 和 thread 15|
+|length/mask|8 element；element 0/7 active，1～6 masked|
 
-|场景 ID|dtype|itype|tmsk|每 thread element 数|每 thread vmsk|
-|---|---|---|---:|---:|---:|
-|`RTL-VTRANS-001`|`DTYP_8`|`LDST_S`|`16'hffff`|16|全 1|
-|`RTL-VTRANS-002`|`DTYP_8`|`LDST_V`|`16'hffff`|16|全 1|
-|`RTL-VTRANS-003`|`DTYP_16`|`LDST_S`|`16'hffff`|16|全 1|
-|`RTL-VTRANS-004`|`DTYP_16`|`LDST_V`|`16'hffff`|16|全 1|
+总数为 `2 × 3 × 2 = 12`。每笔 transaction：
 
-每笔 VTRANS 必须同时满足：
+- V2M element 1～6 data 为 X；M2V 全部 `creq_vdat` 为 X；
+- indexed element 1～6 offset slice 为 X；
+- contiguous/strided 保留 offset 0，其余未使用 packed offset slice 为 X；
+- length 外 mask/data/offset 为 X；
+- element 0/7 的 mask、offset 和 V2M data保持已知。
 
-1. 发送前显式检查 tmsk、所有 length 和所有 vmsk；
-2. monitor transaction 保持相同限制；
-3. reference 生成 16×16 element 的转置 expected data；
-4. scoreboard 检查全部有效 byte 写入正确；
-5. 没有 inactive thread、缺失 byte 或额外 byte；
-6. transaction 和 ack/lifecycle 正常退休；
-7. 对应 dtype × itype × full-mask coverage bin 命中；
-8. 没有未预期 UVM error/fatal。
+第一批共 30 笔真实 RTL transaction。DTYP_16/32 的多 byte masked data 作为后续扩展，不
+阻塞第一批验收。
 
-## 8. 逐文件实施计划
+## 7. 每笔真实 RTL transaction 的判定标准
+
+每个 cell 必须同时满足：
+
+1. driver/monitor 只发布一笔 transaction，目标 don’t-care slice仍为 X；
+2. 不出现 `SHMINS_ACTIVE_PAYLOAD_XZ` 或其他未预期 UVM report；
+3. interpreted-payload coverage 保持 known，目标 don’t-care X bin 精确增加；
+4. reference active thread、element 和 byte 数与 tmsk/length/vmsk 一致；
+5. inactive/masked element 不产生额外 reservation 或 MEM transaction；
+6. V2M 只写入已知有效 byte，数据与 reference 一致；
+7. M2V read 和 writeback 不依赖 X `creq_vdat`；
+8. scoreboard 不出现 unexpected/missing/unresolved byte；
+9. lifecycle 正常退休，测试 drain 后没有 pending transaction；
+10. 最终 `UVM_ERROR: 0`、`UVM_FATAL: 0`，输出稳定 cell 和 test PASS marker。
+
+## 8. 逐文件实施顺序
 
 |顺序|文件或目录|修改|
 |---:|---|---|
-|1|`ver_common/uvc/shmins_agent/shmins_monitor.svh`|抽取 tmsk 和 active/inactive payload 四态检查，保留已有 tmsk report ID|
-|2|`ver_common/uvc/shmins_agent/shmins_request_coverage.svh`|新增本批 mask/VTRANS coverpoint、cross 和可查询计数|
-|3|`ver_common/uvc/shmins_agent/shmins_mst_agent.svh`、`ut_shm/env/shm_env_package.sv`|创建、include 并连接 request coverage subscriber|
-|4|`examples/shmins_monitor_compile/`|新增 monitor、全零和 inactive/active X/Z 组件测试与脚本|
-|5|`examples/shmins_sequence_compile/`|补四个 VTRANS constraint/copy 场景|
-|6|`ut_shm/tests/shm_directed_base_test.svh`|增加从全 mask 合法 transaction 缩小为目标 mask 的复用 builder|
-|7|`ut_shm/tests/shm_tmsk_directed_test.svh`|实现 24 笔 normal mask 矩阵|
-|8|`ut_shm/tests/shm_vtrans_full_mask_test.svh`|实现四笔 VTRANS 全 mask 矩阵|
-|9|`ut_shm/tests/shm_test_package.sv`|include 两个新 test|
-|10|`ut_shm/tc/shmins_mask_directed.tc`|登记两个真实 RTL test 及必要 timeout 配置|
-|11|`ut_shm/regression/shmins_mask_directed.lst`|建立独立 directed list|
-|12|状态、testpoint、component 和 regression 文档|记录实际命中证据与剩余缺口|
+|1|`ver_common/uvc/shmins_agent/sequences/`|新增四态 don’t-care stimulus utility及 package include|
+|2|`examples/shmins_sequence_compile/`|增加 utility 精确 slice 组件测试|
+|3|`examples/shmins_driver_compile/` 或现有 SHMINS component harness|建立 sequencer→driver→interface→monitor 四态保真测试|
+|4|`ut_shm/env/shm_wtrans_item.svh`、`ut_shm/env/shm_reference.svh`|在 decode/data read 前过滤 inactive/masked payload|
+|5|`examples/shm_reference_compile/`|增加 masked offset/data、unused offset 和 M2V data X/Z 测试|
+|6|`ver_common/uvc/shmins_agent/shmins_request_coverage.svh`|区分 interpreted 与各类 ignored X/Z|
+|7|`examples/shmins_monitor_compile/`|补齐合法/非法四态边界矩阵|
+|8|`ut_shm/tests/shm_payload_dontcare_x_test.svh`|实现 18+12 真实 RTL矩阵|
+|9|test package、TC、独立 LST|登记新 test，暂不直接加入 `shm.lst`|
+|10|status、testpoint、component 和 regression 文档|记录组件、RTL 和 coverage 实际证据|
 
-新 class、成员和 function/task 必须遵循
-[SystemVerilog/UVM 开发规范](systemverilog-code-style.md)，特别是 120 字符目标、class
-职责注释、成员语义和完整 `@brief/@param/@return` contract。
+必须按上述顺序先证明验证环境不会错误读取 don’t-care X，再把 X 发送到真实 DUT。否则 RTL
+失败无法区分是 DUT 消费错误还是 reference/monitor 自身 X 处理错误。
 
-## 9. 实施与验证顺序
+## 9. EDA 验证顺序
 
-### 阶段 A：Monitor contract
+### 阶段 A：组件门禁
 
-1. 实现 tmsk 和 active/inactive payload helper；
-2. 保证 tmsk 未知时不继续产生级联 payload 错误；
-3. 运行 `MON-MASK-001`～`010`；
-4. 确认预期 report ID 和次数精确。
+1. utility slice 测试；
+2. driver/monitor 四态保真和 `delay_cycle=0/1` 测试；
+3. monitor 正负 report 矩阵；
+4. reference masked/inactive/M2V data X/Z 测试；
+5. 原 SHMINS copy、monitor、reference 组件测试无回归。
 
-阶段 A 未通过时，不修改 production environment 的 coverage 连接。
+### 阶段 B：环境编译
 
-### 阶段 B：Reference 与 coverage
+1. 远端 VCS 空 design `make compile`；
+2. `TRANS_NUM=0` smoke；
+3. 检查新增 test、utility、coverage 和 package include 完整。
 
-1. 验证 inactive X/Z transaction 的派生数组为空；
-2. 实现 request coverage subscriber；
-3. 用组件矩阵命中 zero、unknown、single、sparse、full 和 inactive X/Z bin；
-4. 运行已有 SHMINS copy/random benchmark，确认 monitor/coverage 修改无回归。
+空 design 结果只能证明编译、elaboration 和 0-transaction 环境路径，不能作为 X 的 DUT
+功能证据。
 
-### 阶段 C：真实 RTL stimulus
+### 阶段 C：真实 RTL
 
-1. 实现 masked transaction builder；
-2. 在 test 内先检查 builder 保留了 inactive sentinel payload；
-3. 实现并编译 `shm_tmsk_directed_test`；
-4. 实现并编译 `shm_vtrans_full_mask_test`；
-5. 建立独立 TC 和 LST。
-
-### 阶段 D：EDA 编译门禁
-
-同步所需源码到 EDA 服务器后执行：
-
-1. SHMINS monitor component tests；
-2. SHMINS sequence compile/copy/VTRANS component tests；
-3. reference component tests；
-4. ut_shm 空 design compile/elaboration；
-5. 0-transaction smoke。
-
-这些结果只证明验证代码可编译、组件 contract 正确和环境连接完整。
-
-### 阶段 E：真实 RTL 验收
-
-1. 单独运行 `shm_tmsk_directed_test`；
-2. 单独运行 `shm_vtrans_full_mask_test`；
-3. 检查所有矩阵 cell 的事务级日志和 coverage bin；
-4. 运行独立 `shmins_mask_directed.lst`；
-5. 重新运行原 109-case `shm.lst`；
-6. 保存命令、seed、日志、UVM 汇总和目标 coverage 结果；
-7. 更新 verification status 和 testpoint。
+1. 单独运行 inactive-thread X 的 18 个 cell；
+2. 单独运行 masked-element X 的 12 个 cell；
+3. 运行新独立 LST；
+4. 保存目标 coverage bin/cross；
+5. 重跑 `shmins_mask_directed.lst`、`p0_directed.lst` 和 `shm.lst`；
+6. 全部通过并完成 coverage 复核后，再决定是否把新 test 纳入主列表。
 
 ## 10. 完成条件
 
-只有同时满足以下条件，才能关闭 `SHMINS-001`：
+本批完成需要：
 
-1. `MON-MASK-001`～`010` 和 `SEQ-VTRANS-001`～`004` 全部通过；
-2. 全零 tmsk 和 active payload X/Z 只产生指定 report，次数准确；
-3. inactive payload X/Z 不产生误报，reference 不访问 inactive payload；
-4. 普通请求 24 个真实 RTL matrix cell 全部通过；
-5. 四个 VTRANS 真实 RTL matrix cell 全部通过；
-6. checker 没有观察到 inactive thread 对应的额外 reservation、MEM 或 writeback；
-7. 本批 required coverage bin/cross 命中并保存可回溯证据；
-8. 原 109-case `shm.lst` 无新增 error/fatal；
-9. 文档同步实际结果和仍未覆盖的 `SHMINS-006/COV-001` 范围。
+1. `X-UTIL/DRV/MON/REF` 全部组件场景通过；
+2. 合法 X 无误报，非法 interpreted X/Z 精确报告；
+3. reference 在读取 data/offset 前完成 inactive/masked 过滤；
+4. 30 笔真实 RTL transaction 全部通过；
+5. required don’t-care X bin 命中并保存可回溯结果；
+6. 三份已有 LST 无新增回归；
+7. 文档更新实际命令、版本、seed、日志和剩余缺口。
 
-完成本批不自动关闭完整 `SHMINS-006`，因为公共字段、valid 为 0 的所有字段类别和其他
-active payload slice 仍需按其独立验收范围复查；也不自动关闭全项目 `COV-001`。
-
-## 11. 2026-08-15 实施快照
-
-阶段 A～D 的代码和静态门禁已完成：
-
-- production monitor 已实现全零 tmsk 报告后丢弃、tmsk X/Z 检查以及 active-thread
-  payload 局部四态检查；
-- `shmins_request_coverage` 已接入 master agent，提供 mask、active thread、方向、space 和
-  VTRANS 的 coverpoint、cross 与事务级可查询计数；
-- `examples/shmins_monitor_compile/` 的 `MON-MASK-001`～`010` 在远端 VCS
-  `W-2024.09-SP1_Full64` 运行通过，三个预期 error 均被准确捕获并降级，最终
-  `UVM_ERROR: 0`、`UVM_FATAL: 0`；
-- `examples/shmins_sequence_compile/` 的四个 VTRANS dtype/itype 组合、copy 和 lifecycle
-  组件测试通过；reference gid-isolation 组件测试加入 inactive payload X/Z 场景后通过；
-- `shm_tmsk_directed_test`、`shm_vtrans_full_mask_test`、TC 和独立 LST 已实现；远端
-  `make compile` 使用空 design 完成 parse、elaboration 和 simv link。
-
-阶段 E 尚未执行，因此当前证据不能关闭 `SHMINS-001`：仍需在真实 RTL 上运行 24 个
-normal mask cell、四个 VTRANS cell、保存目标 coverage 命中，并确认原 109-case
-`shm.lst` 无回归。
+完成本批可以补齐 inactive/masked payload 的四态边界，但不自动关闭整个 `SHMINS-006`：
+公共控制字段和所有非法 active 字段的完整 X/Z 负例仍需按 `TP-CREQ-002` 单独复核。
