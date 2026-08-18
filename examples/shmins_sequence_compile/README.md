@@ -42,7 +42,20 @@ The hazard scenarios distinguish exact and one-byte overlap, adjacent ranges,
 disjoint bytes in one 32-byte beat, equal BANK/BADDR in different gids, and
 both ends of the gid-local WARP writeback range.
 
-Run all four targets with:
+Run the don’t-care X utility slice matrix with:
+
+```sh
+scripts/ubuntu/check_shmins_sequence_vcs.sh dontcare-x
+```
+
+Run the production sequencer→driver→interface→monitor X-preservation and
+`delay_cycle=0/1` matrix with:
+
+```sh
+scripts/ubuntu/check_shmins_sequence_vcs.sh dontcare-driver
+```
+
+Run all six targets with:
 
 ```sh
 scripts/ubuntu/check_shmins_sequence_vcs.sh all

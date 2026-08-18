@@ -313,3 +313,26 @@ payload 基线。
 
 完成本批可以补齐 inactive/masked payload 的四态边界，但不自动关闭整个 `SHMINS-006`：
 公共控制字段和所有非法 active 字段的完整 X/Z 负例仍需按 `TP-CREQ-002` 单独复核。
+
+## 11. 2026-08-18 实现与验证状态
+
+阶段 A 和阶段 B 的静态入口已完成：
+
+- 新增 `shmins_dontcare_x_util`，六个 API 只修改已验证 transaction 中的 don’t-care pin slice；
+- reference 在 masked indexed offset decode、V2M data read 和 shared offset decode 前先过滤无效
+  element；
+- request coverage 已区分 interpreted、inactive、masked data、masked indexed offset、
+  out-of-length 和 M2V-unused data 的 X/Z 类别；
+- `X-UTIL-001`～`005`、`X-DRV-001/002`、`X-MON-001`～`008` 和
+  `X-REF-001`～`005` 已在 hx16、VCS `T-2022.06-SP2-5_Full64` 编译并运行通过，
+  各项最终均为 `UVM_ERROR: 0`、`UVM_FATAL: 0`；
+- standalone reference harness 使用仅存在于 test package 的 byte-memory stand-in，
+  生产 `shm_reference` 源码不变，组件运行不再依赖 VIP SLI server；
+- 空 `RpuShmTop` 的完整 27-module parse、elaboration 和 simv link 通过，新 test、
+  utility、coverage 和 package include 均进入编译。hx16 的 GNU Make 3.82 需用
+  `make .SHELLFLAGS=-ec compile` 避免其对当前多段 `.SHELLFLAGS` 的兼容问题。
+
+真实 RTL 用的 `shm_payload_dontcare_x_test`、根 TC 定义和独立
+`shmins_dontcare_x.lst` 已实现，但 18+12 笔矩阵、目标 coverage bin 和三份既有 LST
+无回归仍需在正式 design 环境执行。因此本批当前状态是“待验证”，不按空 design
+编译结果宣称 DUT 功能通过。

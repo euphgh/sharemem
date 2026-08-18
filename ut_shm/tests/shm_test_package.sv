@@ -16,4 +16,5 @@ package shm_test_package;
     `include "shm_reservation_gid_ownership_test.svh"
     `include "shm_tmsk_directed_test.svh"
     `include "shm_vtrans_full_mask_test.svh"
+    `include "shm_payload_dontcare_x_test.svh"
 endpackage : shm_test_package

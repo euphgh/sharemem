@@ -130,18 +130,33 @@ function void shm_reference::write_shmins_reference(shmins_sequence_item shmins_
         const int unsigned elem_byten = wgolden.data_byte_w();
         foreach(wgolden.baddr_2d_array[tidx, eidx]) begin
             byte elem_wmask = wgolden.wstrb_2d_array[tidx][eidx];
+            if (elem_wmask == 0) begin
+                continue;
+            end
             if (wgolden.creq_info == '1) begin: vtrans_v2m
                 if (eidx >= 16) continue;
                 for(int unsigned byte_idx = 0; byte_idx < elem_byten; byte_idx++) begin: foreach_byte
-                    int data_offset = tidx * elem_byten + byte_idx;
-                    byte byte_wdata = wgolden.creq_vdat[eidx][data_offset];
+                    int data_offset;
+                    byte byte_wdata;
+
+                    if (!elem_wmask[byte_idx]) begin
+                        continue;
+                    end
+                    data_offset = tidx * elem_byten + byte_idx;
+                    byte_wdata = wgolden.creq_vdat[eidx][data_offset];
                     v2m_write_wmap("VTRANS", tidx, eidx, byte_idx, byte_wdata, wgolden);
                 end: foreach_byte
             end: vtrans_v2m
             else begin: normal_v2m
                 for(int unsigned byte_idx = 0; byte_idx < elem_byten; byte_idx++) begin: foreach_byte
-                    int data_offset = eidx * elem_byten + byte_idx;
-                    byte byte_wdata = wgolden.creq_vdat[tidx][data_offset];
+                    int data_offset;
+                    byte byte_wdata;
+
+                    if (!elem_wmask[byte_idx]) begin
+                        continue;
+                    end
+                    data_offset = eidx * elem_byten + byte_idx;
+                    byte_wdata = wgolden.creq_vdat[tidx][data_offset];
                     v2m_write_wmap("V2M", tidx, eidx, byte_idx, byte_wdata, wgolden);
                 end: foreach_byte
             end: normal_v2m

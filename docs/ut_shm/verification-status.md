@@ -65,6 +65,11 @@ VCS `make compile` 已完成所有新增 class 的 parse、elaboration 和 link�
 这补齐两组新增 LST 的真实 RTL case 证据，但本次没有提供可回溯的目标 coverage bin/cross
 报告，因此 coverage-dependent 条目继续保持待验证。下一批开发转向 inactive thread、
 masked element、未使用 offset 和 M2V data 的合法 don’t-care X 定向验证。
+同日已完成该 don’t-care X 批次的验证基础设施、组件测试和空 design 编译：utility、
+driver/monitor 四态保真、monitor 正负边界及 reference 过滤组件测试均在远端 VCS
+`T-2022.06-SP2-5_Full64` 运行通过，最终 `UVM_ERROR/FATAL` 均为 0；新增 18+12 笔真实 RTL
+矩阵、TC 和独立 LST 已进入空 `RpuShmTop` 的完整编译。正式 design 运行和目标 coverage
+证据尚未执行，因此 `SHMINS-006` 转为待验证，而不是关闭。
 
 ## 1. 状态和优先级
 
@@ -115,7 +120,7 @@ masked element、未使用 offset 和 M2V data 的合法 don’t-care X 定向�
 |---|---:|---|---|---|
 |`ENV-001`|P0|待实现|跨组件|运行中 reset 未统一取消 pending 状态|
 |`ENV-002`|P2|待实现|environment config|仍暴露不能组成完整环境的 passive 配置组合|
-|`COV-001`|P1|实现中|跨组件|address/reservation 和 request mask/VTRANS coverage 已接入；其余 coverage 与 bin 证据仍缺|
+|`COV-001`|P1|实现中|跨组件|address/reservation、request mask/VTRANS 和 don’t-care X coverage 已接入；其余 coverage 与 bin 证据仍缺|
 |`DBANK-001`|P0|待验证|共享地址/shmins|wpid/gid 地址和 M2V vaddr 定向 case 已通过真实 RTL；待保存 coverage/关闭证据|
 |`DBANK-002`|P0|待验证|reference/expected model|相同 BADDR 跨 gid 数据隔离 case 已通过真实 RTL；待保存 coverage/关闭证据|
 |`DBANK-004`|P0|待验证|RTL/VLM reservation|other-gid ownership case 已在最新 RTL 通过；待保存实现/coverage 闭环证据|
@@ -123,7 +128,7 @@ masked element、未使用 offset 和 M2V data 的合法 don’t-care X 定向�
 |`SHMINS-001`|P0|待验证|shmins agent|真实 RTL 28-cell及109-case均通过；目标mask/VTRANS coverage证据仍缺|
 |`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
 |`SHMINS-005`|P2|待实现|shmins agent|256-bit 向量参数适配已通过；16-thread/4-bit 等硬编码仍在|
-|`SHMINS-006`|P1|实现中|shmins monitor|局部 checker 已实现；正在规划 inactive/masked don’t-care X 系统矩阵|
+|`SHMINS-006`|P1|待验证|shmins monitor|局部 checker、合法 don’t-care X 组件和30笔RTL矩阵已实现；待正式design与完整非法矩阵|
 |`SHMINS-008`|P1|待验证|shmins monitor/lifecycle|有序 grace 组件测试已通过，待 clocked timeout 触发边界验证|
 |`SHMINS-009`|P1|待验证|shmins/lifecycle|ack 完备 checker 和 credit/release 上溢检查已实现，待定向正负例|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
@@ -273,8 +278,9 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   absolute warp、gid、laddr、wpnum 和 M2V read/write gid；`vlm_reservation_coverage` 已采样
   direction、bank、gid、subbank、delay、ownership、admission 和 MEM match outcome；
   `shmins_request_coverage` 已采样 normal/VTRANS、direction、space、tmsk class/population、
-  active thread、payload X/Z 和 VTRANS dtype/itype。Ack、FFD_CYC、reset 等其他 testpoint
-  尚无对应 functional coverage，新增 request coverage 也尚缺真实 RTL bin 命中证据。
+  active thread、VTRANS dtype/itype，并把 interpreted、inactive、masked data、masked indexed
+  offset、length 外及 M2V 未使用 data 的 X/Z 分开统计。Ack、FFD_CYC、reset 等其他
+  testpoint 尚无对应 functional coverage，新增 request coverage 也尚缺真实 RTL bin 命中证据。
 - 影响：case 运行和 checker 通过不能证明 spec 场景实际发生，所有 testpoint 都缺少
   功能覆盖关闭证据。
 - 目标依据：[Testpoints](plan/testpoints.md)和
@@ -323,14 +329,16 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 
 - 现状：monitor 已先检查 tmsk，再按 active thread 检查 priority、length、有效 vmsk、
   topology 实际使用的 offset slice，以及 V2M 有效 data byte；inactive payload X/Z 和
-  `creq_vld!=1` 时 payload 不检查。组件测试已覆盖 inactive X/Z、active length X、tmsk X
-  和 valid 0。下一批已规划 inactive thread 全 payload X、masked element data/indexed
-  offset X、未使用 packed slice X、length 外 payload X 和 M2V data X 的组件与30笔真实
-  RTL矩阵；公共控制字段及各非法 active payload 字段的完整 X/Z 矩阵仍未覆盖。
+  `creq_vld!=1` 时 payload 不检查。Don’t-care utility、driver/monitor 四态保真、monitor
+  正负 report 和 reference 预过滤组件矩阵已在远端 VCS 通过；reference 会在 masked
+  indexed offset decode、V2M data read 和 shared offset decode 前跳过无效 element。
+  18 笔 inactive-thread X、12 笔 masked-element X 的真实 RTL test、TC 和独立 LST 已实现并
+  通过空 design 编译。正式 design 运行、目标 bin/cross、既有 LST 无回归，以及公共控制
+  字段和各非法 active payload 字段的完整 X/Z 矩阵仍未完成。
 - 影响：非法输入可能进入 reference，错误被延迟或转化成难以定位的数据差异。
 - 目标依据：`CREQ-002`。
-- 验收：为公共字段、active thread payload 和 inactive thread payload 分别注入 X/Z，
-  只报告协议禁止的组合。
+- 验收：为公共字段、active interpreted payload 和各类 ignored payload 分别注入 X/Z，
+  只报告协议禁止的组合；保存30笔真实 RTL矩阵、目标 coverage 和既有 LST 无回归证据。
 
 ### `SHMINS-008` Ack timeout 不是协议时限
 

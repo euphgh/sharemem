@@ -2,7 +2,8 @@
 
 本目录在不实例化真实 DUT 的情况下，验证 SHMINS monitor 的 thread-mask 和局部四态
 contract。测试覆盖合法 single/sparse/full mask、全零丢弃、tmsk X、inactive payload
-X/Z、active payload X，以及 `creq_vld==0` 不采样。
+X/Z、masked V2M data、masked indexed offset、M2V data、length 外 payload，以及
+active mask/shared offset/indexed offset/V2M data X/Z 负例和 `creq_vld==0` 不采样。
 
 在配置好 VCS 的 Ubuntu EDA 环境执行：
 
@@ -18,6 +19,11 @@ UVM_ERROR :    0
 UVM_FATAL :    0
 ```
 
-全零 tmsk 的 `SHMINS_TMSK_ZERO`、tmsk X 的 `SHMINS_TMSK_XZ` 和 active payload X 的
-`SHMINS_ACTIVE_PAYLOAD_XZ` 是预期负例，必须各出现一次并由 report catcher 降级。全零
-sample 不会由 monitor 发布；测试直接调用 coverage subscriber，仅用于命中非法 mask bin。
+全零 tmsk 的 `SHMINS_TMSK_ZERO`、tmsk X 的 `SHMINS_TMSK_XZ` 和 5 类 interpreted
+payload X 的 `SHMINS_ACTIVE_PAYLOAD_XZ` 是预期负例，必须精确出现并由 report
+catcher 降级。全零 sample 不会由 monitor 发布；测试直接调用 coverage subscriber，
+仅用于命中非法 mask bin。
+
+`driver_monitor_tb.sv` 还通过 `dontcare-driver` target 验证三笔 transaction 经过生产
+sequencer、driver、interface 和 monitor 后仍保留精确四态值，并检查
+`delay_cycle=0/1` 的 accept cycle。

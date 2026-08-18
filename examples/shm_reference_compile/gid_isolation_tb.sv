@@ -3,10 +3,104 @@
 package shm_reference_gid_test_pkg;
   import uvm_pkg::*;
   import shm_util_package::*;
+  import collection::*;
   import shm_seq_item_package::*;
-  import shm_env_package::*;
 
   `include "uvm_macros.svh"
+
+  //----------------------------------------------------------------------------
+  // @brief Provides the byte-memory API used by the production reference model.
+  //
+  // This component-only stand-in avoids loading licensed Synopsys VIP while
+  // preserving the read, write, and incremental-initialization semantics used
+  // by shm_reference. It is not compiled into the production environment.
+  //----------------------------------------------------------------------------
+  class svt_mem;
+    typedef enum int {INCR} meminit_e;
+
+    byte unsigned bytes[longint unsigned];
+    longint unsigned init_base;
+
+    //----------------------------------------------------------------------------
+    // @brief Constructs an empty component-test memory.
+    //
+    // @param name Memory instance name retained for API compatibility.
+    // @param suite Memory suite name retained for API compatibility.
+    // @param data_width Data width retained for API compatibility.
+    // @param address_width Address width retained for API compatibility.
+    // @param lower_address Lower bound retained for API compatibility.
+    // @param upper_address Upper bound retained for API compatibility.
+    //----------------------------------------------------------------------------
+    function new(string name,
+                 string suite,
+                 int data_width,
+                 int address_width,
+                 longint unsigned lower_address,
+                 longint unsigned upper_address);
+      init_base = 0;
+    endfunction : new
+
+    //----------------------------------------------------------------------------
+    // @brief Selects deterministic incremental values for unwritten addresses.
+    //
+    // @param mode Initialization mode; only INCR is used by shm_reference.
+    // @param base_value Base byte value for address zero.
+    //----------------------------------------------------------------------------
+    function void set_meminit(meminit_e mode, longint unsigned base_value);
+      init_base = base_value;
+    endfunction : set_meminit
+
+    //----------------------------------------------------------------------------
+    // @brief Writes one byte at the requested address.
+    //
+    // @param address Byte address to update.
+    // @param value New byte value.
+    //----------------------------------------------------------------------------
+    function void write(longint unsigned address, byte unsigned value);
+      bytes[address] = value;
+    endfunction : write
+
+    //----------------------------------------------------------------------------
+    // @brief Reads a written byte or its deterministic incremental default.
+    //
+    // @param address Byte address to read.
+    // @return Stored byte, or init_base plus address before the first write.
+    //----------------------------------------------------------------------------
+    function byte unsigned read(longint unsigned address);
+      if (bytes.exists(address)) begin
+        return bytes[address];
+      end
+      return byte'(init_base + address);
+    endfunction : read
+  endclass : svt_mem
+
+  //----------------------------------------------------------------------------
+  // @brief Supplies the configuration handle required by shm_reference build.
+  //
+  // Production configuration is intentionally not pulled into this standalone
+  // component harness because the reference model only stores and prints it.
+  //----------------------------------------------------------------------------
+  class shm_environment_config extends uvm_object;
+    //----------------------------------------------------------------------------
+    // @brief Constructs the component-test reference configuration.
+    //
+    // @param name UVM object instance name.
+    //----------------------------------------------------------------------------
+    function new(string name = "shm_environment_config");
+      super.new(name);
+    endfunction : new
+
+    //----------------------------------------------------------------------------
+    // @brief Preserves the production configuration initialization call site.
+    //----------------------------------------------------------------------------
+    function void init();
+    endfunction : init
+
+    `uvm_object_utils(shm_environment_config)
+  endclass : shm_environment_config
+
+  `include "shm_physical_map_util.svh"
+  `include "shm_reference.svh"
 
   //----------------------------------------------------------------------------
   // @brief Captures immutable reference transactions for independent checking.
@@ -233,6 +327,105 @@ package shm_reference_gid_test_pkg;
     endfunction : check_inactive_payload_xz
 
     //----------------------------------------------------------------------------
+    // @brief Creates one sparse-mask topology item for reference don’t-care tests.
+    //
+    // @param topology 0 for contiguous, 1 for strided, or 2 for indexed.
+    // @param direction V2M or M2V request direction.
+    // @param item_name UVM object instance name.
+    // @return Generated item with thread zero and elements 0/7 active.
+    //----------------------------------------------------------------------------
+    virtual function shmins_sequence_item create_dontcare_item(int unsigned topology,
+                                                                creq_rw_e direction,
+                                                                string item_name);
+      shmins_sequence_item item;
+
+      case (topology)
+        0: item = shmins_contiguous_sequence_item::type_id::create(item_name);
+        1: item = shmins_strided_sequence_item::type_id::create(item_name);
+        2: item = shmins_indexed_sequence_item::type_id::create(item_name);
+        default: begin
+          `uvm_fatal("SHM_REFERENCE_DONTCARE_TOPOLOGY", $sformatf("unsupported topology %0d", topology))
+          return null;
+        end
+      endcase
+      if (!item.randomize() with {
+            creq_rw == local::direction;
+            creq_dtype == DTYP_8;
+            creq_atype_w == ATYP_16;
+            creq_atype_s == ATYP_U;
+            creq_atype_g == GAUTO_1B;
+            creq_space == SPACE_LOC;
+            creq_wpid == 0;
+            creq_tmsk == 16'h0001;
+            elem_num[0] == 8;
+            creq_vmsk[0][7:0] == 8'h81;
+          }) begin
+        `uvm_fatal("SHM_REFERENCE_DONTCARE_RANDOMIZE", $sformatf("failed to randomize %s", item_name))
+      end
+      return item;
+    endfunction : create_dontcare_item
+
+    //----------------------------------------------------------------------------
+    // @brief Counts active bytes in one flattened reference write map.
+    //
+    // @param item Published reference item containing the write map.
+    // @return Sum of associative byte entries across all physical BANKs.
+    //----------------------------------------------------------------------------
+    virtual function int unsigned wmap_byte_count(shm_wtrans_item item);
+      int unsigned count = 0;
+
+      foreach (item.wmap[physical_bank]) begin
+        count += item.wmap[physical_bank].size();
+      end
+      return count;
+    endfunction : wmap_byte_count
+
+    //----------------------------------------------------------------------------
+    // @brief Verifies masked offsets/data and M2V unused data are never consumed.
+    //----------------------------------------------------------------------------
+    virtual function void check_dontcare_payload_xz();
+      shmins_sequence_item item;
+      int unsigned previous_count;
+
+      item = create_dontcare_item(0, SHM_V2M, "reference_contiguous_x");
+      void'(shmins_dontcare_x_util::poison_masked_element_data(item, 1'bx));
+      void'(shmins_dontcare_x_util::poison_unused_offset_slices(item, 1'bx));
+      void'(shmins_dontcare_x_util::poison_out_of_length_payload(item, 1'bx));
+      previous_count = sink.items.size();
+      reference_model.write_shmins_reference(item);
+      if (sink.items.size() != previous_count + 1 || wmap_byte_count(sink.items[previous_count]) != 2) begin
+        `uvm_fatal("X_REF_002", "masked contiguous payload changed the two-byte reference result")
+      end
+
+      item = create_dontcare_item(2, SHM_V2M, "reference_indexed_x");
+      void'(shmins_dontcare_x_util::poison_masked_element_data(item, 1'bx));
+      void'(shmins_dontcare_x_util::poison_indexed_masked_offsets(item, 1'bx));
+      void'(shmins_dontcare_x_util::poison_out_of_length_payload(item, 1'bx));
+      previous_count = sink.items.size();
+      reference_model.write_shmins_reference(item);
+      if (sink.items.size() != previous_count + 1 || wmap_byte_count(sink.items[previous_count]) != 2) begin
+        `uvm_fatal("X_REF_003", "masked indexed offset/data changed the two-byte reference result")
+      end
+
+      item = create_dontcare_item(1, SHM_V2M, "reference_strided_x");
+      void'(shmins_dontcare_x_util::poison_masked_element_data(item, 1'bx));
+      void'(shmins_dontcare_x_util::poison_unused_offset_slices(item, 1'bx));
+      previous_count = sink.items.size();
+      reference_model.write_shmins_reference(item);
+      if (sink.items.size() != previous_count + 1 || wmap_byte_count(sink.items[previous_count]) != 2) begin
+        `uvm_fatal("X_REF_004", "unused strided offsets changed the two-byte reference result")
+      end
+
+      item = create_dontcare_item(0, SHM_M2V, "reference_m2v_x");
+      void'(shmins_dontcare_x_util::poison_m2v_vdata(item, 1'bx));
+      previous_count = sink.items.size();
+      reference_model.write_shmins_reference(item);
+      if (sink.items.size() != previous_count + 1 || wmap_byte_count(sink.items[previous_count]) != 2) begin
+        `uvm_fatal("X_REF_005", "M2V input-data X changed the two-byte read/writeback result")
+      end
+    endfunction : check_dontcare_payload_xz
+
+    //----------------------------------------------------------------------------
     // @brief Runs equal-BADDR V2M writes and M2V reads in gid zero and gid one.
     //
     // @param phase UVM run phase controlling the test objection.
@@ -318,6 +511,7 @@ package shm_reference_gid_test_pkg;
       check_m2v_wpid(3);
       check_inactive_payload_xz(1'bx);
       check_inactive_payload_xz(1'bz);
+      check_dontcare_payload_xz();
 
       `uvm_info("SHM_REFERENCE_GID_TEST", "reference gid-isolation component test: PASS", UVM_LOW)
       phase.drop_objection(this);

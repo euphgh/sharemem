@@ -52,6 +52,8 @@ class shm_wtrans_item extends shmins_sequence_item;
                                  ref longint signed elem_unify_addr[],
                                  ref longint signed eoff_val[]);
         int unsigned element_count;
+        bit has_active_element;
+        longint signed shared_offset;
 
         element_count = thread_elem_cnt(tidx);
         if (element_count > max_elem_cnt()) begin
@@ -60,14 +62,32 @@ class shm_wtrans_item extends shmins_sequence_item;
         eoff_val = new[element_count];
         elem_unify_addr = new[element_count];
 
+        has_active_element = 1'b0;
         for (int unsigned elem_idx = 0; elem_idx < element_count; elem_idx++) begin
+            if (is_active_element(tidx, elem_idx)) begin
+                has_active_element = 1'b1;
+                break;
+            end
+        end
+        if (!has_active_element) begin
+            return;
+        end
+
+        shared_offset = 0;
+        if (creq_itype inside {LDST_S, LDST_V, LDSTE_S}) begin
+            shared_offset = decode_packed_offset(tidx, 0);
+        end
+
+        for (int unsigned elem_idx = 0; elem_idx < element_count; elem_idx++) begin
+            if (!is_active_element(tidx, elem_idx)) begin
+                continue;
+            end
             case (creq_itype)
                 LDST_S, LDST_V: begin
-                    eoff_val[elem_idx] = decode_packed_offset(tidx, 0) +
-                                         longint'(elem_idx) * longint'(data_byte_w());
+                    eoff_val[elem_idx] = shared_offset + longint'(elem_idx) * longint'(data_byte_w());
                 end
                 LDSTE_S: begin
-                    eoff_val[elem_idx] = longint'(elem_idx) * decode_packed_offset(tidx, 0);
+                    eoff_val[elem_idx] = longint'(elem_idx) * shared_offset;
                 end
                 LDSTE_V: begin
                     eoff_val[elem_idx] = decode_packed_offset(tidx, elem_idx);

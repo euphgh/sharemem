@@ -32,6 +32,7 @@ Agent 从 Config DB 获取 `shmins_mst_agent_config` 和 `shmins_vif`。默认�
 |`ver_common/uvc/shmins_agent/sequences/shmins_strided_sequence_item.svh`|LDSTE_S 地址生成|
 |`ver_common/uvc/shmins_agent/sequences/shmins_indexed_sequence_item.svh`|LDSTE_V 地址生成|
 |`ver_common/uvc/shmins_agent/sequences/shmins_vtrans_sequence_item.svh`|继承 contiguous 的 VTRANS 请求|
+|`ver_common/uvc/shmins_agent/sequences/shmins_dontcare_x_util.svh`|在已验证 item 上注入合法 don’t-care X/Z|
 
 ## 3. Transaction 与 `creq_typ`
 
@@ -138,9 +139,10 @@ Monitor 先检查 `creq_tmsk`：含 X/Z 时报告并停止 per-thread 分类，�
 允许 X/Z。公共控制字段和完整字段矩阵仍由 `SHMINS-006` 跟踪。
 
 Agent 在 monitor 存在时创建并连接 `shmins_request_coverage`。该 subscriber 只读采样
-normal/VTRANS、direction、space、mask class/population、active thread、payload X/Z 和
-VTRANS dtype/itype；全零事务只允许由组件 harness 直接采样 coverage，不经过 production
-monitor 数据流。
+normal/VTRANS、direction、space、mask class/population、active thread 和 VTRANS
+dtype/itype，并把 interpreted、inactive、masked data、masked indexed offset、length 外和
+M2V 未使用 data 的 X/Z 分开统计。全零事务只允许由组件 harness 直接采样 coverage，
+不经过 production monitor 数据流。
 
 Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计字段；contiguous override
 额外复制 `start_maddr`。`compare_item()` 使用 UVM 注册字段比较，不再无条件 fatal。
@@ -161,8 +163,9 @@ Transaction 的 `do_copy()` 已覆盖公共 creq、生成地址模型和统计�
 
 `ut_shm/tests/shm_unit_test.svh` 通过 `shmins_mst_unit_sequence` 覆盖当前集成激励入口，
 可用 plusarg 改变 transaction 数量、normal domain 和 VTRANS 比例。当前没有独立的
-credit/release、ack 完整性或 reset 静默测试；thread-mask 和局部四态组件测试位于
-`examples/shmins_monitor_compile/`，transaction copy/VTRANS 组件测试位于
+credit/release、ack 完整性或 reset 静默测试；thread-mask、四态边界及
+sequencer→driver→monitor 保真测试位于 `examples/shmins_monitor_compile/`，transaction
+copy/VTRANS 和 don’t-care utility 精确 slice 测试位于
 `examples/shmins_sequence_compile/`。Strided item 已为 V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
 生成 element-0 mask，V2M/M2V 共 24 个叶子 case 已随扩容后的 109-case 主列表
 通过真实 DUT regression，`SHMINS-007` 已关闭。其余缺口由验证实现状态中的
@@ -197,8 +200,9 @@ credit/release、ack 完整性或 reset 静默测试；thread-mask 和局部四�
 - `SHMINS-004`：RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case 真实 RTL 回归；
   ATYPE_S/G 仍等待 testcase 配置到 monitor 的端到端定向验证。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。
-- `SHMINS-006`：active-thread payload 局部 X/Z 检查已实现；inactive/masked don’t-care X
-  的组件和30笔真实 RTL矩阵已规划，公共字段和完整非法字段矩阵仍缺。
+- `SHMINS-006`：active interpreted payload 局部 X/Z 检查、合法 don’t-care X utility、
+  component matrix、18+12笔真实 RTL test和ignored-X coverage已实现；组件和空design编译
+  已通过，正式design运行、目标bin及公共/active非法字段完整矩阵仍缺。
 - `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 和 V2M/M2V 24 个 case
   已随 109-case 主列表通过真实 RTL regression，2026-08-14 关闭。
 - `SHMINS-008`：固定 ack timeout 已移除，改为 scoreboard observed 后可配置 grace；

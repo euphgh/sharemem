@@ -235,7 +235,8 @@ Reservation 到实际 MEM 的匹配键和 busy 规则由
 
 - `creq_tmsk` 数据链已经贯通；全零 sample 由 monitor 报告后丢弃，inactive payload X/Z
   组件测试已通过，稀疏 mask、DUT 输出抑制和 VTRANS 全 mask 的28个 cell 也已随最新
-  `shmins_mask_directed.lst` 通过真实 RTL；inactive/masked don’t-care X 系统矩阵仍待实现；
+  `shmins_mask_directed.lst` 通过真实 RTL；inactive/masked don’t-care X utility、reference
+  过滤、组件矩阵和30笔系统 test已实现并通过空design编译，正式design运行及coverage待完成；
 - MEM read 服务尚未按 `FFD_CYC` 建立截止周期快照；
 - 各组件能避开初始 reset 期间的采样，但运行中 reset 对 reference item、scoreboard
   outstanding、memory read response 和 reservation scheduler state 的清理尚未统一；

@@ -16,6 +16,14 @@ package shmins_mask_monitor_test_pkg;
     MONITOR_INACTIVE_X,
     MONITOR_INACTIVE_Z,
     MONITOR_ACTIVE_LENGTH_X,
+    MONITOR_MASKED_DATA_X,
+    MONITOR_MASKED_INDEXED_OFFSET_X,
+    MONITOR_ACTIVE_MASK_X,
+    MONITOR_SHARED_OFFSET_X,
+    MONITOR_ACTIVE_INDEXED_OFFSET_X,
+    MONITOR_ACTIVE_DATA_X,
+    MONITOR_M2V_DATA_X,
+    MONITOR_OUT_OF_LENGTH_X,
     MONITOR_ALL_X
   } monitor_payload_mode_e;
 
@@ -135,7 +143,7 @@ package shmins_mask_monitor_test_pkg;
     report_catcher = new("report_catcher");
     report_catcher.expect_report("SHMINS_TMSK_ZERO", 1);
     report_catcher.expect_report("SHMINS_TMSK_XZ", 1);
-    report_catcher.expect_report("SHMINS_ACTIVE_PAYLOAD_XZ", 1);
+    report_catcher.expect_report("SHMINS_ACTIVE_PAYLOAD_XZ", 5);
     uvm_report_cb::add(null, report_catcher);
   endfunction : build_phase
 
@@ -195,8 +203,25 @@ package shmins_mask_monitor_test_pkg;
 
     drive_request(16'h0001, MONITOR_ACTIVE_LENGTH_X);
     check_transaction_count(8, "MON-MASK-009");
+
+    drive_request(16'h0001, MONITOR_MASKED_DATA_X);
+    check_transaction_count(9, "X-MON-002");
+    drive_request(16'h0001, MONITOR_MASKED_INDEXED_OFFSET_X);
+    check_transaction_count(10, "X-MON-003");
+    drive_request(16'h0001, MONITOR_ACTIVE_MASK_X);
+    check_transaction_count(11, "X-MON-004");
+    drive_request(16'h0001, MONITOR_SHARED_OFFSET_X);
+    check_transaction_count(12, "X-MON-005");
+    drive_request(16'h0001, MONITOR_ACTIVE_INDEXED_OFFSET_X);
+    check_transaction_count(13, "X-MON-006");
+    drive_request(16'h0001, MONITOR_ACTIVE_DATA_X);
+    check_transaction_count(14, "X-MON-007");
+    drive_request(16'h0001, MONITOR_M2V_DATA_X);
+    check_transaction_count(15, "X-MON-008");
+    drive_request(16'h0001, MONITOR_OUT_OF_LENGTH_X);
+    check_transaction_count(16, "X-MON-OUT-OF-LENGTH");
     drive_request('x, MONITOR_ALL_X, 1'b0);
-    check_transaction_count(8, "MON-MASK-010");
+    check_transaction_count(16, "MON-MASK-010");
 
     if (!report_catcher.expectations_met()) begin
       `uvm_fatal("SHMINS_MASK_MONITOR_REPORT_COUNT", "expected report IDs did not occur exactly once")
@@ -208,7 +233,11 @@ package shmins_mask_monitor_test_pkg;
         coverage.sampled_mask_class_count[SHMINS_MASK_FULL] == 0 ||
         coverage.sampled_inactive_payload_xz_count[SHMINS_PAYLOAD_X] == 0 ||
         coverage.sampled_inactive_payload_xz_count[SHMINS_PAYLOAD_Z] == 0 ||
-        coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_X] == 0) begin
+        coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_X] == 0 ||
+        coverage.sampled_masked_data_xz_count[SHMINS_PAYLOAD_X] == 0 ||
+        coverage.sampled_masked_indexed_offset_xz_count[SHMINS_PAYLOAD_X] == 0 ||
+        coverage.sampled_out_of_length_xz_count[SHMINS_PAYLOAD_X] == 0 ||
+        coverage.sampled_m2v_unused_vdata_xz_count[SHMINS_PAYLOAD_X] == 0) begin
       `uvm_fatal("SHMINS_MASK_MONITOR_COVERAGE", "component matrix did not reach all required counters")
     end
 
@@ -259,6 +288,48 @@ package shmins_mask_monitor_test_pkg;
     end
     else if (payload_mode == MONITOR_ACTIVE_LENGTH_X) begin
       vif.creq_len[0] = 'x;
+    end
+    else if (payload_mode == MONITOR_MASKED_DATA_X) begin
+      vif.creq_len[0] = 8;
+      vif.creq_vmsk[0][7:0] = 8'h81;
+      vif.creq_vdat[0][1] = 'x;
+    end
+    else if (payload_mode == MONITOR_MASKED_INDEXED_OFFSET_X) begin
+      vif.creq_typ = {4'h0, SPACE_LOC, 4'h0, 1'b0, LDSTE_V, GAUTO_1B, ATYP_U, ATYP_32,
+                      DTYP_8, SHM_V2M};
+      vif.creq_len[0] = 8;
+      vif.creq_vmsk[0][7:0] = 8'h81;
+      vif.creq_offs[0][63:32] = 'x;
+    end
+    else if (payload_mode == MONITOR_ACTIVE_MASK_X) begin
+      vif.creq_len[0] = 8;
+      vif.creq_vmsk[0][1] = 1'bx;
+    end
+    else if (payload_mode == MONITOR_SHARED_OFFSET_X) begin
+      vif.creq_offs[0][31:0] = 'x;
+    end
+    else if (payload_mode == MONITOR_ACTIVE_INDEXED_OFFSET_X) begin
+      vif.creq_typ = {4'h0, SPACE_LOC, 4'h0, 1'b0, LDSTE_V, GAUTO_1B, ATYP_U, ATYP_32,
+                      DTYP_8, SHM_V2M};
+      vif.creq_len[0] = 8;
+      vif.creq_vmsk[0][7:0] = 8'h81;
+      vif.creq_offs[0][255:224] = 'x;
+    end
+    else if (payload_mode == MONITOR_ACTIVE_DATA_X) begin
+      vif.creq_vdat[0][0] = 'x;
+    end
+    else if (payload_mode == MONITOR_M2V_DATA_X) begin
+      vif.creq_typ = {4'h0, SPACE_LOC, 4'h0, 1'b0, LDST_S, GAUTO_1B, ATYP_U, ATYP_32,
+                      DTYP_8, SHM_M2V};
+      vif.creq_vdat[0] = 'x;
+    end
+    else if (payload_mode == MONITOR_OUT_OF_LENGTH_X) begin
+      vif.creq_typ = {4'h0, SPACE_LOC, 4'h0, 1'b0, LDST_S, GAUTO_1B, ATYP_U, ATYP_16,
+                      DTYP_8, SHM_V2M};
+      vif.creq_len[0] = 8;
+      vif.creq_vmsk[0][VEC_BYTE_N-1:8] = 'x;
+      vif.creq_vdat[0][VEC_BYTE_N-1:8] = 'x;
+      vif.creq_offs[0][VEC_W-1:16] = 'x;
     end
     else if (payload_mode == MONITOR_ALL_X) begin
       vif.creq_id = 'x;

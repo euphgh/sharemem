@@ -131,3 +131,27 @@ CentOS 真实 RTL 的最终结果。
 该证据验证 reservation 接受非对齐地址并执行完整地址匹配。2026-08-11 已进一步确认
 下游 SRAM 对所有 32-Byte read/write 都支持非对齐地址，因此不存在待补的 scoreboard
 来源相关 alignment checker。该组件证据仍不替代真实 RTL 完整 regression。
+
+## 8. 2026-08-18 SHMINS don’t-care X 组件门禁
+
+在 hx16 使用 VCS `T-2022.06-SP2-5_Full64` 执行：
+
+```bash
+scripts/ubuntu/check_shmins_sequence_vcs.sh all
+scripts/ubuntu/check_shm_reference_vcs.sh
+make .SHELLFLAGS=-ec compile
+```
+
+结果如下：
+
+- SHMINS compile、copy、lifecycle、dual-gid-address、mask-monitor、don’t-care utility 和
+  driver/monitor 四态保真目标全部通过；
+- monitor 负例精确捕获5个预期 interpreted-payload X/Z report，最终
+  `UVM_ERROR: 0`、`UVM_FATAL: 0`；
+- standalone reference 的 gid isolation、masked/inactive/M2V don’t-care X 过滤通过，
+  最终 `UVM_ERROR: 0`、`UVM_FATAL: 0`；
+- 空 `RpuShmTop` 环境共27个 module完成 parse、elaboration 和 simv link。
+
+GNU Make 3.82 对仓库当前多段 `.SHELLFLAGS` 的解释不兼容，因此本次空 design 编译显式
+覆盖为 `.SHELLFLAGS=-ec`。本批没有执行空 design smoke，也没有执行正式 RTL；后者仍需用
+`shmins_dontcare_x.lst` 验证30笔合法 X transaction 和目标 coverage。

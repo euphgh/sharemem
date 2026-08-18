@@ -91,7 +91,8 @@ shm_unit_test
 ├── shm_m2v_vaddr_boundary_test
 ├── shm_reservation_gid_ownership_test
 ├── shm_tmsk_directed_test
-└── shm_vtrans_full_mask_test
+├── shm_vtrans_full_mask_test
+└── shm_payload_dontcare_x_test
 ```
 
 公共参数当前为：
@@ -223,6 +224,7 @@ case_name : RUN=1 SEED=num
 |[`shm.lst`](../../../ut_shm/regression/shm.lst)|include 前两份普通列表|109|
 |[`p0_directed.lst`](../../../ut_shm/regression/p0_directed.lst)|P0-3/P0-4 双 gid 定向组|4|
 |[`shmins_mask_directed.lst`](../../../ut_shm/regression/shmins_mask_directed.lst)|普通 mask 24-cell 与 VTRANS 4-cell 定向组|2 tests / 28 cells|
+|[`shmins_dontcare_x.lst`](../../../ut_shm/regression/shmins_dontcare_x.lst)|inactive-thread与masked-element合法X定向组|1 test / 30 cells|
 
 普通 V2M 和 M2V regression 都包含：
 
@@ -264,7 +266,10 @@ blocking；2026-08-18 用户确认 `p0_directed.lst` 已在最新 design 上四�
 `shm_tmsk_directed_test` 的 24 个 normal cell 和 `shm_vtrans_full_mask_test` 的4个 VTRANS
 cell 均通过。该列表仍独立于主列表，等待目标 mask/VTRANS bin/cross 归档。
 
-下一批 case 开发转向合法 don’t-care X，具体矩阵和实施顺序见
+合法 don’t-care X 的 `shm_payload_dontcare_x_test`、根 TC 和独立
+`shmins_dontcare_x.lst` 已实现。该 test 内部执行 18 笔 inactive-thread X 和12笔
+masked-element X transaction；组件测试和空 design 编译已通过，正式 design 运行及目标
+coverage 尚待完成。具体矩阵和判定标准见
 [SHMINS don’t-care X 定向验证开发计划](../../development/shm-directed-verification-development-plan.md)。
 
 ## 9. 维护规则

@@ -68,6 +68,10 @@ element 视为 16×16 方阵。目标 `[thread][element]` 的数据来自转置�
 
 普通 V2M/M2V 中，reference 为 inactive thread 创建空的地址、BANK 和 strobe 数组，
 因此不会解释该 thread 允许为 X/Z 的 payload，也不会生成 MEM/reservation 或写回期望。
+地址展开还会在 indexed offset decode 前跳过 masked element，并且仅在存在 active element
+时解码 contiguous/strided 的 shared offset；V2M 数据生成会在读取 `creq_vdat` 前过滤
+zero-strobe element 和 disabled byte lane。因此合法 masked、length 外和 direction 未使用
+payload 的 X/Z 不会污染 reference memory 或期望 byte map。
 
 ## 6. M2V
 
@@ -113,8 +117,11 @@ item 在真实 design 上通过当时 `shm.lst` 的全部 85 个 case。2026-08-
 写入物理 bank/BADDR 相同、gid 分别为 0/1 的 reference memory，检查 flattened wmap key
 不合并，并从两个 gid 分别执行 M2V readback。2026-08-15 P0-1 扩展后，测试还逐 byte
 检查 VTRANS wpid 3/4 的 16×16 转置，并验证 M2V wpid 3/4 的 writeback gid 和已编码
-`creq_vaddr`。远端 `scripts/ubuntu/check_shm_reference_vcs.sh` 通过且 0 error/fatal。该组件
-结果证明 expected model 的 gid 隔离和 reference contract，不替代真实 RTL directed case。
+`creq_vaddr`。2026-08-18 测试继续扩展 inactive thread、masked V2M data、masked indexed
+offset、unused shared offset 和 M2V unused data X/Z；standalone harness 使用测试局部的
+byte-memory stand-in，不依赖 VIP SLI server。远端
+`scripts/ubuntu/check_shm_reference_vcs.sh` 通过且 0 error/fatal。该组件结果证明 expected
+model 的 gid 隔离和 don’t-care 预过滤 contract，不替代真实 RTL directed case。
 
 ## 10. 开发 contract
 
