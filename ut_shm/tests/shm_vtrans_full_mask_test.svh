@@ -61,8 +61,12 @@ endtask : main_phase
 task shm_vtrans_full_mask_test::run_vtrans_cell(creq_dtype_e dtype, creq_itype_e itype);
   shmins_vtrans_sequence_item item;
   longint unsigned request_count_before;
+  longint unsigned request_count_after;
   longint unsigned address_byte_count_before;
   longint unsigned cross_count_before;
+  longint unsigned cross_count_after;
+  longint unsigned itype_count_before[4];
+  longint unsigned itype_count_after[4];
   int unsigned expected_length;
   int unsigned expected_byte_count;
   string item_name;
@@ -103,15 +107,49 @@ task shm_vtrans_full_mask_test::run_vtrans_cell(creq_dtype_e dtype, creq_itype_e
   request_count_before = shm_env.shmins_mst_agt.coverage.sampled_request_count;
   address_byte_count_before = shm_env.address_coverage.sampled_active_byte_count;
   cross_count_before = shm_env.shmins_mst_agt.coverage.vtrans_cross_count(dtype, itype);
+  foreach (itype_count_before[itype_idx]) begin
+    itype_count_before[itype_idx] =
+        shm_env.shmins_mst_agt.coverage.sampled_vtrans_cross_count[dtype][itype_idx];
+  end
   expected_byte_count = THD_N * 16 * item.data_byte_w();
+
+  `uvm_info("SHM_VTRANS_SEND_DEBUG",
+            $sformatf({"%s expected dtype=%0d itype=%0d; item typ=0x%05h info=0x%0h rw=%0d ",
+                       "space=%0d dtype=%0d itype=%0d tmsk=0x%0h; request_before=%0d ",
+                       "cross_before=%0d"},
+                      item_name, dtype, itype, item.creq_typ, item.creq_info, item.creq_rw,
+                      item.creq_space, item.creq_dtype, item.creq_itype, item.creq_tmsk,
+                      request_count_before, cross_count_before),
+            UVM_LOW)
 
   send_directed_item(item);
   shm_env.wait_for_idle();
 
-  if (shm_env.shmins_mst_agt.coverage.sampled_request_count != request_count_before + 1 ||
-      shm_env.shmins_mst_agt.coverage.vtrans_cross_count(dtype, itype) != cross_count_before + 1) begin
+  request_count_after = shm_env.shmins_mst_agt.coverage.sampled_request_count;
+  cross_count_after = shm_env.shmins_mst_agt.coverage.vtrans_cross_count(dtype, itype);
+  foreach (itype_count_after[itype_idx]) begin
+    itype_count_after[itype_idx] =
+        shm_env.shmins_mst_agt.coverage.sampled_vtrans_cross_count[dtype][itype_idx];
+  end
+  `uvm_info("SHM_VTRANS_COVERAGE_DEBUG",
+            $sformatf({"%s request before=%0d after=%0d delta=%0d; expected cell dtype=%0d ",
+                       "itype=%0d before=%0d after=%0d delta=%0d; dtype=%0d itype deltas ",
+                       "[0]=%0d [1]=%0d [2]=%0d [3]=%0d"},
+                      item_name, request_count_before, request_count_after,
+                      request_count_after - request_count_before, dtype, itype, cross_count_before,
+                      cross_count_after, cross_count_after - cross_count_before, dtype,
+                      itype_count_after[0] - itype_count_before[0],
+                      itype_count_after[1] - itype_count_before[1],
+                      itype_count_after[2] - itype_count_before[2],
+                      itype_count_after[3] - itype_count_before[3]),
+            UVM_LOW)
+
+  if (request_count_after != request_count_before + 1 || cross_count_after != cross_count_before + 1) begin
     `uvm_fatal("SHM_VTRANS_REQUEST_COVERAGE",
-               $sformatf("%s did not increment its request coverage cell exactly once", item_name))
+               $sformatf({"%s expected one request and one dtype=%0d itype=%0d cell sample; ",
+                          "request before=%0d after=%0d, cell before=%0d after=%0d"},
+                         item_name, dtype, itype, request_count_before, request_count_after,
+                         cross_count_before, cross_count_after))
   end
   if (shm_env.address_coverage.sampled_active_byte_count !=
       address_byte_count_before + expected_byte_count) begin

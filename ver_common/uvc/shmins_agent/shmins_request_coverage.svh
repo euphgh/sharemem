@@ -265,6 +265,18 @@ function void shmins_request_coverage::write(shmins_sequence_item t);
     vtrans_cg.sample(t.creq_dtype, t.creq_itype, mask_class);
     sampled_vtrans_cross_count[t.creq_dtype][t.creq_itype]++;
   end
+  if (t.creq_info == 4'hf ||
+      (mask_class == SHMINS_MASK_FULL && t.creq_rw == SHM_V2M && t.creq_space == SPACE_LOC)) begin
+    `uvm_info("SHMINS_VTRANS_COVERAGE_SAMPLE",
+              $sformatf({"uid=%0d id=%0d typ=0x%05h info=0x%0h rw=%0d space=%0d dtype=%0d ",
+                         "itype=%0d tmsk=0x%0h mask_class=%0d request_count=%0d cell_count=%0d"},
+                        t.transaction_uid, t.creq_id, t.creq_typ, t.creq_info, t.creq_rw,
+                        t.creq_space, t.creq_dtype, t.creq_itype, t.creq_tmsk, mask_class,
+                        sampled_request_count,
+                        int'(t.creq_dtype) < 3 && int'(t.creq_itype) < 4 ?
+                            sampled_vtrans_cross_count[t.creq_dtype][t.creq_itype] : 0),
+              UVM_LOW)
+  end
 endfunction : write
 
 function shmins_mask_class_e shmins_request_coverage::classify_mask(logic [THD_N-1:0] tmsk);
