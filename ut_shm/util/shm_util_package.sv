@@ -22,10 +22,10 @@ package shm_util_package;
     parameter WARP_N          = 8                     ;
     parameter GID_N           = 2                     ;
     parameter WARP_PER_GID    = WARP_N / GID_N        ;
-    parameter OTF_N           = 4                     ;
+    parameter OTF_N           = 8                     ;
     parameter PRIO_W          = 4                     ;
     parameter FFD_CYC         = 1                     ; //feedforward cycle
-    parameter RPORT_DLY       = 4                     ;
+    parameter RPORT_DLY       = 5                     ;
     parameter VTAB_D          = 6+RPORT_DLY-FFD_CYC+1+1+1; // current default: 12
     parameter ID_W            = 8                     ;
     parameter THD_N           = 16                    ;
