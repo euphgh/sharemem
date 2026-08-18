@@ -333,6 +333,14 @@ payload 基线。
   `make .SHELLFLAGS=-ec compile` 避免其对当前多段 `.SHELLFLAGS` 的兼容问题。
 
 真实 RTL 用的 `shm_payload_dontcare_x_test`、根 TC 定义和独立
-`shmins_dontcare_x.lst` 已实现，但 18+12 笔矩阵、目标 coverage bin 和三份既有 LST
-无回归仍需在正式 design 环境执行。因此本批当前状态是“待验证”，不按空 design
-编译结果宣称 DUT 功能通过。
+`shmins_dontcare_x.lst` 已实现。用户随后确认18+12笔矩阵在正式 design上通过；test内部
+counter确认 interpreted payload保持known，并命中inactive、masked data、masked indexed
+offset、out-of-length和M2V-unused data的目标X类别。正式报告中
+`dontcare_xz_cg=58.33%`，未命中项主要属于本批未要求的Z/XZ扩展。
+
+同一 coverage summary还记录：`request_cg=68.33%`、`address_cg=89.88%`、
+`m2v_gid_cg=91.67%`、`reservation_admission_cg=66.67%`、`mem_match_cg=62.50%`，以及
+`vtrans_cg`、`active_thread_cg`、`normal_mask_cg`均为100%。因此本计划定义的合法
+don’t-care X首批范围已经取得组件、正式RTL和目标X coverage证据。三份既有LST在此前
+版本已有通过记录，但本次没有新增同一coverage run下的合并回归日志；完整Z/XZ和非法
+public/active字段矩阵继续由`SHMINS-006`跟踪。

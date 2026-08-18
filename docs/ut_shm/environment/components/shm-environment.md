@@ -139,7 +139,7 @@ Environment 只配置一个 `vlm_vif`；实际 write 和 read service transactio
   新增的 24 个 strided case。`DBANK-003` 和 `SHMINS-007` 已关闭。
 - `ENV-001`：运行中 reset 尚未统一清理。
 - `ENV-002`：公开配置仍能表达当前不支持的 passive 组合。
-- 第一批 `shm_address_coverage` 已接入 reference fanout；真实 RTL directed case 的目标
-  bin/cross 命中证据尚未生成。
+- 第一批 `shm_address_coverage` 已接入 reference fanout；正式 RTL coverage报告得到
+  `address_cg=89.88%`、`m2v_gid_cg=91.67%`，仍需分析并补齐未命中bin/cross。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

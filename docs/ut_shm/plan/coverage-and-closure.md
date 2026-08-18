@@ -6,16 +6,30 @@ waiver 判断验证是否收敛。逐功能点的目标 bin/cross 见
 
 ## 1. 当前状态
 
-当前仓库没有有效的 functional covergroup、coverpoint 或 cross：
+当前已实现三类只读 functional coverage collector：
 
-- shmins monitor 中只有被注释的历史 coverage include；
-- reservation coverage class 只有空的同步入口和恒为 0 的计数器；
-- reference、scoreboard 和 memory agent 没有 functional coverage model。
+- `shmins_request_coverage`：request kind、mask、active thread、VTRANS 和 don’t-care X/Z；
+- `shm_address_coverage`：逻辑/物理地址边界及 M2V read/write gid；
+- `vlm_reservation_coverage`：reservation admission、ownership 和 MEM match outcome。
 
-因此，当前 regression case 数、checker error 数为 0、reservation matched counter 或
-代码执行日志都不能作为 functional coverage 已完成的证据。所有 testpoint 的
-functional coverage 状态统一为“未实现”，总体不能标记为已闭环。全局缺口见
-`COV-001`，reservation 子组件缺口另见 `RSV-002`。
+2026-08-18 用户提供的正式 design coverage summary 共包含9个 covergroup：
+
+|Covergroup|Score|
+|---|---:|
+|`shmins_request_coverage::dontcare_xz_cg`|58.33%|
+|`vlm_reservation_coverage::mem_match_cg`|62.50%|
+|`vlm_reservation_coverage::reservation_admission_cg`|66.67%|
+|`shmins_request_coverage::request_cg`|68.33%|
+|`shm_address_coverage::address_cg`|89.88%|
+|`shm_address_coverage::m2v_gid_cg`|91.67%|
+|`shmins_request_coverage::vtrans_cg`|100.00%|
+|`shmins_request_coverage::active_thread_cg`|100.00%|
+|`shmins_request_coverage::normal_mask_cg`|100.00%|
+
+这组结果关闭 thread-mask/VTRANS 直接关联的 coverage 目标，并建立其余领域的首个数字
+基线。非100% group仍必须分析未命中 bin/cross；报告中尚不存在的 ack、FFD_CYC、reset、
+scoreboard乱序等 coverage仍属于缺口。全局问题见 `COV-001`，reservation coverage扩展见
+`RSV-002`。
 
 ## 2. Functional coverage
 
@@ -140,5 +154,6 @@ coverage 清单，实施后应把 assertion 名称映射回 testpoint ID。
 - regression 列表、TC 定义和文档映射一致；
 - `verification-status.md` 中影响该领域的 P0/P1 问题已经处理或明确批准暂缓。
 
-整个 ut_shm 关闭需要所有功能领域满足上述条件。当前没有 functional coverage，且仍有
-多项 P0 实现缺口，因此 Phase 5 的产物是完整验证目标和缺口基线，不是验证完成声明。
+整个 ut_shm 关闭需要所有功能领域满足上述条件。当前已有9个 functional covergroup和
+首轮正式 design报告，但多数领域尚未达到100%或缺少对应 model，且仍有开放实现问题；
+因此当前结果是可回溯的覆盖基线，不是全环境验证完成声明。

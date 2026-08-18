@@ -139,8 +139,8 @@ model 的 gid 隔离和 don’t-care 预过滤 contract，不替代真实 RTL di
 
 - `REF-001`：SPACE_BLK 公共映射已改为 WPID/WPNUM 派生 group，两轮各 1248 个独立
   公式检查和实际 RTL BLK regression 已通过，2026-08-13 关闭。
-- `SHMINS-001`：reference mask 正向主路径已通过 109-case 真实 RTL 回归；24-cell normal
-  mask 和4-cell VTRANS 定向组已在最新真实 design 上通过，等待目标 coverage 归档。
+- `SHMINS-001`：reference mask 正向主路径、24-cell normal mask、4-cell VTRANS和18笔
+  inactive-X均已通过正式design；三个直接相关covergroup均为100%，2026-08-18关闭。
 - `SHMINS-002`：输入 transaction copy 已通过 consumer 交叉测试、85-case RTL 回归和
   四 topology 独立 copy/compare 组件测试，2026-08-13 关闭。
 - `SHMINS-003`：正式生成器和 validator 已按 group-relative BLK 公式更新；基础
@@ -149,6 +149,7 @@ model 的 gid 隔离和 don’t-care 预过滤 contract，不替代真实 RTL di
 - `ENV-001`：运行中 reset 未重建 `ref_banks` 或取消旧期望。
 - 双 gid reference memory、wmap 和 M2V 写回正向主路径已通过 109-case 真实 RTL 回归；
   同 BADDR 跨 gid 的 V2M/M2V 隔离、VTRANS wpid 3/4 转置和 M2V wpid 3/4 writeback
-  组件测试与真实 RTL directed LST 均已通过，目标 coverage bin 命中证据仍缺。
+  组件测试与真实 RTL directed LST 均已通过；30笔don’t-care X也证明inactive/masked
+  payload不会污染期望模型。地址coverage仍未完全闭环。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

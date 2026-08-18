@@ -352,7 +352,9 @@ handle 传播和 unmatched MEM 的无效 gid/match metadata。2026-08-15 远端
 `scripts/ubuntu/check_vlm_reservation_vcs.sh all` 全部通过。
 这些组件结果不替代真实 RTL directed case 和功能覆盖闭环。2026-08-15 的首轮正式 design
 P0-4 case 曾使用同一 directed policy 暴露 other-gid global blocking；2026-08-18 用户确认
-该 case 已在最新 design 上通过。当前仍需归档对应目标 coverage bin/cross。
+该 case 已在最新 design 上通过。随后正式 design coverage报告得到
+`reservation_admission_cg=66.67%`、`mem_match_cg=62.50%`；当前仍需分析并补齐未命中
+bin/cross，不能用group总分替代逐testpoint闭环。
 
 ## 13. 调试观察点
 

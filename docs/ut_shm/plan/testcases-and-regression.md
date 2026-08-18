@@ -264,12 +264,14 @@ blocking；2026-08-18 用户确认 `p0_directed.lst` 已在最新 design 上四�
 
 同日用户确认 `shmins_mask_directed.lst` 也在最新 design 上全部通过，即
 `shm_tmsk_directed_test` 的 24 个 normal cell 和 `shm_vtrans_full_mask_test` 的4个 VTRANS
-cell 均通过。该列表仍独立于主列表，等待目标 mask/VTRANS bin/cross 归档。
+cell 均通过。随后正式 design coverage 中 `normal_mask_cg`、`active_thread_cg` 和
+`vtrans_cg` 均达到100%，对应 `TP-CREQ-003` 已闭环；该列表仍独立于主列表。
 
 合法 don’t-care X 的 `shm_payload_dontcare_x_test`、根 TC 和独立
 `shmins_dontcare_x.lst` 已实现。该 test 内部执行 18 笔 inactive-thread X 和12笔
-masked-element X transaction；组件测试和空 design 编译已通过，正式 design 运行及目标
-coverage 尚待完成。具体矩阵和判定标准见
+masked-element X transaction；组件测试、空 design编译和正式 design运行均已通过。
+`dontcare_xz_cg=58.33%`，test内counter确认本批要求的各个X类别均已命中；未命中的Z/XZ
+bin和完整非法字段矩阵属于后续 `SHMINS-006` 工作。具体矩阵和判定标准见
 [SHMINS don’t-care X 定向验证开发计划](../../development/shm-directed-verification-development-plan.md)。
 
 ## 9. 维护规则

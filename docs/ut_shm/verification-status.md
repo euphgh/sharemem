@@ -70,6 +70,13 @@ driver/monitor 四态保真、monitor 正负边界及 reference 过滤组件测�
 `T-2022.06-SP2-5_Full64` 运行通过，最终 `UVM_ERROR/FATAL` 均为 0；新增 18+12 笔真实 RTL
 矩阵、TC 和独立 LST 已进入空 `RpuShmTop` 的完整编译。正式 design 运行和目标 coverage
 证据尚未执行，因此 `SHMINS-006` 转为待验证，而不是关闭。
+随后用户确认 `shmins_dontcare_x.lst` 已在正式 design 上通过，并提供同次 functional
+coverage 摘要。`vtrans_cg`、`active_thread_cg` 和 `normal_mask_cg` 均为 100%，补齐
+`SHMINS-001` 的目标 coverage 证据并关闭该问题；`dontcare_xz_cg` 为 58.33%，证明本批
+要求的合法 X 类别已被采样，但并未覆盖该 covergroup 的所有 Z/XZ bin。其余报告为
+`request_cg=68.33%`、`address_cg=89.88%`、`m2v_gid_cg=91.67%`、
+`reservation_admission_cg=66.67%` 和 `mem_match_cg=62.50%`。这些百分比只更新当前覆盖
+基线；缺少 bin/cross 逐项分析的领域不能仅凭总分关闭。
 
 ## 1. 状态和优先级
 
@@ -125,10 +132,9 @@ driver/monitor 四态保真、monitor 正负边界及 reference 过滤组件测�
 |`DBANK-002`|P0|待验证|reference/expected model|相同 BADDR 跨 gid 数据隔离 case 已通过真实 RTL；待保存 coverage/关闭证据|
 |`DBANK-004`|P0|待验证|RTL/VLM reservation|other-gid ownership case 已在最新 RTL 通过；待保存实现/coverage 闭环证据|
 |`DBANK-005`|P1|待验证|test/coverage|`p0_directed.lst` 四项及109-case主列表均通过；目标bin证据仍缺|
-|`SHMINS-001`|P0|待验证|shmins agent|真实 RTL 28-cell及109-case均通过；目标mask/VTRANS coverage证据仍缺|
 |`SHMINS-004`|P1|待验证|unit sequence|RW/DTYPE/ATYPE_W/ITYPE/SPACE 固定配置已通过 109-case RTL 回归，待 ATYPE_S/G 端到端定向验证|
 |`SHMINS-005`|P2|待实现|shmins agent|256-bit 向量参数适配已通过；16-thread/4-bit 等硬编码仍在|
-|`SHMINS-006`|P1|待验证|shmins monitor|局部 checker、合法 don’t-care X 组件和30笔RTL矩阵已实现；待正式design与完整非法矩阵|
+|`SHMINS-006`|P1|实现中|shmins monitor|合法don’t-care X组件、30笔RTL和目标X bin已通过；完整非法公共/active字段矩阵仍缺|
 |`SHMINS-008`|P1|待验证|shmins monitor/lifecycle|有序 grace 组件测试已通过，待 clocked timeout 触发边界验证|
 |`SHMINS-009`|P1|待验证|shmins/lifecycle|ack 完备 checker 和 credit/release 上溢检查已实现，待定向正负例|
 |`SHMINS-010`|P1|待实现|shmins monitor|复位期间 release 和 ack 静默缺少检查|
@@ -279,31 +285,19 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   direction、bank、gid、subbank、delay、ownership、admission 和 MEM match outcome；
   `shmins_request_coverage` 已采样 normal/VTRANS、direction、space、tmsk class/population、
   active thread、VTRANS dtype/itype，并把 interpreted、inactive、masked data、masked indexed
-  offset、length 外及 M2V 未使用 data 的 X/Z 分开统计。Ack、FFD_CYC、reset 等其他
-  testpoint 尚无对应 functional coverage，新增 request coverage 也尚缺真实 RTL bin 命中证据。
-- 影响：case 运行和 checker 通过不能证明 spec 场景实际发生，所有 testpoint 都缺少
-  功能覆盖关闭证据。
+  offset、length 外及 M2V 未使用 data 的 X/Z 分开统计。2026-08-18 正式 design 报告包含
+  9 个 covergroup：`vtrans_cg`、`active_thread_cg`、`normal_mask_cg` 为100%；
+  `dontcare_xz_cg=58.33%`、`request_cg=68.33%`、`address_cg=89.88%`、
+  `m2v_gid_cg=91.67%`、`reservation_admission_cg=66.67%`、`mem_match_cg=62.50%`。
+  Ack、FFD_CYC、reset 等其他 testpoint 尚无对应 functional coverage；非100% group也尚缺
+  未命中 bin/cross 的逐项分析。
+- 影响：`TP-CREQ-003` 已有完整目标 coverage 并闭环；其余领域不能仅凭 case 通过或
+  covergroup 总分证明所有 spec 场景实际发生。
 - 目标依据：[Testpoints](plan/testpoints.md)和
   [Coverage 与关闭条件](plan/coverage-and-closure.md)。
 - 验收：每个 required testpoint 都能映射到已实现的 functional bin/cross，报告可按
   testpoint ID 回溯，未命中项有定向激励或有效 waiver。第一批双 gid 验收暂不要求全项目
   coverage merge 或总百分比阈值，但必须保存其目标 bin/cross 的命中证据。
-
-### `SHMINS-001` `creq_tmsk` 数据通路
-
-- 现状：tb top、interface、transaction、copy、factory field、driver 和 monitor 已贯通
-  `THD_N` bit `creq_tmsk`。普通请求约束非全零，VTRANS 约束全 1；monitor 报告 X/Z 和
-  全零值，并在全零报告后丢弃事务，不分配 UID、不发布到 production analysis port。
-  Reference 为非 active thread 创建空的地址/BANK/strobe 数组，不解释 inactive payload，
-  也不生成对应读写期望。`MON-MASK-001`～`010`、四个 VTRANS sequence cell 和 reference
-  inactive X/Z 组件测试已通过。2026-08-18 用户确认 `shmins_mask_directed.lst` 在最新
-  真实 design 上全部通过，即 24-cell normal 和 4-cell VTRANS 均通过；原 109-case
-  主列表通过结论继续有效。本次尚未提供目标 mask/VTRANS coverage 报告。
-- 影响：mask 和 VTRANS 的组件、定向系统及主列表正向证据已具备；在目标 coverage
-  bin/cross 归档前仍不能按既定关闭条件完成闭环。
-- 目标依据：[creq/ack 接口](spec/creq-ack-interface.md)。
-- 验收：覆盖非全零普通 mask、inactive thread X/Z、全零非法请求和 VTRANS 全 1；保存
-  24-cell normal、4-cell VTRANS、目标 coverage 和 109-case 无回归证据。
 
 ### `SHMINS-004` Unit sequence 配置丢失
 
@@ -332,9 +326,11 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
   `creq_vld!=1` 时 payload 不检查。Don’t-care utility、driver/monitor 四态保真、monitor
   正负 report 和 reference 预过滤组件矩阵已在远端 VCS 通过；reference 会在 masked
   indexed offset decode、V2M data read 和 shared offset decode 前跳过无效 element。
-  18 笔 inactive-thread X、12 笔 masked-element X 的真实 RTL test、TC 和独立 LST 已实现并
-  通过空 design 编译。正式 design 运行、目标 bin/cross、既有 LST 无回归，以及公共控制
-  字段和各非法 active payload 字段的完整 X/Z 矩阵仍未完成。
+  18 笔 inactive-thread X、12 笔 masked-element X 的真实 RTL test、TC 和独立 LST 已实现，
+  并在正式 design 上通过；`dontcare_xz_cg=58.33%`，本批要求的 interpreted-known、inactive、
+  masked data、masked indexed offset、length 外和 M2V-unused data 的 X 类别均由 test 内
+  counter 门禁确认命中。完整 Z/XZ 正例、公共控制字段及各非法 active payload 字段的完整
+  X/Z 矩阵仍未完成。
 - 影响：非法输入可能进入 reference，错误被延迟或转化成难以定位的数据差异。
 - 目标依据：`CREQ-002`。
 - 验收：为公共字段、active interpreted payload 和各类 ignored payload 分别注入 X/Z，
@@ -423,6 +419,8 @@ Reference 期望模型在统一接口之前完成；scoreboard 的 actual gid me
 - 现状：coverage 已在 scheduler 更新前采样同一 transaction/check result/pre-update state，
   实现 direction、bank、gid、subbank、delay、other-gid ownership、admission outcome、MEM
   match outcome 和 resolved gid 的第一批 coverpoint/cross，并维护可供组件测试检查的计数器。
+  正式 design报告中 `reservation_admission_cg=66.67%`、`mem_match_cg=62.50%`，已建立
+  部分覆盖基线，但尚未提供未命中bin/cross明细。
 - 影响：第一批双 gid ownership/resolver 已有采样基础；reservation 的完整 delay、并发共享、
   X/Z 和 reset 场景仍未覆盖闭环。
 - 目标：继续按 testpoint 补齐缺失的 coverpoint/cross，且不得改变 scheduler 状态或参与
@@ -461,6 +459,22 @@ handle 传播。该 policy 是可重复激励基础设施，不参与 checker �
   为 X/Z 时不启动业务 X/Z 检查，也不产生正常 transaction。
 
 ## 5. 已解决记录
+
+### `SHMINS-001` `creq_tmsk` 数据通路
+
+- 关闭日期：2026-08-18。
+- 修改：interface、transaction、copy、driver、monitor 和 reference 已贯通 `THD_N` bit
+  `creq_tmsk`；普通请求约束非全零，VTRANS约束全1。Monitor 对全零请求报告后丢弃，不向
+  production analysis port发布；reference不解释inactive thread payload，也不产生对应期望。
+- 组件证据：`MON-MASK-001`～`010`、四个 VTRANS sequence cell、inactive X/Z 和 reference
+  过滤测试均通过。
+- 系统证据：用户确认 `shmins_mask_directed.lst` 的24-cell normal mask和4-cell VTRANS，
+  以及新增 `shmins_dontcare_x.lst` 的18笔 inactive-thread X均在正式 design 上通过；原
+  109-case主列表通过结论继续有效。
+- Coverage：`normal_mask_cg=100%`、`active_thread_cg=100%`、`vtrans_cg=100%`。
+- 结论：普通/VTRANS mask、thread 0～15、全零非法输入的组件边界及inactive thread系统
+  抑制均已具备激励、checker、真实 RTL和coverage证据。更广泛的payload四态负例继续由
+  `SHMINS-006` 跟踪。
 
 ### `SHMINS-007` V2M `LDSTE_S + SPACE_WRP/SPACE_BLK`
 

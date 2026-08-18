@@ -190,8 +190,9 @@ copy/VTRANS 和 don’t-care utility 精确 slice 测试位于
 
 - `SHMINS-012`：topology-based 正式 sequence item、benchmark、consumer 和真实 RTL 集成
   已于 2026-08-13 验证完成并关闭。
-- `SHMINS-001`：组件矩阵、24个 normal mask cell 和4个 VTRANS cell 已在最新真实
-  design 上通过，原109-case主列表通过结论继续有效；等待目标 coverage bin/cross归档。
+- `SHMINS-001`：组件矩阵、24个 normal mask cell、4个 VTRANS cell和18笔inactive-X
+  transaction已在正式design上通过；`normal_mask_cg`、`active_thread_cg`和`vtrans_cg`
+  均为100%，2026-08-18关闭。
 - `SHMINS-002/011`：transaction copy/compare 已通过 reference consumer 交叉测试及
   `examples/shmins_sequence_compile/copy_tb.sv` 的四 topology 正反例，2026-08-13 关闭。
 - `SHMINS-003`：过程式 MADDR 生成、12 KiB/空洞检查和两层映射已按 group-relative BLK
@@ -201,8 +202,9 @@ copy/VTRANS 和 don’t-care utility 精确 slice 测试位于
   ATYPE_S/G 仍等待 testcase 配置到 monitor 的端到端定向验证。
 - `SHMINS-005`：存在固定 16-thread/4-bit 参数硬编码。
 - `SHMINS-006`：active interpreted payload 局部 X/Z 检查、合法 don’t-care X utility、
-  component matrix、18+12笔真实 RTL test和ignored-X coverage已实现；组件和空design编译
-  已通过，正式design运行、目标bin及公共/active非法字段完整矩阵仍缺。
+  component matrix、18+12笔真实 RTL test和ignored-X coverage已实现并通过正式design；
+  `dontcare_xz_cg=58.33%`且本批目标X counter均命中。完整Z/XZ及公共/active非法字段
+  矩阵仍缺。
 - `SHMINS-007`：V2M `LDSTE_S + WRP/BLK` 的 element-0 mask 和 V2M/M2V 24 个 case
   已随 109-case 主列表通过真实 RTL regression，2026-08-14 关闭。
 - `SHMINS-008`：固定 ack timeout 已移除，改为 scoreboard observed 后可配置 grace；
