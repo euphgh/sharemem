@@ -107,9 +107,10 @@ task shm_payload_dontcare_x_test::run_inactive_x_cell(creq_rw_e direction,
                                                        string mask_name);
   shmins_contiguous_sequence_item item;
   longint unsigned request_count_before;
-  longint unsigned interpreted_known_before;
+  longint unsigned interpreted_xz_before[4];
   longint unsigned inactive_x_before;
   longint unsigned address_byte_count_before;
+  int unsigned monitor_count_before;
   string item_name;
 
   item_name = $sformatf("inactive_%s_%s_%s", direction == SHM_V2M ? "v2m" : "m2v",
@@ -120,21 +121,57 @@ task shm_payload_dontcare_x_test::run_inactive_x_cell(creq_rw_e direction,
   end
 
   request_count_before = shm_env.shmins_mst_agt.coverage.sampled_request_count;
-  interpreted_known_before =
-      shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN];
+  foreach (interpreted_xz_before[xz_class]) begin
+    interpreted_xz_before[xz_class] =
+        shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[xz_class];
+  end
   inactive_x_before = shm_env.shmins_mst_agt.coverage.sampled_inactive_payload_xz_count[SHMINS_PAYLOAD_X];
   address_byte_count_before = shm_env.address_coverage.sampled_active_byte_count;
+  monitor_count_before = shm_env.shmins_mst_agt.monitor.shmins_cnt;
 
   send_directed_item(item);
   shm_env.wait_for_idle();
 
-  if (shm_env.shmins_mst_agt.coverage.sampled_request_count != request_count_before + 1 ||
-      shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN] !=
-          interpreted_known_before + 1 ||
-      shm_env.shmins_mst_agt.coverage.sampled_inactive_payload_xz_count[SHMINS_PAYLOAD_X] !=
-          inactive_x_before + 1) begin
+  if (shm_env.shmins_mst_agt.coverage.sampled_request_count != request_count_before + 1) begin
+    `uvm_fatal("SHM_DONTCARE_X_REQUEST_COVERAGE",
+               $sformatf({"%s request coverage expected exactly one sample: request=%0d->%0d ",
+                          "monitor=%0d->%0d id=%0d rw=%0d itype=%0d atype_w=%0d"},
+                         item_name, request_count_before,
+                         shm_env.shmins_mst_agt.coverage.sampled_request_count,
+                         monitor_count_before, shm_env.shmins_mst_agt.monitor.shmins_cnt,
+                         item.creq_id, item.creq_rw, item.creq_itype, item.creq_atype_w))
+  end
+  if (shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN] !=
+      interpreted_xz_before[SHMINS_PAYLOAD_KNOWN] + 1) begin
+    `uvm_fatal("SHM_DONTCARE_X_INTERPRETED_COVERAGE",
+               $sformatf({"%s interpreted payload was not classified known: ",
+                          "known=%0d->%0d x=%0d->%0d z=%0d->%0d xz=%0d->%0d ",
+                          "request=%0d->%0d monitor=%0d->%0d id=%0d rw=%0d itype=%0d atype_w=%0d"},
+                         item_name,
+                         interpreted_xz_before[SHMINS_PAYLOAD_KNOWN],
+                         shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[
+                             SHMINS_PAYLOAD_KNOWN],
+                         interpreted_xz_before[SHMINS_PAYLOAD_X],
+                         shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[
+                             SHMINS_PAYLOAD_X],
+                         interpreted_xz_before[SHMINS_PAYLOAD_Z],
+                         shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[
+                             SHMINS_PAYLOAD_Z],
+                         interpreted_xz_before[SHMINS_PAYLOAD_XZ],
+                         shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[
+                             SHMINS_PAYLOAD_XZ],
+                         request_count_before,
+                         shm_env.shmins_mst_agt.coverage.sampled_request_count,
+                         monitor_count_before, shm_env.shmins_mst_agt.monitor.shmins_cnt,
+                         item.creq_id, item.creq_rw, item.creq_itype, item.creq_atype_w))
+  end
+  if (shm_env.shmins_mst_agt.coverage.sampled_inactive_payload_xz_count[SHMINS_PAYLOAD_X] !=
+      inactive_x_before + 1) begin
     `uvm_fatal("SHM_DONTCARE_X_INACTIVE_COVERAGE",
-               $sformatf("%s did not increment interpreted-known and inactive-X coverage", item_name))
+               $sformatf("%s inactive-X coverage expected %0d, observed %0d",
+                         item_name, inactive_x_before + 1,
+                         shm_env.shmins_mst_agt.coverage.sampled_inactive_payload_xz_count[
+                             SHMINS_PAYLOAD_X]))
   end
   if (shm_env.address_coverage.sampled_active_byte_count !=
       address_byte_count_before + $countones(target_tmsk)) begin
@@ -206,11 +243,12 @@ task shm_payload_dontcare_x_test::run_masked_x_cell(creq_rw_e direction,
                                                      creq_atype_w_e atype_width);
   shmins_sequence_item item;
   longint unsigned request_count_before;
-  longint unsigned interpreted_known_before;
+  longint unsigned interpreted_xz_before[4];
   longint unsigned target_x_before;
   longint unsigned indexed_x_before;
   longint unsigned out_of_length_x_before;
   longint unsigned address_byte_count_before;
+  int unsigned monitor_count_before;
   string topology_name;
   string item_name;
 
@@ -225,8 +263,10 @@ task shm_payload_dontcare_x_test::run_masked_x_cell(creq_rw_e direction,
   item = build_masked_x_item(direction, topology, atype_width, item_name);
 
   request_count_before = shm_env.shmins_mst_agt.coverage.sampled_request_count;
-  interpreted_known_before =
-      shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN];
+  foreach (interpreted_xz_before[xz_class]) begin
+    interpreted_xz_before[xz_class] =
+        shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[xz_class];
+  end
   target_x_before = direction == SHM_V2M ?
       shm_env.shmins_mst_agt.coverage.sampled_masked_data_xz_count[SHMINS_PAYLOAD_X] :
       shm_env.shmins_mst_agt.coverage.sampled_m2v_unused_vdata_xz_count[SHMINS_PAYLOAD_X];
@@ -235,15 +275,43 @@ task shm_payload_dontcare_x_test::run_masked_x_cell(creq_rw_e direction,
   out_of_length_x_before =
       shm_env.shmins_mst_agt.coverage.sampled_out_of_length_xz_count[SHMINS_PAYLOAD_X];
   address_byte_count_before = shm_env.address_coverage.sampled_active_byte_count;
+  monitor_count_before = shm_env.shmins_mst_agt.monitor.shmins_cnt;
 
   send_directed_item(item);
   shm_env.wait_for_idle();
 
-  if (shm_env.shmins_mst_agt.coverage.sampled_request_count != request_count_before + 1 ||
-      shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN] !=
-          interpreted_known_before + 1) begin
+  if (shm_env.shmins_mst_agt.coverage.sampled_request_count != request_count_before + 1) begin
+    `uvm_fatal("SHM_DONTCARE_X_REQUEST_COVERAGE",
+               $sformatf({"%s request coverage expected exactly one sample: request=%0d->%0d ",
+                          "monitor=%0d->%0d id=%0d rw=%0d itype=%0d atype_w=%0d"},
+                         item_name, request_count_before,
+                         shm_env.shmins_mst_agt.coverage.sampled_request_count,
+                         monitor_count_before, shm_env.shmins_mst_agt.monitor.shmins_cnt,
+                         item.creq_id, item.creq_rw, item.creq_itype, item.creq_atype_w))
+  end
+  if (shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN] !=
+      interpreted_xz_before[SHMINS_PAYLOAD_KNOWN] + 1) begin
     `uvm_fatal("SHM_DONTCARE_X_INTERPRETED_COVERAGE",
-               $sformatf("%s did not remain interpreted-payload known", item_name))
+               $sformatf({"%s interpreted payload was not classified known: ",
+                          "known=%0d->%0d x=%0d->%0d z=%0d->%0d xz=%0d->%0d ",
+                          "request=%0d->%0d monitor=%0d->%0d id=%0d rw=%0d itype=%0d atype_w=%0d"},
+                         item_name,
+                         interpreted_xz_before[SHMINS_PAYLOAD_KNOWN],
+                         shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[
+                             SHMINS_PAYLOAD_KNOWN],
+                         interpreted_xz_before[SHMINS_PAYLOAD_X],
+                         shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[
+                             SHMINS_PAYLOAD_X],
+                         interpreted_xz_before[SHMINS_PAYLOAD_Z],
+                         shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[
+                             SHMINS_PAYLOAD_Z],
+                         interpreted_xz_before[SHMINS_PAYLOAD_XZ],
+                         shm_env.shmins_mst_agt.coverage.sampled_active_payload_xz_count[
+                             SHMINS_PAYLOAD_XZ],
+                         request_count_before,
+                         shm_env.shmins_mst_agt.coverage.sampled_request_count,
+                         monitor_count_before, shm_env.shmins_mst_agt.monitor.shmins_cnt,
+                         item.creq_id, item.creq_rw, item.creq_itype, item.creq_atype_w))
   end
   if ((direction == SHM_V2M ?
        shm_env.shmins_mst_agt.coverage.sampled_masked_data_xz_count[SHMINS_PAYLOAD_X] :
