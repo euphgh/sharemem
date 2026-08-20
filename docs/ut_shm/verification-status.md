@@ -55,9 +55,9 @@
 | SHMINS-008 | P1 | 待验证 | ACK lifecycle 的超时边界尚缺定向验证 |
 | SHMINS-009 | P1 | 待验证 | credit 与 ACK 完备性检查尚缺定向正负例 |
 | SHMINS-010 | P1 | 待实现 | reset 期间 release/ACK 静默尚未检查 |
-| VMEM-001 | P0 | 待实现 | memory model 尚未实现 `FFD_CYC` read snapshot |
+| VMEM-001 | P0 | 实现中 | `FFD_CYC>=1` read snapshot 已实现，0-cycle 窗口尚未支持 |
 | VMEM-002 | P1 | 待实现 | memory interface 的 X/Z 检查不完整 |
-| VMEM-003 | P2 | 待实现 | memory agent 仍暴露没有有效行为的辅助结构和 API |
+| VMEM-003 | P2 | 实现中 | 旧 agent 辅助结构已删除，保留 transaction compare API 尚待处理 |
 | SCB-002 | P1 | 待验证 | scoreboard timeout 边界与诊断尚缺定向验收 |
 | RSV-002 | P1 | 实现中 | reservation 功能覆盖率模型仍未闭环 |
 | RSV-004 | P1 | 待实现 | 全局 `input_error` 会抑制无关 slot 的检查 |
@@ -178,15 +178,18 @@
 
 ### VMEM-001：`FFD_CYC` read snapshot
 
-- 当前实现：memory driver 在采样 `mem_rvld/mem_raddr` 后立即读取 `rtl_banks`，再延迟输出 read data。
-- 剩余缺口：没有按 `FFD_CYC` 截止周期构造 read snapshot。
-- 影响：无法表示 read 在未来截止周期之前可见、截止周期之后不可见的重叠 write。
+- 当前实现：统一 VLM agent 对 `FFD_CYC>=1` 在 `T0+FFD_CYC-1` 形成 snapshot，并在
+  `T0+RPORT_DLY` 返回；同步 write transport 与 committed-cycle watermark 消除了同周期
+  process-order 依赖。组件测试已覆盖 `FFD_CYC=1/2`、截止边界、边界后写、partial strobe、
+  多次覆盖、连续同 BANK read 和双 gid 隔离，空 design 全量 VCS 编译通过。
+- 剩余缺口：`FFD_CYC=0` 尚未支持。
+- 影响：正参数窗口已经可信；若未来参数取 0，环境会在 build 阶段 fatal，不能用于验证该配置。
 - 验收条件：覆盖 `FFD_CYC=0`、1 和大于 1，验证截止前、边界和截止后的重叠 write 可见性。
 - 关联 testpoint：[TP-MEM-003](plan/testpoints.md)。
 
 ### VMEM-002：memory interface X/Z 检查
 
-- 当前实现：memory monitor 能采集有效读写 transaction 并完成基础字段转换。
+- 当前实现：统一 VLM monitor 能采集有效读写 transaction 并完成基础字段转换。
 - 剩余缺口：valid 拉起时的 addr、data、mask、delay 关联字段未知值检查不完整。
 - 影响：X/Z 可能进入 reference 或 scoreboard，形成不稳定比较或掩盖 DUT 接口问题。
 - 验收条件：明确 valid 与 don't-care 字段矩阵，合法未知值不报错，非法未知值由定向注入稳定触发错误。
@@ -194,9 +197,9 @@
 
 ### VMEM-003：无效辅助结构
 
-- 当前实现：active memory agent 创建 sequencer，但 driver 不消费 sequence item；
-  `vlm_memory_sequence_item.compare_item()` 不会累计错误，且循环硬编码为 16。
-- 剩余缺口：公开结构和 API 暗示了实际不存在或不可靠的控制、比较能力。
+- 当前实现：旧的独立 interface、monitor、driver、sequencer、config 和 agent 已删除；
+  `vlm_memory_sequence_item` 作为统一 VLM agent 与 scoreboard 的公共 transaction 保留。
+- 剩余缺口：`vlm_memory_sequence_item.compare_item()` 不会累计错误，且循环硬编码为 16。
 - 影响：调用方可能依赖静默返回错误结果的 API，维护者也难以判断真实数据流。
 - 验收条件：删除无意义结构，或补齐可验证用途；所有保留 compare API 均有定向组件测试。
 - 关联 testpoint：无直接 DUT testpoint；属于 memory agent API 健壮性要求。

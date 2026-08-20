@@ -169,6 +169,28 @@ class shm_scoreboard extends uvm_scoreboard;
     // @return BANK/GID/BADDR/data hierarchy containing only unresolved bytes.
     //-------------------------------------------------------------------------
     extern protected function string unresolved_bytes_sprint(int index);
+
+    //-------------------------------------------------------------------------
+    // @brief Applies one resolved actual MEM write to rtl_banks.
+    //
+    // @param trans Write transaction with immutable gid/match metadata.
+    // @post Every trusted strobe byte is visible to later read snapshots.
+    //-------------------------------------------------------------------------
+    extern protected function void commit_actual_memory_write(vlm_memory_sequence_item trans);
+
+    //-------------------------------------------------------------------------
+    // @brief Fills one resolved MEM read transaction from current rtl_banks.
+    //
+    // @param trans Read transaction whose active BANK data fields are updated.
+    //-------------------------------------------------------------------------
+    extern protected function void read_actual_memory_snapshot(vlm_memory_sequence_item trans);
+
+    //-------------------------------------------------------------------------
+    // @brief Executes one no-time actual-memory write or read operation.
+    //
+    // @param trans Resolved transaction selecting write commit or read snapshot.
+    // @param delay TLM delay retained for API compatibility; no delay is added.
+    //-------------------------------------------------------------------------
     extern virtual task b_transport(vlm_memory_sequence_item trans, uvm_tlm_time delay);
 
     `uvm_component_utils_begin(shm_scoreboard)
@@ -178,6 +200,34 @@ class shm_scoreboard extends uvm_scoreboard;
 endclass: shm_scoreboard
 
 task shm_scoreboard::b_transport(vlm_memory_sequence_item trans, uvm_tlm_time delay);
+    if (trans.vlm_read) begin
+        read_actual_memory_snapshot(trans);
+    end else begin
+        commit_actual_memory_write(trans);
+    end
+endtask : b_transport
+
+function void shm_scoreboard::commit_actual_memory_write(vlm_memory_sequence_item trans);
+    for (int unsigned bid = 0; bid < BANK_N; bid++) begin
+        if (!trans.vlm_bken[bid]) begin
+            continue;
+        end
+        if (!trans.gid_valid[bid] || !trans.reservation_matched[bid]) begin
+            `uvm_error(get_type_name(),
+                       $sformatf("MEM write bank %0d has no uniquely matched reservation gid", bid))
+            continue;
+        end
+        for (int unsigned byte_offs = 0; byte_offs < VLM_DATA_BYTE_W; byte_offs++) begin
+            if (trans.vlm_strb[bid][byte_offs]) begin
+                baddr_t byte_waddr = trans.vlm_addr[bid] + baddr_t'(byte_offs);
+                byte unsigned wdata = trans.vlm_data[bid][byte_offs * 8 +: 8];
+                rtl_banks[bid][trans.vlm_gid[bid]].write(byte_waddr, wdata);
+            end
+        end
+    end
+endfunction : commit_actual_memory_write
+
+function void shm_scoreboard::read_actual_memory_snapshot(vlm_memory_sequence_item trans);
     for(int unsigned bid = 0; bid < BANK_N; bid++) begin
         if (trans.vlm_bken[bid]) begin
             if (!trans.gid_valid[bid] || !trans.reservation_matched[bid]) begin
@@ -194,7 +244,7 @@ task shm_scoreboard::b_transport(vlm_memory_sequence_item trans, uvm_tlm_time de
                       UVM_FULL)
         end
     end
-endtask // 任务结束，控制权和修改后的 txn 一起交还给 Driver
+endfunction : read_actual_memory_snapshot
 
 // compare new trans with old trans, calculate expired
 function void shm_scoreboard::compare_with_old_trans(const ref shm_wtrans_item new_trans);
@@ -417,21 +467,6 @@ task shm_scoreboard::compare_dut_with_ref();
         wmap_t vlm_wmap;
         rtl_wrvlm_analysis_fifo.get(tr);
         if (tr.vlm_read) continue;
-        for(int unsigned bid = 0; bid < BANK_N; bid ++) begin
-            if (!tr.vlm_bken[bid]) continue;
-            if (!tr.gid_valid[bid] || !tr.reservation_matched[bid]) begin
-                `uvm_error(get_type_name(),
-                           $sformatf("MEM write bank %0d has no uniquely matched reservation gid", bid))
-                continue;
-            end
-            for (int unsigned byte_offs = 0; byte_offs < VLM_DATA_BYTE_W; byte_offs++) begin
-                if (tr.vlm_strb[bid][byte_offs]) begin
-                    baddr_t byte_waddr = tr.vlm_addr[bid] + baddr_t'(byte_offs);
-                    byte unsigned wdata = tr.vlm_data[bid][byte_offs * 8 +: 8];
-                    rtl_banks[bid][tr.vlm_gid[bid]].write(byte_waddr, wdata);
-                end
-            end
-        end
         void'(vlm2aa::trans(tr, vlm_wmap));
         begin
             waddr_set_t vlm_waddrs = wmap_util::get_keys(vlm_wmap);

@@ -124,6 +124,18 @@ package shmins_mask_monitor_test_pkg;
     extern protected function void check_transaction_count(int unsigned expected_count,
                                                             string scenario);
 
+    //----------------------------------------------------------------------------
+    // @brief Checks that one legal don’t-care request remains interpreted-payload known.
+    //
+    // @param known_before Interpreted-known count captured before the request.
+    // @param x_before Interpreted-X count captured before the request.
+    // @param scenario Stable scenario name used in diagnostics.
+    //----------------------------------------------------------------------------
+    extern protected function void check_interpreted_known_increment(
+        longint unsigned known_before,
+        longint unsigned x_before,
+        string scenario);
+
     `uvm_component_utils(shmins_mask_monitor_test)
   endclass : shmins_mask_monitor_test
 
@@ -139,6 +151,7 @@ package shmins_mask_monitor_test_pkg;
     end
     monitor = shmins_monitor::type_id::create("monitor", this);
     coverage = shmins_request_coverage::type_id::create("coverage", this);
+    coverage.interpreted_payload_xz_log_enable = 1'b1;
     sink = shmins_mask_monitor_sink::type_id::create("sink", this);
     report_catcher = new("report_catcher");
     report_catcher.expect_report("SHMINS_TMSK_ZERO", 1);
@@ -155,6 +168,8 @@ package shmins_mask_monitor_test_pkg;
   endfunction : connect_phase
 
   task shmins_mask_monitor_test::main_phase(uvm_phase phase);
+    longint unsigned interpreted_known_before;
+    longint unsigned interpreted_x_before;
     logic [THD_N-1:0] unknown_tmsk;
     shmins_sequence_item zero_coverage_item;
 
@@ -204,10 +219,18 @@ package shmins_mask_monitor_test_pkg;
     drive_request(16'h0001, MONITOR_ACTIVE_LENGTH_X);
     check_transaction_count(8, "MON-MASK-009");
 
+    interpreted_known_before = coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN];
+    interpreted_x_before = coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_X];
     drive_request(16'h0001, MONITOR_MASKED_DATA_X);
     check_transaction_count(9, "X-MON-002");
+    check_interpreted_known_increment(interpreted_known_before, interpreted_x_before, "X-MON-002");
+
+    interpreted_known_before = coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN];
+    interpreted_x_before = coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_X];
     drive_request(16'h0001, MONITOR_MASKED_INDEXED_OFFSET_X);
     check_transaction_count(10, "X-MON-003");
+    check_interpreted_known_increment(interpreted_known_before, interpreted_x_before, "X-MON-003");
+
     drive_request(16'h0001, MONITOR_ACTIVE_MASK_X);
     check_transaction_count(11, "X-MON-004");
     drive_request(16'h0001, MONITOR_SHARED_OFFSET_X);
@@ -216,10 +239,20 @@ package shmins_mask_monitor_test_pkg;
     check_transaction_count(13, "X-MON-006");
     drive_request(16'h0001, MONITOR_ACTIVE_DATA_X);
     check_transaction_count(14, "X-MON-007");
+
+    interpreted_known_before = coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN];
+    interpreted_x_before = coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_X];
     drive_request(16'h0001, MONITOR_M2V_DATA_X);
     check_transaction_count(15, "X-MON-008");
+    check_interpreted_known_increment(interpreted_known_before, interpreted_x_before, "X-MON-008");
+
+    interpreted_known_before = coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN];
+    interpreted_x_before = coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_X];
     drive_request(16'h0001, MONITOR_OUT_OF_LENGTH_X);
     check_transaction_count(16, "X-MON-OUT-OF-LENGTH");
+    check_interpreted_known_increment(interpreted_known_before, interpreted_x_before,
+                                      "X-MON-OUT-OF-LENGTH");
+
     drive_request('x, MONITOR_ALL_X, 1'b0);
     check_transaction_count(16, "MON-MASK-010");
 
@@ -239,6 +272,11 @@ package shmins_mask_monitor_test_pkg;
         coverage.sampled_out_of_length_xz_count[SHMINS_PAYLOAD_X] == 0 ||
         coverage.sampled_m2v_unused_vdata_xz_count[SHMINS_PAYLOAD_X] == 0) begin
       `uvm_fatal("SHMINS_MASK_MONITOR_COVERAGE", "component matrix did not reach all required counters")
+    end
+    if (coverage.interpreted_payload_xz_log_count != 5) begin
+      `uvm_fatal("SHMINS_MASK_MONITOR_XZ_LOG_COUNT",
+                 $sformatf("expected five interpreted-payload diagnostics, observed %0d",
+                           coverage.interpreted_payload_xz_log_count))
     end
 
     `uvm_info("SHMINS_MASK_MONITOR_TEST", "thread-mask monitor component matrix: PASS", UVM_LOW)
@@ -358,6 +396,21 @@ package shmins_mask_monitor_test_pkg;
                            scenario, expected_count, sink.transaction_count))
     end
   endfunction : check_transaction_count
+
+  function void shmins_mask_monitor_test::check_interpreted_known_increment(
+      longint unsigned known_before,
+      longint unsigned x_before,
+      string scenario);
+    if (coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN] != known_before + 1 ||
+        coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_X] != x_before) begin
+      `uvm_fatal("SHMINS_MASK_MONITOR_INTERPRETED_CLASS",
+                 $sformatf({"%s expected interpreted-known increment without interpreted-X: ",
+                            "known=%0d->%0d x=%0d->%0d"},
+                           scenario, known_before,
+                           coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_KNOWN],
+                           x_before, coverage.sampled_active_payload_xz_count[SHMINS_PAYLOAD_X]))
+    end
+  endfunction : check_interpreted_known_increment
 endpackage : shmins_mask_monitor_test_pkg
 
 //------------------------------------------------------------------------------

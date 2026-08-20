@@ -15,6 +15,9 @@
 - [SHMINS don’t-care X 定向验证开发计划](shm-directed-verification-development-plan.md)：
   细化 inactive thread、masked element、未使用 offset 和 M2V data 的合法 X 注入，规定
   utility、driver/monitor、reference、coverage、30-cell 真实 RTL 矩阵和验收顺序。
+- [SHM 读写顺序定向验证开发计划](shm-ordered-access-directed-verification-plan.md)：
+  规定 M-read/M-write、M-write/M-write 和 V-write/V-write 顺序 Case，补齐 `FFD_CYC`
+  snapshot、最终 `ref_banks/rtl_banks` 比较、directed batch 和跨 transaction 地址安全检查。
 
 规范对新增代码和本次实际修改的代码生效。现有 legacy 代码不要因为无关的
 功能修改而整文件重排；后续 refactor 时再逐步收敛。

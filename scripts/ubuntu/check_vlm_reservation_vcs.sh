@@ -16,7 +16,8 @@ usage() {
   directed-busy  编译并运行 deterministic external busy policy 组件测试
   gid-contract   编译并运行双 gid ownership/resolver 定向测试
   agent-metadata 编译并运行 unmatched MEM metadata 组件测试
-  all            依次执行以上六个目标
+  read-snapshot  编译并运行 FFD_CYC=1/2 read snapshot 组件测试
+  all            依次执行以上七个目标
   clean          删除本脚本生成的 build 目录
 
 环境变量：
@@ -42,7 +43,7 @@ case "$target" in
         usage
         exit 0
         ;;
-    compile | alignment | external-busy | directed-busy | gid-contract | agent-metadata | all | clean)
+    compile | alignment | external-busy | directed-busy | gid-contract | agent-metadata | read-snapshot | all | clean)
         ;;
     *)
         printf '错误：未知目标：%s\n' "$target" >&2
@@ -268,6 +269,34 @@ run_agent_metadata() {
     )
 }
 
+run_read_snapshot() {
+    local simv="$build_dir/read_snapshot_simv"
+
+    prepare_build
+    require_file "$vlm_interface"
+    require_file "$example_dir/read_snapshot_tb.sv"
+
+    printf 'Ubuntu VCS：编译并运行 FFD read snapshot 组件测试\n'
+    (
+        cd -- "$build_dir"
+        "${vcs_common[@]}" \
+            "$utility_package" \
+            "$clock_interface" \
+            "$vlm_interface" \
+            "$example_dir/read_snapshot_tb.sv" \
+            "${vcs_extra[@]}" \
+            -top read_snapshot_tb \
+            -o "$simv" \
+            -l read_snapshot_compile.log
+        "$simv" +TEST_FFD_CYC=1 -l read_snapshot_ffd1_test.log
+        check_uvm_test_log read_snapshot_ffd1_test.log \
+            '[VLM_READ_SNAPSHOT_TEST] FFD_CYC=1 RPORT_DLY=5 read snapshot component test: PASS'
+        "$simv" +TEST_FFD_CYC=2 -l read_snapshot_ffd2_test.log
+        check_uvm_test_log read_snapshot_ffd2_test.log \
+            '[VLM_READ_SNAPSHOT_TEST] FFD_CYC=2 RPORT_DLY=5 read snapshot component test: PASS'
+    )
+}
+
 clean_build() {
     rm -rf -- "$build_dir"
     printf '已删除：%s\n' "$build_dir"
@@ -292,6 +321,9 @@ case "$target" in
     agent-metadata)
         run_agent_metadata
         ;;
+    read-snapshot)
+        run_read_snapshot
+        ;;
     all)
         compile_integration
         run_alignment
@@ -299,6 +331,7 @@ case "$target" in
         run_directed_busy
         run_gid_contract
         run_agent_metadata
+        run_read_snapshot
         ;;
     clean)
         clean_build

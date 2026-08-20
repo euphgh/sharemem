@@ -4,10 +4,11 @@
 //------------------------------------------------------------------------------
 // @brief Coordinates reservation sampling, checking, coverage, and scheduling.
 //
-// Owns the monitor, checker, coverage collector, and scheduler. Its main_phase
-// is the only core cycle loop and always operates actively: it samples one
-// normalized transaction, checks and covers the pre-update state, updates the
-// scheduler, and drives busy for the next cycle. It never drives MEM data.
+// Owns the monitor, checker, coverage collector, scheduler, and fixed-latency
+// MEM read response path. Its main_phase is the only core cycle loop: it
+// samples one normalized transaction, resolves gid metadata, synchronously
+// commits actual writes, schedules read snapshots, and advances reservation
+// state. It does not own the byte memory or compare expected write data.
 //------------------------------------------------------------------------------
 class vlm_reservation_agent extends uvm_agent;
 
@@ -41,6 +42,15 @@ class vlm_reservation_agent extends uvm_agent;
 
   // Detailed checker result associated with current_txn.
   vlm_reservation_check_result_t current_check_result;
+
+  // Latest sampled cycle whose matched MEM write has been synchronously committed.
+  shm_cycle_t memory_committed_cycle;
+
+  // Set after the first post-reset cycle has committed its MEM write state.
+  bit memory_cycle_committed;
+
+  // Number of accepted read responses that have not reached their DUT sampling cycle.
+  int unsigned pending_read_response_count;
 
   //------------------------------------------------------------------------------
   // @brief Constructs the VLM reservation agent.
@@ -99,6 +109,71 @@ class vlm_reservation_agent extends uvm_agent;
                                                 const ref vlm_reservation_check_result_t result);
 
   //------------------------------------------------------------------------------
+  // @brief Returns whether no MEM read response remains in flight.
+  //
+  // @return 1 when every accepted read has reached its response cycle.
+  //------------------------------------------------------------------------------
+  extern function bit is_memory_idle();
+
+  //------------------------------------------------------------------------------
+  // @brief Formats the read-response pipeline state for drain diagnostics.
+  //
+  // @return Pending count and the latest synchronously committed memory cycle.
+  //------------------------------------------------------------------------------
+  extern function string pending_memory_state_sprint();
+
+  //------------------------------------------------------------------------------
+  // @brief Builds resolved read and write transactions for one sampled cycle.
+  //
+  // @param txn               Atomically sampled reservation/MEM transaction.
+  // @param result            Checker result containing trusted gid metadata.
+  // @param read_transaction  Newly allocated aggregate read transaction.
+  // @param write_transaction Newly allocated aggregate write transaction.
+  // @param has_read          Set when at least one BANK carries a MEM read.
+  // @param has_write         Set when at least one BANK carries a MEM write.
+  //------------------------------------------------------------------------------
+  extern protected function void build_memory_transactions(
+      const ref vlm_reservation_cycle_transaction_t txn,
+      const ref vlm_reservation_check_result_t      result,
+      output    vlm_memory_sequence_item             read_transaction,
+      output    vlm_memory_sequence_item             write_transaction,
+      output    bit                                  has_read,
+      output    bit                                  has_write);
+
+  //------------------------------------------------------------------------------
+  // @brief Applies one actual MEM write to the synchronous byte-memory endpoint.
+  //
+  // @param write_transaction Resolved write payload and immutable gid metadata.
+  // @pre mem_port is connected and the transport implementation consumes no time.
+  //------------------------------------------------------------------------------
+  extern protected task commit_memory_write(vlm_memory_sequence_item write_transaction);
+
+  //------------------------------------------------------------------------------
+  // @brief Marks all actual MEM writes through one sampled cycle as committed.
+  //
+  // @param cycle Sampled cycle whose write state is now visible to read workers.
+  //------------------------------------------------------------------------------
+  extern protected function void commit_memory_cycle(shm_cycle_t cycle);
+
+  //------------------------------------------------------------------------------
+  // @brief Starts one nonblocking fixed-latency read-response worker.
+  //
+  // @param read_transaction Resolved read request whose gid metadata is immutable.
+  // @param accept_cycle     Cycle in which the DUT issued the MEM read.
+  //------------------------------------------------------------------------------
+  extern protected task launch_read_response(vlm_memory_sequence_item read_transaction,
+                                             shm_cycle_t              accept_cycle);
+
+  //------------------------------------------------------------------------------
+  // @brief Snapshots one read at its FFD cutoff and drives it at fixed latency.
+  //
+  // @param read_transaction Resolved read request filled by the memory transport.
+  // @param accept_cycle     Cycle in which the DUT issued the MEM read.
+  //------------------------------------------------------------------------------
+  extern protected task serve_read_response(vlm_memory_sequence_item read_transaction,
+                                            shm_cycle_t              accept_cycle);
+
+  //------------------------------------------------------------------------------
   // @brief Drives scheduler final busy onto the reservation interface.
   //
   // @pre Scheduler final busy represents the next interface cycle.
@@ -115,6 +190,9 @@ function vlm_reservation_agent::new(string name = "vlm_reservation_agent", uvm_c
   read_analysis_port = new("read_analysis_port", this);
   write_analysis_port = new("write_analysis_port", this);
   mem_port = new("mem_port", this);
+  memory_committed_cycle = 0;
+  memory_cycle_committed = 1'b0;
+  pending_read_response_count = 0;
 endfunction : new
 
 function void vlm_reservation_agent::build_phase(uvm_phase phase);
@@ -131,6 +209,12 @@ function void vlm_reservation_agent::build_phase(uvm_phase phase);
   // Both interfaces are mandatory because every cycle combines reservation and actual MEM observations.
   if (cfg.vif == null) begin
     `uvm_fatal("VLM_RESERVATION_NO_VIF", "reservation agent config requires unified vif")
+  end
+
+  if (cfg.ffd_cyc < 1 || cfg.ffd_cyc > cfg.rport_dly) begin
+    `uvm_fatal("VLM_MEMORY_TIMING_CONFIG",
+               $sformatf("requires 1 <= ffd_cyc <= rport_dly, got ffd_cyc=%0d rport_dly=%0d",
+                         cfg.ffd_cyc, cfg.rport_dly))
   end
 
   vif = cfg.vif;
@@ -212,6 +296,31 @@ task vlm_reservation_agent::process_memory_requests(
   bit has_read;
   bit has_write;
 
+  build_memory_transactions(txn, result, read_transaction, write_transaction, has_read, has_write);
+
+  // Commit actual memory before releasing this cycle to a read worker. The
+  // analysis path remains responsible only for expected-data matching.
+  if (has_write) begin
+    commit_memory_write(write_transaction);
+    write_analysis_port.write(write_transaction);
+  end
+
+  // Advance the watermark on every sampled cycle, including cycles without a
+  // write, so a future-cutoff read cannot wait forever on an idle cycle.
+  commit_memory_cycle(txn.cycle);
+
+  if (has_read) begin
+    launch_read_response(read_transaction, txn.cycle);
+  end
+endtask : process_memory_requests
+
+function void vlm_reservation_agent::build_memory_transactions(
+    const ref vlm_reservation_cycle_transaction_t txn,
+    const ref vlm_reservation_check_result_t      result,
+    output    vlm_memory_sequence_item             read_transaction,
+    output    vlm_memory_sequence_item             write_transaction,
+    output    bit                                  has_read,
+    output    bit                                  has_write);
   has_read = 1'b0;
   has_write = 1'b0;
   read_transaction = vlm_memory_sequence_item::type_id::create("resolved_read_transaction");
@@ -239,27 +348,69 @@ task vlm_reservation_agent::process_memory_requests(
       write_transaction.reservation_matched[bank] = result.mem_reservation_matched[VLM_RESERVATION_WRITE][bank];
     end
   end
+endfunction : build_memory_transactions
 
-  if (has_write) begin
-    write_analysis_port.write(write_transaction);
+task vlm_reservation_agent::commit_memory_write(vlm_memory_sequence_item write_transaction);
+  uvm_tlm_time delay = new("write_memory_delay");
+  mem_port.b_transport(write_transaction, delay);
+endtask : commit_memory_write
+
+function void vlm_reservation_agent::commit_memory_cycle(shm_cycle_t cycle);
+  memory_committed_cycle = cycle;
+  memory_cycle_committed = 1'b1;
+endfunction : commit_memory_cycle
+
+task vlm_reservation_agent::launch_read_response(vlm_memory_sequence_item read_transaction,
+                                                 shm_cycle_t              accept_cycle);
+  pending_read_response_count++;
+  fork
+    begin
+      automatic vlm_memory_sequence_item completed_transaction = read_transaction;
+      automatic shm_cycle_t completed_accept_cycle = accept_cycle;
+      serve_read_response(completed_transaction, completed_accept_cycle);
+    end
+  join_none
+endtask : launch_read_response
+
+task vlm_reservation_agent::serve_read_response(vlm_memory_sequence_item read_transaction,
+                                                shm_cycle_t              accept_cycle);
+  uvm_tlm_time delay = new("read_memory_delay");
+  shm_cycle_t snapshot_cycle = accept_cycle + cfg.ffd_cyc - 1;
+
+  // Wake on the configured cutoff edge, then wait for the main cycle loop to
+  // synchronously apply that edge's write before reading the memory model.
+  repeat (cfg.ffd_cyc - 1) @(vif.slv_cb);
+  wait (memory_cycle_committed && memory_committed_cycle >= snapshot_cycle);
+  mem_port.b_transport(read_transaction, delay);
+
+  // Drive one edge before the architectural response edge so the clocking-block
+  // output is stable when the DUT samples at accept_cycle + rport_dly.
+  repeat (cfg.rport_dly - cfg.ffd_cyc) @(vif.slv_cb);
+  for (int unsigned bank = 0; bank < BANK_N; bank++) begin
+    if (read_transaction.vlm_bken[bank] && read_transaction.reservation_matched[bank]) begin
+      vif.slv_cb.rdata[bank] <= read_transaction.vlm_data[bank];
+    end
   end
-  if (has_read) begin
-    uvm_tlm_time delay = new("read_memory_delay");
-    mem_port.b_transport(read_transaction, delay);
-    fork
-      begin
-        automatic vlm_memory_sequence_item completed_transaction = read_transaction;
-        repeat (RPORT_DLY - 1) @(vif.slv_cb);
-        for (int unsigned bank = 0; bank < BANK_N; bank++) begin
-          if (completed_transaction.vlm_bken[bank] && completed_transaction.reservation_matched[bank]) begin
-            vif.slv_cb.rdata[bank] <= completed_transaction.vlm_data[bank];
-          end
-        end
-        read_analysis_port.write(completed_transaction);
-      end
-    join_none
+
+  // Publish completion and retire the worker on the DUT sampling edge, not on
+  // the preceding clocking-block drive edge.
+  @(vif.slv_cb);
+  read_analysis_port.write(read_transaction);
+  if (pending_read_response_count == 0) begin
+    `uvm_error("VLM_MEMORY_PENDING_UNDERFLOW", "read-response pending count is already zero")
+  end else begin
+    pending_read_response_count--;
   end
-endtask : process_memory_requests
+endtask : serve_read_response
+
+function bit vlm_reservation_agent::is_memory_idle();
+  return pending_read_response_count == 0;
+endfunction : is_memory_idle
+
+function string vlm_reservation_agent::pending_memory_state_sprint();
+  return $sformatf("memory read responses pending=%0d committed=%0d committed_cycle=%0d",
+                   pending_read_response_count, memory_cycle_committed, memory_committed_cycle);
+endfunction : pending_memory_state_sprint
 
 function void vlm_reservation_agent::drive_busy();
   if (vif == null || scheduler == null) begin

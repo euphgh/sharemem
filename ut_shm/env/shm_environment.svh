@@ -164,6 +164,9 @@ function bit shm_environment::is_idle();
     if (vlm_agt != null && vlm_agt.scheduler != null && !vlm_agt.scheduler.is_idle()) begin
         return 1'b0;
     end
+    if (vlm_agt != null && !vlm_agt.is_memory_idle()) begin
+        return 1'b0;
+    end
     return 1'b1;
 endfunction : is_idle
 
@@ -201,6 +204,9 @@ function string shm_environment::pending_state_sprint();
     end
     if (vlm_agt != null && vlm_agt.scheduler != null) begin
         result = {result, $sformatf("reservation scheduler idle=%0d\n", vlm_agt.scheduler.is_idle())};
+    end
+    if (vlm_agt != null) begin
+        result = {result, vlm_agt.pending_memory_state_sprint(), "\n"};
     end
     return result;
 endfunction : pending_state_sprint

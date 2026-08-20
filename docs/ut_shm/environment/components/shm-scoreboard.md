@@ -10,7 +10,7 @@
 |---|---|---|
 |`ref_wrvlm_analysis_export`|`shm_reference.wdata_ass_arr_port`|接收每笔 creq 的期望 byte map|
 |`rtl_wrvlm_analysis_export`|统一 VLM monitor write port|接收已补全 gid/match status 的 DUT 实际 MEM write|
-|`mem_imp`|memory slave driver|为 MEM read response 提供 blocking transport|
+|`mem_imp`|统一 VLM agent|同步提交实际 MEM write，并为 MEM read snapshot 提供 blocking transport|
 |`ref_wrvlm_analysis_fifo`|reference export 后端|解耦期望收集|
 |`rtl_wrvlm_analysis_fifo`|actual export 后端|解耦实际写比较|
 |`completion_analysis_port`|transaction lifecycle checker|发布每笔 reference 的 data completion 分类和 cycle|
@@ -34,7 +34,7 @@
 
 ```text
 collect_ref()            建立/覆盖期望
-compare_dut_with_ref()   更新实际 memory 并匹配实际写
+compare_dut_with_ref()   匹配已经同步提交的实际写
 scan_timeout_creq()      输出完成或超时诊断
 ```
 
@@ -55,8 +55,10 @@ write 到达和 timeout 扫描视为同一状态机的三个入口。
 
 ## 4. 实际 write 比对
 
-`compare_dut_with_ref()` 只接纳已经匹配唯一到期 reservation 的 MEM transaction。它先按
-`<bank_id,gid>` 和 byte strobe 更新 `rtl_banks`，再把实际 MEM write 转成 byte map。
+统一 VLM agent 在请求周期先通过 `b_transport()` 按 `<bank_id,gid>` 和 byte strobe 同步更新
+`rtl_banks`，再通过 analysis port 发布同一实际 MEM write。`compare_dut_with_ref()` 只负责
+接纳已经匹配唯一到期 reservation 的 transaction，并把它转成 byte map；它不再重复更新
+memory。
 每个实际写 byte 必须满足：
 
 - 地址存在于 `wmap_final` 或 `wmap_expired`；
@@ -97,13 +99,13 @@ expected/matched/expired/unresolved byte 数。两个 timeout 紧接着按 BANK/
 
 ## 6. MEM read service
 
-`b_transport()` 对 transaction 中每个 active bank，要求 `gid_valid` 和
-`reservation_matched`，再从 `rtl_banks[bank][gid]` 的起始地址连续读取一个 MEM beat，
-并把结果写回 transaction。Memory driver 随后按 `RPORT_DLY` 驱动
-接口。
+`b_transport()` 根据 transaction 方向分派：write 要求 `gid_valid` 和
+`reservation_matched`，并按有效 strobe 同步更新 `rtl_banks`；read 从对应
+`rtl_banks[bank][gid]` 连续读取一个 MEM beat，并把 snapshot 写回 transaction。
 
-当前读取发生在 T0 调用 transport 时，只包含当时已经进入 `rtl_banks` 的 write，尚未
-实现 `FFD_CYC` 截止窗口。该问题归入 memory model 的 `VMEM-001`。
+`FFD_CYC` 的等待与截止周期编排由统一 VLM agent 负责。Agent 只在
+`T0+FFD_CYC-1` 周期 write 已提交后调用 read transport，并在 `T0+RPORT_DLY` 返回数据。
+当前支持 `FFD_CYC>=1`；`FFD_CYC=0` 仍归入 `VMEM-001`。
 
 ## 7. `check_phase`
 
@@ -171,7 +173,7 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 
 - `SCB-002`：固定 128-cycle timeout 已移除并改为可关闭的 no-progress/record-age
   plusarg；2026-08-14 空 design VCS 编译通过，仍待长延迟和 timeout 触发定向验证。
-- `VMEM-001`：read service 未实现 `FFD_CYC` snapshot。
+- `VMEM-001`：`FFD_CYC>=1` snapshot 已实现并通过组件测试，`FFD_CYC=0` 尚未支持。
 - `ENV-001`：运行中 reset 未清理 outstanding 和实际 memory 状态。
 - scoreboard memory、wmap 和 read service 已接入 reservation match metadata，并通过
   当前真实 design 的 109-case `shm.lst` 回归；仍缺 gid 数据隔离和 mismatch

@@ -42,7 +42,7 @@ coverage仍不完整。本批暂不要求全项目 coverage merge 或总百分�
 |Creq/ack|`TP-CREQ-001`～`005`、`TP-ACK-001`|`TP-CREQ-003`已闭环；credit、完整四态、priority和ack仍不完整|
 |数据路径|`TP-DATA-001`～`004`|双 gid主路径、gid隔离和M2V边界真实RTL通过；完整coverage仍缺|
 |地址模型|`TP-ADDR-001`～`009`|BLK公式/回归、双gid物理公式和wpid边界真实RTL通过；完整coverage仍缺|
-|MEM|`TP-MEM-001`～`005`|统一 monitor、gid resolver 和模型正向主路径已通过 109-case 真实 RTL 回归；FFD_CYC 和定向负例未完成|
+|MEM|`TP-MEM-001`～`005`|统一路径正向主回归通过；FFD_CYC>=1 组件矩阵通过，FFD_CYC=0 和定向负例未完成|
 |Reservation|`TP-RSV-001`～`008`|组件/checker已接入；最新RTL ownership directed case通过，完整coverage仍缺|
 |Reset|`TP-RST-001`～`002`|初始 reset 可避开未知采样，运行中 reset 没有统一取消状态|
 
@@ -86,7 +86,7 @@ coverage仍不完整。本批暂不要求全项目 coverage merge 或总百分�
 |---|---|---|---|---|---|---|
 |`TP-MEM-001`|[`MEM-002`](../spec/mem-vlm-interface.md#6-检查规则)、`MEM-003`：有效 read/write 的完整地址已知；write strobe和有效data已知且非零|read/write分别注入valid/address/strobe/data X/Z和零strobe|统一 VLM monitor；当前旧实现只覆盖部分valid/address，见`VMEM-002`|direction × field × known/XZ × valid|无负向case|统一monitor四态检查待实现|
 |`TP-MEM-002`|[`MEM-003`](../spec/mem-vlm-interface.md#6-检查规则)和 [写事务](../spec/mem-vlm-interface.md#22-写事务)：strobe lane写入`mem_waddr+lane`，地址允许非对齐|两个gid、full/sparse/single-lane、低5bit和跨32-Byte边界|matched memory transaction、`rtl_banks[bank][gid]`、reference byte map和scoreboard|source × gid × strobe × DTYPE × lowbits × crossing|正向随机写流量已通过 109-case RTL 回归；无 gid/strobe 定向|gid-aware 模型正向主路径已通过全列表；边界 case 和 coverage 缺失|
-|`TP-MEM-003`|[`MEM-004`](../spec/mem-vlm-interface.md#6-检查规则)：T0 read 在 `T0+RPORT_DLY` 返回，只包含 `T0+FFD_CYC-1` 及之前的重叠写|`FFD_CYC=0/1/>1`，截止前/同周期/截止后写，byte 部分重叠和多次覆盖|T0 read transaction、写事件时间、memory snapshot 和返回 data；固定延迟路径存在，FFD snapshot 缺口见 `VMEM-001`|FFD_CYC × write relative cycle × overlap class × strobe × return correctness|M2V case 使用 read service，但没有 FFD 定向 case，当前参数只有 1|激励缺失、检查/模型部分、coverage 缺失、case 缺失；总体部分实现|
+|`TP-MEM-003`|[`MEM-004`](../spec/mem-vlm-interface.md#6-检查规则)：T0 read 在 `T0+RPORT_DLY` 返回，只包含 `T0+FFD_CYC-1` 及之前的重叠写|`FFD_CYC=0/1/>1`，截止前/同周期/截止后写，byte 部分重叠和多次覆盖|统一 agent 的同步 write transport、committed-cycle watermark、snapshot 和固定延迟返回；`FFD_CYC=0` 缺口见 `VMEM-001`|FFD_CYC × write relative cycle × overlap class × strobe × return correctness|组件 test 已覆盖 FFD_CYC=1/2、截止边界/边界后、partial strobe、多次覆盖、连续 read 和双 gid；0 尚缺|激励/检查对正参数已实现；FFD_CYC=0、functional coverage 和真实 RTL 定向证据仍缺；总体部分实现|
 |`TP-MEM-004`|[同周期读写](../spec/mem-vlm-interface.md#25-同周期读写)及流水：不同 BANK 并行，同 BANK 可同时 read/write，每 BANK read 每拍可流水且保持顺序|连续 read、同拍多 BANK、同 BANK read/write、不同地址及重叠地址|memory monitor read/write transaction、每 BANK pending read queue、RPORT_DLY 后 data 和 M2V 最终写回|bank concurrency × pipeline depth × same-bank RW × overlap × order|公共 64～128 周期间隔不能稳定形成流水或同拍 read/write；无定向 case|激励缺失、检查部分、coverage 缺失、case 缺失；总体部分实现|
 |`TP-MEM-005`|[`VLM-012`](../spec/mem-vlm-interface.md#6-检查规则)：MEM 无 gid，只有唯一到期 reservation match 才能补全 gid并更新数据模型|正常 match、unexpected、missing、地址错误，以及两个 gid相同 BADDR 的隔离访问|resolver 的 gid/gid_valid/matched；read driver和 scoreboard只消费完全匹配事务|direction × gid × match outcome × same-BADDR-different-gid|P0-1 resolver组件矩阵及相同BANK/BADDR跨gid真实RTL数据隔离case通过|正常双gid系统证据已具备；bin证据和resolver负例RTL场景仍缺|
 

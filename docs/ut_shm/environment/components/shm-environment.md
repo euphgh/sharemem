@@ -76,7 +76,7 @@ Environment 按以下顺序建立依赖：
 |shmins monitor analysis port|lifecycle accept imp|两端实例都存在|
 |shmins monitor raw ack port|lifecycle ack imp|两端实例都存在|
 |统一 VLM monitor write analysis port|scoreboard RTL analysis export|两端实例都存在且 transaction 已完成 reservation match|
-|统一 VLM memory driver blocking transport port|scoreboard `mem_imp`|两端实例都存在且 read gid 有效|
+|统一 VLM agent blocking transport port|scoreboard `mem_imp`|两端实例都存在且 MEM gid/match 有效|
 |reference expected-write analysis port|scoreboard reference analysis export|两端实例都存在|
 |reference expected-write analysis port|address coverage analysis export|两端实例都存在|
 |scoreboard completion port|lifecycle completion imp|两端实例都存在|
@@ -91,7 +91,8 @@ Environment 只配置一个 `vlm_vif`；实际 write 和 read service transactio
 ## 6. Phase、drain 与 reset
 
 `shm_environment` 使用共享 `clk_if.cycle_count`；该计数不随 reset 清零。`is_idle()`
-联合检查 scoreboard、transaction lifecycle 和 reservation scheduler。`wait_for_idle()`
+联合检查 scoreboard、transaction lifecycle、reservation scheduler 和 pending MEM read
+response。`wait_for_idle()`
 至少连续两个 clock cycle 观察到 idle 才返回，避免最后一笔 monitor/FIFO delta-cycle
 传播尚未完成时提前结束。超过 `TEST_DRAIN_TIMEOUT_CYCLES` 只报告 testbench drain hang，
 不定义 DUT 单笔事务的最大完成时延。
@@ -108,7 +109,7 @@ Environment 只配置一个 `vlm_vif`；实际 write 和 read service transactio
 - fatal ID 指向的 Config DB 字段是否设置；
 - `shm_environment_config.init()` 是否在 environment 子组件 build 前调用；
 - drain timeout 时 scoreboard、lifecycle 和 reservation scheduler 的 pending state；
-- memory driver 的 `mem_port` 是否连接到 scoreboard；
+- 统一 VLM agent 的 `mem_port` 是否连接到 scoreboard；
 - reservation agent 是否同时取得 reservation 和 memory vif。
 
 ## 8. 相关测试

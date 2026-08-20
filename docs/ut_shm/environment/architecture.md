@@ -143,15 +143,15 @@ scoreboard；reservation checker/resolver 保持在统一 VLM agent 内同步调
 |`shmins_mst_agt.monitor.ack_analysis_port`|analysis port → analysis imp|`lifecycle_checker.ack_imp`|raw direction-specific ack event|
 |`shm_ref.wdata_ass_arr_port`|analysis port → analysis FIFO|`shm_scb.ref_wrvlm_analysis_export`|`shm_wtrans_item` 期望 byte map|
 |`vlm_agt.write_analysis_port`|analysis port → analysis FIFO|`shm_scb.rtl_wrvlm_analysis_export`|经唯一到期 record 补全 gid 的实际 MEM write transaction|
-|`vlm_agt.mem_port`|blocking transport port → imp|`shm_scb.mem_imp`|带 gid 的 MEM read request，并在同一 transaction 中返回数据|
+|`vlm_agt.mem_port`|blocking transport port → imp|`shm_scb.mem_imp`|同步提交带 gid 的 MEM write，或取得 MEM read snapshot|
 |`shm_scb.completion_analysis_port`|analysis port → analysis imp|`lifecycle_checker.completion_imp`|transaction data observed/resolved event|
 
 统一 monitor 先产生原始 cycle snapshot；agent 在 scheduler pre-update 状态下完成 MEM
 匹配并返回 gid/match status，然后才发布 memory transaction。没有唯一匹配 record 的
 MEM 事件只用于协议诊断，不得更新 scoreboard 的可信 memory model。
 
-MEM read driver 使用同一 resolver 取得 gid，再向 scoreboard 查询
-`<bank_id, gid, BADDR>` 数据。Monitor 和 driver 不允许独立重复解析 reservation。
+统一 agent 的 MEM 路径使用同一 resolver 取得 gid，再向 scoreboard 同步提交 write 或查询
+`<bank_id, gid, BADDR>` read snapshot。不得由不同线程独立重复解析 reservation。
 
 ## 6. UVM phase 分工
 

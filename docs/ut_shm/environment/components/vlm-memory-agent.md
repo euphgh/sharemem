@@ -28,8 +28,9 @@ driver、reference 或 scoreboard 都不得根据地址猜测 gid。
 |`ver_common/uvc/vlm_reservation_agent/vlm_reservation_agent.svh`|发布 write、查询 read data 和定时返回|
 |`ut_shm/env/shm_scoreboard.svh`|实际 memory model 与 read transport 实现|
 
-旧的 `vlm_memory_interface`、monitor、driver、sequencer 和 agent 文件暂时保留为迁移历史，
-但不再进入主环境 filelist 或 UVM hierarchy。
+旧的独立 `vlm_memory_interface`、monitor、driver、sequencer、config 和 agent 已删除。
+`vlm_memory_sequence_item` 仍是统一 agent、scoreboard 和组件测试共同使用的 MEM transaction
+类型，因此继续保留。
 
 ## 3. Transaction
 
@@ -38,9 +39,14 @@ driver、reference 或 scoreboard 都不得根据地址猜测 gid。
 - `vlm_bken`、`vlm_addr`、`vlm_data` 和 `vlm_strb`；
 - `vlm_gid`、`gid_valid` 和 `reservation_matched`。
 
-Write transaction 在请求周期发布。Read transaction 在请求周期固定地址和 gid metadata，
-从 scoreboard 查询对应 `<bank,gid,BADDR>` 数据，再在 `RPORT_DLY` 语义下驱动 `rdata`。
-返回时不得重新读取 scheduler record。
+Write transaction 在请求周期同步提交给 scoreboard，再发布到 write analysis port。Read
+transaction 在请求周期固定地址和 gid metadata，在 `T0+FFD_CYC-1` 周期提交完成后从
+scoreboard 取得 snapshot，并在 `T0+RPORT_DLY` 驱动 `rdata`。返回时不得重新读取
+scheduler record。
+
+当前 config 要求 `1 <= FFD_CYC <= RPORT_DLY`。统一 agent 每周期先提交该周期 write，再推进
+memory committed-cycle watermark；read worker 只在 watermark 到达截止周期后读取。该顺序
+使同周期 read/write 和未来可见窗口不依赖 UVM process 调度先后。`FFD_CYC=0` 暂不支持。
 
 ## 4. 可信数据边界
 
@@ -55,7 +61,8 @@ Write transaction 在请求周期发布。Read transaction 在请求周期固定
 
 ## 5. 当前缺口
 
-- `VMEM-001`：read snapshot 尚未实现 `FFD_CYC` 写可见窗口；
+- `VMEM-001`：`FFD_CYC>=1` 的 read snapshot 已实现并有定向组件证据，`FFD_CYC=0`
+  尚未支持；
 - `VMEM-002`：MEM strobe 和有效 write data 的 X/Z 检查仍不完整；
 - `ENV-001`：运行中 reset 尚未取消 pending read response 和重建 memory；
 - 双 gid 正向主路径已通过 VCS 编译和当前真实 design 的 109-case `shm.lst`

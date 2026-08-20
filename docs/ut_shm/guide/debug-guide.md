@@ -62,8 +62,10 @@ scripts/local/sync_remote_repo.sh --dry-run
 ## 4. Slang 失败
 
 先区分 UVM 源码 warning、wrapper 缺少 include/package，以及改动文件自身的错误。
-`check_vlm_memory_slang.sh` 是聚焦检查，未包含的 class 报 undefined 不代表完整环境一定
-失败，也不能把扩大 wrapper 后出现的真实依赖错误忽略为工具差异。
+`check_shmins_random_benchmark_slang.sh` 是 SHMINS 聚焦检查，未包含的 VLM 或 environment
+class 报 undefined 不代表完整环境一定失败，也不能把扩大 wrapper 后出现的真实依赖错误
+忽略为工具差异。统一 VLM 路径应使用远端
+`check_vlm_reservation_vcs.sh` 和根 Makefile 验证。
 
 常见检查顺序：
 

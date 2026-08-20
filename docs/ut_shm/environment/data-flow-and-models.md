@@ -106,7 +106,7 @@ M2V 分别维护 ordered lifecycle queue；年轻事务的 ack grace 只有在�
 |`shmins_ack_event`|shmins monitor|发布前由 monitor 填充；发布后只读|lifecycle checker|
 |`shm_completion_event`|shm scoreboard|发布前由 scoreboard 填充；发布后只读|lifecycle checker|
 |监测 `vlm_memory_sequence_item`|统一 VLM monitor + resolver|monitor 填原始 payload，resolver 填 gid/match；发布后只读|shm scoreboard 或其他订阅者|
-|读服务 `vlm_memory_sequence_item`|VLM memory driver|driver 填 request；scoreboard 填 `vlm_data`|原 driver|
+|读服务 `vlm_memory_sequence_item`|统一 VLM agent|agent 填 request；scoreboard 填 `vlm_data`|统一 VLM agent|
 |reservation cycle transaction|统一 VLM monitor|monitor 创建 request handle；下游只读|checker、resolver、coverage、scheduler|
 |scheduler record|reservation scheduler|scheduler|checker、coverage、scheduler|
 
@@ -163,7 +163,8 @@ sequenceDiagram
   R->>R: write expected data to v-write address
   R->>S: expected shm_wtrans_item
   DUT->>RD: mem_rvld / mem_raddr
-  RD->>S: b_transport(read transaction)
+  RD->>RD: wait through FFD_CYC cutoff
+  RD->>S: b_transport(read snapshot transaction)
   S->>S: read rtl_banks
   S-->>RD: fill transaction.vlm_data
   RD-->>DUT: mem_rdata after fixed delay
@@ -176,12 +177,12 @@ Reference 在收到 creq 时，从自己的 `ref_banks[bank][gid]` 读取期望 
 已经编码为 gid 内 BADDR 的 `creq_vaddr` 生成期望 v-write，并把结果仍表示为
 `shm_wtrans_item.wmap`。实际读路径由统一 VLM agent 观察 `mem_rvld/mem_raddr`，先从唯一
 到期 record 恢复 gid，再通过 `b_transport` 请求 scoreboard 读取
-`rtl_banks[bank][gid]`，然后在固定延迟后驱动 `mem_rdata`。DUT 随后产生的 v-write 与其他
-MEM write 一样由 monitor 送入 scoreboard。
+`rtl_banks[bank][gid]`。统一 agent 先等待到 `T0+FFD_CYC-1` 的 write 已同步提交，再取得
+snapshot，并在 `T0+RPORT_DLY` 驱动 `mem_rdata`。DUT 随后产生的 v-write 与其他 MEM
+write 一样由 monitor 送入 scoreboard。
 
-当前 `b_transport()` 在接到 read transaction 时立即读取 `rtl_banks`。它尚未实现
-[MEM/VLM 接口](../spec/mem-vlm-interface.md#24-ffd_cyc-写可见窗口)要求的
-`FFD_CYC` 截止周期快照；这是 memory model 的已知实现缺口。
+当前实现覆盖 `FFD_CYC>=1`，并用 committed-cycle watermark 固定截止周期，避免同周期
+read/write 结果依赖 UVM process 调度顺序。`FFD_CYC=0` 尚未实现。
 
 ## 5. 两份 memory 状态
 
@@ -191,7 +192,7 @@ model。二者使用相同的地址范围和初始化策略，但推进时机不
 |状态|所有者|按什么事件更新|服务对象|
 |---|---|---|---|
 |`ref_banks[BANK_N][GID_N]`|`shm_reference`|监测到 creq 后，按 reference 预测顺序读写|生成 V2M/M2V 的期望 byte map|
-|`rtl_banks[BANK_N][GID_N]`|`shm_scoreboard`|统一 monitor 发布匹配的实际 MEM write 后更新|向 memory driver 提供 DUT 实际可见的 read data|
+|`rtl_banks[BANK_N][GID_N]`|`shm_scoreboard`|统一 agent 在请求周期同步提交匹配的实际 MEM write|向统一 agent 提供 DUT 实际可见的 read snapshot|
 
 两份状态不能合并。Outstanding 或 DUT 调度改变请求先后时，reference 已经预测的状态
 与实际 MEM 已完成状态可能暂时不同；共享一份 memory 会把预测结果提前暴露给 DUT，
@@ -238,7 +239,7 @@ Reservation 到实际 MEM 的匹配键和 busy 规则由
   `shmins_mask_directed.lst` 通过真实 RTL；inactive/masked don’t-care X utility、reference
   过滤、组件矩阵和30笔系统 test均已通过，`dontcare_xz_cg=58.33%`且目标X类别由test
   counter确认命中；完整Z/XZ及非法字段矩阵仍待实现；
-- MEM read 服务尚未按 `FFD_CYC` 建立截止周期快照；
+- MEM read 服务已支持 `FFD_CYC>=1` 的截止周期快照；`FFD_CYC=0` 尚未实现；
 - 各组件能避开初始 reset 期间的采样，但运行中 reset 对 reference item、scoreboard
   outstanding、memory read response 和 reservation scheduler state 的清理尚未统一；
 - reservation agent 不执行 alignment policy，并继续检查 reservation 与 MEM 完整地址

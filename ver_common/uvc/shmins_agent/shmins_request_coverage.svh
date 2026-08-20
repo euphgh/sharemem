@@ -26,6 +26,12 @@ typedef enum int unsigned {
 class shmins_request_coverage extends uvm_subscriber #(shmins_sequence_item);
   localparam int unsigned MASK_CLASS_N = 5;
 
+  // Enables detailed interpreted-payload X/Z logging; disabled for normal verification runs.
+  bit interpreted_payload_xz_log_enable;
+
+  // Number of transactions for which detailed interpreted-payload diagnostics were emitted.
+  int unsigned interpreted_payload_xz_log_count;
+
   // Total number of requests sampled by the collector.
   longint unsigned sampled_request_count;
 
@@ -249,6 +255,16 @@ class shmins_request_coverage extends uvm_subscriber #(shmins_sequence_item);
       shmins_sequence_item transaction);
 
   //----------------------------------------------------------------------------
+  // @brief Logs every X/Z field interpreted by one active request.
+  //
+  // @param transaction Request whose active payload is inspected.
+  // @param classification Aggregate X/Z classification already produced for the request.
+  //----------------------------------------------------------------------------
+  extern protected function void log_interpreted_payload_xz(
+      shmins_sequence_item transaction,
+      shmins_payload_xz_e classification);
+
+  //----------------------------------------------------------------------------
   // @brief Classifies data bytes belonging to masked length-bounded elements.
   //
   // @param transaction Request whose masked element data is inspected.
@@ -298,6 +314,21 @@ class shmins_request_coverage extends uvm_subscriber #(shmins_sequence_item);
                                                     ref bit has_z);
 
   //----------------------------------------------------------------------------
+  // @brief Observes one selected data byte without iterating neighboring bytes.
+  //
+  // @param transaction Request containing the data vector.
+  // @param thread_idx Thread index containing the selected byte.
+  // @param byte_idx Byte index within the selected thread data vector.
+  // @param has_x Set when the selected byte contains X.
+  // @param has_z Set when the selected byte contains Z.
+  //----------------------------------------------------------------------------
+  extern protected function void observe_data_byte_xz(shmins_sequence_item transaction,
+                                                       int unsigned thread_idx,
+                                                       int unsigned byte_idx,
+                                                       ref bit has_x,
+                                                       ref bit has_z);
+
+  //----------------------------------------------------------------------------
   // @brief Converts accumulated X/Z flags to the public classification enum.
   //
   // @param has_x Indicates that at least one X bit was observed.
@@ -321,6 +352,8 @@ endclass : shmins_request_coverage
 function shmins_request_coverage::new(string name = "shmins_request_coverage",
                                       uvm_component parent = null);
   super.new(name, parent);
+  interpreted_payload_xz_log_enable = 1'b0;
+  interpreted_payload_xz_log_count = 0;
   sampled_request_count = 0;
   foreach (sampled_mask_class_count[index]) sampled_mask_class_count[index] = 0;
   foreach (sampled_active_payload_xz_count[index]) sampled_active_payload_xz_count[index] = 0;
@@ -366,6 +399,9 @@ function void shmins_request_coverage::write(shmins_sequence_item t);
   request_kind = t.creq_info == 4'hf ? 1 : 0;
   inactive_xz = classify_payload_xz(t, 1'b0);
   active_xz = classify_payload_xz(t, 1'b1);
+  if (interpreted_payload_xz_log_enable && active_xz != SHMINS_PAYLOAD_KNOWN) begin
+    log_interpreted_payload_xz(t, active_xz);
+  end
   masked_data_xz = classify_masked_data_xz(t);
   masked_indexed_offset_xz = classify_masked_indexed_offset_xz(t);
   out_of_length_xz = classify_out_of_length_xz(t);
@@ -536,9 +572,7 @@ function shmins_payload_xz_e shmins_request_coverage::classify_interpreted_paylo
       if (transaction.creq_rw == SHM_V2M) begin
         for (int unsigned byte_lane = 0; byte_lane < transaction.data_byte_w(); byte_lane++) begin
           int unsigned byte_idx = elem_idx * transaction.data_byte_w() + byte_lane;
-          foreach (transaction.creq_vdat[thread_idx][byte_idx, bit_idx]) begin
-            observe_four_state(transaction.creq_vdat[thread_idx][byte_idx][bit_idx], has_x, has_z);
-          end
+          observe_data_byte_xz(transaction, thread_idx, byte_idx, has_x, has_z);
         end
       end
     end
@@ -548,6 +582,140 @@ function shmins_payload_xz_e shmins_request_coverage::classify_interpreted_paylo
   end
   return flags_to_xz(has_x, has_z);
 endfunction : classify_interpreted_payload_xz
+
+function void shmins_request_coverage::log_interpreted_payload_xz(
+    shmins_sequence_item transaction,
+    shmins_payload_xz_e classification);
+  int unsigned offender_count;
+  string diagnostic_context;
+
+  offender_count = 0;
+  interpreted_payload_xz_log_count++;
+  diagnostic_context = $sformatf("uid=%0d id=%0d rw=%0d itype=%0d atype_w=%0d class=%0d",
+                                  transaction.transaction_uid, transaction.creq_id, transaction.creq_rw,
+                                  transaction.creq_itype, transaction.creq_atype_w, classification);
+  `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+            {diagnostic_context, " interpreted payload contains X/Z"}, UVM_NONE)
+
+  for (int unsigned thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
+    bit has_active_element;
+    int unsigned element_count;
+
+    if (transaction.creq_tmsk[thread_idx] !== 1'b1) begin
+      continue;
+    end
+    if ($isunknown(transaction.creq_prio[thread_idx])) begin
+      offender_count++;
+      `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+                $sformatf("%s thread=%0d field=creq_prio value=%b", diagnostic_context, thread_idx,
+                          transaction.creq_prio[thread_idx]),
+                UVM_NONE)
+    end
+    if ($isunknown(transaction.creq_len[thread_idx])) begin
+      offender_count++;
+      `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+                $sformatf("%s thread=%0d field=creq_len value=%b", diagnostic_context, thread_idx,
+                          transaction.creq_len[thread_idx]),
+                UVM_NONE)
+      continue;
+    end
+    if (transaction.data_byte_w() == 0) begin
+      continue;
+    end
+
+    element_count = transaction.thread_elem_cnt(thread_idx);
+    if (element_count > transaction.max_elem_cnt()) begin
+      element_count = transaction.max_elem_cnt();
+    end
+    has_active_element = 1'b0;
+    for (int unsigned elem_idx = 0; elem_idx < element_count; elem_idx++) begin
+      if ($isunknown(transaction.creq_vmsk[thread_idx][elem_idx])) begin
+        offender_count++;
+        `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+                  $sformatf("%s thread=%0d field=creq_vmsk element=%0d value=%b", diagnostic_context,
+                            thread_idx, elem_idx, transaction.creq_vmsk[thread_idx][elem_idx]),
+                  UVM_NONE)
+        continue;
+      end
+      if (transaction.creq_vmsk[thread_idx][elem_idx] !== 1'b1) begin
+        continue;
+      end
+
+      has_active_element = 1'b1;
+      if (transaction.creq_itype == LDSTE_V) begin
+        logic [VEC_W-1:0] packed_offsets;
+
+        packed_offsets = transaction.creq_offs(thread_idx);
+        case (transaction.offs_bit_w())
+          16: begin
+            if ($isunknown(packed_offsets[elem_idx * 16 +: 16])) begin
+              offender_count++;
+              `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+                        $sformatf("%s thread=%0d field=creq_offs element=%0d value=%b", diagnostic_context,
+                                  thread_idx, elem_idx, packed_offsets[elem_idx * 16 +: 16]),
+                        UVM_NONE)
+            end
+          end
+          32: begin
+            if ($isunknown(packed_offsets[elem_idx * 32 +: 32])) begin
+              offender_count++;
+              `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+                        $sformatf("%s thread=%0d field=creq_offs element=%0d value=%b", diagnostic_context,
+                                  thread_idx, elem_idx, packed_offsets[elem_idx * 32 +: 32]),
+                        UVM_NONE)
+            end
+          end
+          default: ;
+        endcase
+      end
+      if (transaction.creq_rw == SHM_V2M) begin
+        for (int unsigned byte_lane = 0; byte_lane < transaction.data_byte_w(); byte_lane++) begin
+          int unsigned byte_idx;
+
+          byte_idx = elem_idx * transaction.data_byte_w() + byte_lane;
+          if ($isunknown(transaction.creq_vdat[thread_idx][byte_idx])) begin
+            offender_count++;
+            `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+                      $sformatf("%s thread=%0d field=creq_vdat element=%0d byte=%0d value=%b",
+                                diagnostic_context, thread_idx, elem_idx, byte_idx,
+                                transaction.creq_vdat[thread_idx][byte_idx]),
+                      UVM_NONE)
+          end
+        end
+      end
+    end
+
+    if (has_active_element && transaction.creq_itype inside {LDST_S, LDST_V, LDSTE_S}) begin
+      logic [VEC_W-1:0] packed_offsets;
+
+      packed_offsets = transaction.creq_offs(thread_idx);
+      case (transaction.offs_bit_w())
+        16: begin
+          if ($isunknown(packed_offsets[15:0])) begin
+            offender_count++;
+            `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+                      $sformatf("%s thread=%0d field=creq_offs element=0 value=%b", diagnostic_context,
+                                thread_idx, packed_offsets[15:0]),
+                      UVM_NONE)
+          end
+        end
+        32: begin
+          if ($isunknown(packed_offsets[31:0])) begin
+            offender_count++;
+            `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+                      $sformatf("%s thread=%0d field=creq_offs element=0 value=%b", diagnostic_context,
+                                thread_idx, packed_offsets[31:0]),
+                      UVM_NONE)
+          end
+        end
+        default: ;
+      endcase
+    end
+  end
+
+  `uvm_info("SHMINS_INTERPRETED_PAYLOAD_XZ_DETAIL",
+            $sformatf("%s interpreted offender_count=%0d", diagnostic_context, offender_count), UVM_NONE)
+endfunction : log_interpreted_payload_xz
 
 function shmins_payload_xz_e shmins_request_coverage::classify_masked_data_xz(
     shmins_sequence_item transaction);
@@ -575,9 +743,7 @@ function shmins_payload_xz_e shmins_request_coverage::classify_masked_data_xz(
       end
       for (int unsigned byte_lane = 0; byte_lane < transaction.data_byte_w(); byte_lane++) begin
         int unsigned byte_idx = elem_idx * transaction.data_byte_w() + byte_lane;
-        foreach (transaction.creq_vdat[thread_idx][byte_idx, bit_idx]) begin
-          observe_four_state(transaction.creq_vdat[thread_idx][byte_idx][bit_idx], has_x, has_z);
-        end
+        observe_data_byte_xz(transaction, thread_idx, byte_idx, has_x, has_z);
       end
     end
   end
@@ -639,9 +805,7 @@ function shmins_payload_xz_e shmins_request_coverage::classify_out_of_length_xz(
       observe_four_state(transaction.creq_vmsk[thread_idx][elem_idx], has_x, has_z);
     end
     for (int unsigned byte_idx = byte_count; byte_idx < VEC_BYTE_N; byte_idx++) begin
-      foreach (transaction.creq_vdat[thread_idx][byte_idx, bit_idx]) begin
-        observe_four_state(transaction.creq_vdat[thread_idx][byte_idx][bit_idx], has_x, has_z);
-      end
+      observe_data_byte_xz(transaction, thread_idx, byte_idx, has_x, has_z);
     end
     if (transaction.creq_itype == LDSTE_V) begin
       for (int unsigned offset_idx = element_count; offset_idx < transaction.offs_elem_max(); offset_idx++) begin
@@ -702,6 +866,19 @@ function void shmins_request_coverage::observe_offset_xz(shmins_sequence_item tr
     default: ;
   endcase
 endfunction : observe_offset_xz
+
+function void shmins_request_coverage::observe_data_byte_xz(shmins_sequence_item transaction,
+                                                              int unsigned thread_idx,
+                                                              int unsigned byte_idx,
+                                                              ref bit has_x,
+                                                              ref bit has_z);
+  if (thread_idx >= THD_N || byte_idx >= VEC_BYTE_N) begin
+    return;
+  end
+  for (int unsigned bit_idx = 0; bit_idx < 8; bit_idx++) begin
+    observe_four_state(transaction.creq_vdat[thread_idx][byte_idx][bit_idx], has_x, has_z);
+  end
+endfunction : observe_data_byte_xz
 
 function shmins_payload_xz_e shmins_request_coverage::flags_to_xz(bit has_x, bit has_z);
   if (has_x && has_z) return SHMINS_PAYLOAD_XZ;

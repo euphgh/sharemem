@@ -8,7 +8,7 @@
 
 |变量|读取者|默认值|作用|
 |---|---|---|---|
-|`SLANG`|`scripts/local/check_vlm_memory_slang.sh`|`slang`|Slang 可执行文件|
+|`SLANG`|`scripts/local/check_shmins_random_benchmark_slang.sh`|`slang`|Slang 可执行文件|
 |`UVM_HOME`|同上|`resources/uvm-1.2`|本地 UVM 源码根目录|
 |`SHAREMEM_REMOTE_HOST`|Ubuntu 同步和远程执行脚本|`chatgpt`|Ubuntu SSH 主机或别名|
 |`SHAREMEM_REMOTE_DIR`|Ubuntu 同步和远程执行脚本|`sharemem`|Ubuntu HOME 下的仓库路径|
@@ -91,7 +91,7 @@ scripts/ubuntu/check_vlm_reservation_vcs.sh compile +define+MY_DEBUG
 |`SCB_TIMEOUT_SCAN_INTERVAL_CYCLES`|正整数|scoreboard|timeout/completion 扫描周期；默认 10，0 会 fatal|
 |`ACK_POST_COMPLETE_GRACE_CYCLES`|非负整数|lifecycle checker|数据全部实际匹配且成为同方向有序队头后等待 required ack 的诊断 grace；默认 20，0 关闭中途诊断|
 |`TEST_DRAIN_TIMEOUT_CYCLES`|正整数|`shm_environment.wait_for_idle()`|sequence 结束后环境 drain watchdog；默认 10000，0 会 fatal|
-|`file_debug`|无值开关|reference、旧独立 VLM memory monitor|主环境创建 `vlm.ref`；旧 monitor 单独使用时创建 `vlm_memory.rtl`，统一 VLM monitor 当前不创建独立 debug 文件|
+|`file_debug`|无值开关|reference|主环境创建 `vlm.ref`；统一 VLM monitor 当前不创建独立 debug 文件|
 |`UVM_VERBOSITY`|UVM verbosity 名称|UVM|控制 UVM report 输出级别|
 |`UVM_TOPOLOGY`|无值开关|UVM|打印 UVM topology|
 

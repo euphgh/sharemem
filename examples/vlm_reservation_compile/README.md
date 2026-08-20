@@ -74,6 +74,18 @@ This test checks config-to-scheduler policy propagation and confirms that an
 unmatched published MEM transaction keeps `gid_valid==0` and
 `reservation_matched==0`.
 
+Run the positive-window MEM read snapshot test with:
+
+```sh
+scripts/ubuntu/check_vlm_reservation_vcs.sh read-snapshot
+```
+
+The target runs the same component harness with `FFD_CYC=1` and `FFD_CYC=2`.
+It checks cutoff visibility, writes after the cutoff, partial strobes, repeated
+writes, consecutive same-bank reads, gid isolation, exact response cycles, and
+pending-read retirement. `FFD_CYC=0` is intentionally outside the current
+implementation boundary.
+
 Run all component targets with:
 
 ```sh
