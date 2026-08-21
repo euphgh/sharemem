@@ -44,7 +44,7 @@ endargs
 ### 2.2 继承
 
 派生 case 使用 `derived_case: base_case`。它继承 base case 的 UVM test 和 plusargs，
-并可追加或覆盖参数；最终 `UVM_TESTNAME` 仍是 base case 对应的 test class：
+并可追加或覆盖参数；最终 `UVM_TESTNAME` 仍是 base case 对应的 test class。需要注意的是，继承额base_case必须在tc中被如2.1定义过，不可以直接使用一个未定义的UVM_TESTNAME：
 
 ```text
 v2m_unit_test: shm_unit_test

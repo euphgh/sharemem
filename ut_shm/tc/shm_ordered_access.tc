@@ -30,7 +30,7 @@ shm_v_write_then_write_order_test
 +TEST_DRAIN_TIMEOUT_CYCLES=20000
 endargs
 
-shm_ordered_access_matrix_base: shm_ordered_access_matrix_test
+shm_ordered_access_matrix_test
 +EXTERNAL_BUSY_PERCENT=0
 +SCB_NO_PROGRESS_TIMEOUT_CYCLES=0
 +SCB_RECORD_AGE_TIMEOUT_CYCLES=0
@@ -38,7 +38,7 @@ shm_ordered_access_matrix_base: shm_ordered_access_matrix_test
 +TEST_DRAIN_TIMEOUT_CYCLES=40000
 endargs
 
-order_ext_exact_mrmw: shm_ordered_access_matrix_base
+order_ext_exact_mrmw: shm_ordered_access_matrix_test
 +ORDER_CELL=ORDER_EXT_EXACT_MRMW
 +ORDER_KIND=M_READ_THEN_WRITE
 +ORDER_OVERLAP=EXACT
@@ -52,7 +52,7 @@ order_ext_exact_mrmw: shm_ordered_access_matrix_base
 +ORDER_VTRANS_FIRST=0
 endargs
 
-order_ext_exact_mwmr: shm_ordered_access_matrix_base
+order_ext_exact_mwmr: shm_ordered_access_matrix_test
 +ORDER_CELL=ORDER_EXT_EXACT_MWMR
 +ORDER_KIND=M_WRITE_THEN_READ
 +ORDER_OVERLAP=EXACT
@@ -66,7 +66,7 @@ order_ext_exact_mwmr: shm_ordered_access_matrix_base
 +ORDER_VTRANS_FIRST=0
 endargs
 
-order_ext_exact_mwmw: shm_ordered_access_matrix_base
+order_ext_exact_mwmw: shm_ordered_access_matrix_test
 +ORDER_CELL=ORDER_EXT_EXACT_MWMW
 +ORDER_KIND=M_WRITE_THEN_WRITE
 +ORDER_OVERLAP=EXACT
@@ -80,7 +80,7 @@ order_ext_exact_mwmw: shm_ordered_access_matrix_base
 +ORDER_VTRANS_FIRST=0
 endargs
 
-order_ext_exact_vwvw: shm_ordered_access_matrix_base
+order_ext_exact_vwvw: shm_ordered_access_matrix_test
 +ORDER_CELL=ORDER_EXT_EXACT_VWVW
 +ORDER_KIND=V_WRITE_THEN_WRITE
 +ORDER_OVERLAP=EXACT
@@ -94,7 +94,7 @@ order_ext_exact_vwvw: shm_ordered_access_matrix_base
 +ORDER_VTRANS_FIRST=0
 endargs
 
-order_ext_partial_mrmw: shm_ordered_access_matrix_base
+order_ext_partial_mrmw: shm_ordered_access_matrix_test
 +ORDER_CELL=ORDER_EXT_PARTIAL_MRMW
 +ORDER_KIND=M_READ_THEN_WRITE
 +ORDER_OVERLAP=PARTIAL
@@ -108,7 +108,7 @@ order_ext_partial_mrmw: shm_ordered_access_matrix_base
 +ORDER_VTRANS_FIRST=0
 endargs
 
-order_ext_partial_mwmr: shm_ordered_access_matrix_base
+order_ext_partial_mwmr: shm_ordered_access_matrix_test
 +ORDER_CELL=ORDER_EXT_PARTIAL_MWMR
 +ORDER_KIND=M_WRITE_THEN_READ
 +ORDER_OVERLAP=PARTIAL
@@ -122,7 +122,7 @@ order_ext_partial_mwmr: shm_ordered_access_matrix_base
 +ORDER_VTRANS_FIRST=0
 endargs
 
-order_ext_partial_mwmw: shm_ordered_access_matrix_base
+order_ext_partial_mwmw: shm_ordered_access_matrix_test
 +ORDER_CELL=ORDER_EXT_PARTIAL_MWMW
 +ORDER_KIND=M_WRITE_THEN_WRITE
 +ORDER_OVERLAP=PARTIAL
@@ -136,7 +136,7 @@ order_ext_partial_mwmw: shm_ordered_access_matrix_base
 +ORDER_VTRANS_FIRST=0
 endargs
 
-order_ext_partial_vwvw: shm_ordered_access_matrix_base
+order_ext_partial_vwvw: shm_ordered_access_matrix_test
 +ORDER_CELL=ORDER_EXT_PARTIAL_VWVW
 +ORDER_KIND=V_WRITE_THEN_WRITE
 +ORDER_OVERLAP=PARTIAL
@@ -150,7 +150,7 @@ order_ext_partial_vwvw: shm_ordered_access_matrix_base
 +ORDER_VTRANS_FIRST=0
 endargs
 
-order_ext_vtrans_mwmw: shm_ordered_access_matrix_base
+order_ext_vtrans_mwmw: shm_ordered_access_matrix_test
 +ORDER_CELL=ORDER_EXT_VTRANS_MWMW
 +ORDER_KIND=M_WRITE_THEN_WRITE
 +ORDER_OVERLAP=PARTIAL

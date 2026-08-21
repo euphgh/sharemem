@@ -221,7 +221,7 @@
 ### RSV-002：reservation 功能覆盖率
 
 - 当前实现：已有 reservation admission 和 MEM match 覆盖组，覆盖 gid、busy 来源和匹配结果等基础维度。
-- 剩余缺口：同/异 gid、同/异 subbank、delay、内部/外部 busy、接受/拒绝以及 resolver 负向结果的交叉尚未全部 closure。
+- 剩余缺口：同/异 gid、同/异 subbank、delay、内部/外部 busy、接受/拒绝以及 resolver 负向结果的交叉尚未全部 closure；当前 `VTAB_D=13` 新增的合法上边界 `delay==12` 也尚需逐 bin 证据。
 - 影响：checker 通过不能证明关键并发与阻塞组合都被执行。
 - 验收条件：建立 coverage-to-testpoint mapping，逐 bin 分析并通过定向用例或 waiver 关闭缺口。
 - 关联 testpoint：[TP-RSV-001～TP-RSV-008](plan/testpoints.md)。

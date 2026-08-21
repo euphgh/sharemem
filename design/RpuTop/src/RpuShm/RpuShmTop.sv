@@ -6,7 +6,7 @@ module RpuShmTop
     parameter PRIO_W      = 4                  ,
     parameter FFD_CYC     = 1                  , //feedforward cycle
     parameter RPORT_DLY   = 5                  ,
-    parameter VTAB_D      = 6+RPORT_DLY-FFD_CYC+1+1+1, //13
+    parameter VTAB_D      = 6+RPORT_DLY-FFD_CYC+1+1+1+1,//13
     parameter ID_W        = 8                  ,
     parameter THD_N       = 16                 ,
     parameter BANK_N      = 16                 ,
