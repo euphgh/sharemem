@@ -21,4 +21,6 @@ package shm_test_package;
     `include "shm_m_write_then_read_order_test.svh"
     `include "shm_m_write_then_write_order_test.svh"
     `include "shm_v_write_then_write_order_test.svh"
+    `include "shm_ordered_access_matrix_config.svh"
+    `include "shm_ordered_access_matrix_test.svh"
 endpackage : shm_test_package

@@ -229,7 +229,7 @@ case_name : RUN=1 SEED=num
 |[`p0_directed.lst`](../../../ut_shm/regression/p0_directed.lst)|P0-3/P0-4 双 gid 定向组|4|
 |[`shmins_mask_directed.lst`](../../../ut_shm/regression/shmins_mask_directed.lst)|普通 mask 24-cell 与 VTRANS 4-cell 定向组|2 tests / 28 cells|
 |[`shmins_dontcare_x.lst`](../../../ut_shm/regression/shmins_dontcare_x.lst)|inactive-thread与masked-element合法X定向组|1 test / 30 cells|
-|[`shm_ordered_access.lst`](../../../ut_shm/regression/shm_ordered_access.lst)|同 thread M-read/M-write、M-write/M-write 和 V-write/V-write 顺序|4 tests|
+|[`shm_ordered_access.lst`](../../../ut_shm/regression/shm_ordered_access.lst)|同 thread 四种基础顺序和 dtype/gid/space/topology 扩展矩阵|13 tests / 13 cells|
 
 普通 V2M 和 M2V regression 都包含：
 
@@ -242,11 +242,16 @@ case_name : RUN=1 SEED=num
 `LDSTE_S + WRP/BLK` case。没有固定 seed 和 functional coverage 仍不能证明随机字段
 命中特定边界或 coverage bin。
 
-`shm_ordered_access.lst` 已登记到根 TC，但暂不被 `shm.lst` include。四个 test 固定使用
+`shm_ordered_access.lst` 已登记到根 TC，但暂不被 `shm.lst` include。四个基础 test 固定使用
 thread 0、DTYP8、单 element、SPACE_LOC 和零 external busy，并通过 directed queue
 背靠背发布目标 pair；setup 与目标 batch 之间、目标 batch 与最终检查之间才 drain。
-2026-08-20 已完成组件门禁、完整环境编译和零事务 smoke，正式 design 结果尚待运行，
-因此当前不能把这四个 case 记为 RTL 通过。
+2026-08-21 用户确认四个基础 test、独立列表和原 `shm.lst` 均已通过正式 design。
+
+列表使用一个参数化 `shm_ordered_access_matrix_test` class 和九个 TC alias，每次仿真只执行
+一个可独立诊断的 cell。矩阵覆盖四种顺序关系的 exact/partial、DTYP16/32、thread 15、
+gid 0/1、wpid 3/4、WRP/BLK、strided/indexed 和 VTRANS M-write。九个 alias 已登记，公共
+class 已通过远端组件门禁、空 design 编译与零事务 smoke；尚待正式 RTL 运行和 coverage
+merge 结果，因此不能作为 DUT 功能通过 evidence。
 
 ## 8. 双 gid 迁移新增 case 组
 

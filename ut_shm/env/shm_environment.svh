@@ -11,6 +11,7 @@ class shm_environment extends uvm_env;
 
     shm_reference  shm_ref;
     shm_address_coverage address_coverage;
+    shm_ordered_access_coverage ordered_access_coverage;
     shm_scoreboard shm_scb;
     shm_transaction_lifecycle_checker lifecycle_checker;
 
@@ -131,6 +132,8 @@ function void shm_environment::build_phase(uvm_phase phase);
 
         shm_ref = shm_reference::type_id::create("shm_ref", this);
         address_coverage = shm_address_coverage::type_id::create("address_coverage", this);
+        ordered_access_coverage =
+            shm_ordered_access_coverage::type_id::create("ordered_access_coverage", this);
         shm_scb = shm_scoreboard::type_id::create("shm_scb", this);
         lifecycle_checker =
             shm_transaction_lifecycle_checker::type_id::create("lifecycle_checker", this);
@@ -163,6 +166,10 @@ function void shm_environment::connect_phase(uvm_phase phase);
 
     if (shm_ref != null && address_coverage != null) begin
         shm_ref.wdata_ass_arr_port.connect(address_coverage.analysis_export);
+    end
+
+    if (shm_ref != null && ordered_access_coverage != null) begin
+        shm_ref.wdata_ass_arr_port.connect(ordered_access_coverage.analysis_export);
     end
 
     if (shm_scb != null && lifecycle_checker != null) begin
@@ -242,8 +249,13 @@ endfunction : compare_final_memory
 
 function void shm_environment::check_final_memory(string caller_label = "environment check_phase");
     string diagnostic;
+    bit converged;
 
-    if (!compare_final_memory(diagnostic)) begin
+    converged = compare_final_memory(diagnostic);
+    if (ordered_access_coverage != null) begin
+        ordered_access_coverage.sample_final_result(converged);
+    end
+    if (!converged) begin
         `uvm_error("SHM_FINAL_MEMORY_MISMATCH", {caller_label, ":\n", diagnostic})
     end
 endfunction : check_final_memory

@@ -109,7 +109,34 @@ scoreboard timeout 为 0，只按预期最大总运行时间调整 `TEST_DRAIN_T
 `ut_shm/tc/ut_shm.tc` 当前覆盖为 10。值越大，DUT 可用的 reservation slot 越少，事务
 完成时间通常越长。超过 100 会在 build phase fatal。
 
-## 6. 调试开关
+## 6. Ordered-access 扩展矩阵
+
+`shm_ordered_access_matrix_test` 每次仿真只运行一个矩阵 cell。以下字段全部必填且没有代码
+默认值；推荐只通过 `ut_shm/tc/shm_ordered_access.tc` 中的具名 alias 使用。
+
+|Plusarg|合法值|作用|
+|---|---|---|
+|`+ORDER_CELL=<name>`|非空字符串|稳定的 cell 日志标签|
+|`+ORDER_KIND=<value>`|`M_READ_THEN_WRITE`、`M_WRITE_THEN_READ`、`M_WRITE_THEN_WRITE`、`V_WRITE_THEN_WRITE`|选择架构顺序关系|
+|`+ORDER_OVERLAP=<value>`|`EXACT`、`PARTIAL`|选择物理 byte overlap 类型|
+|`+ORDER_FIRST_DTYPE=<value>`|`DTYP_8`、`DTYP_16`、`DTYP_32`|第一笔目标 transaction 的 DTYPE|
+|`+ORDER_SECOND_DTYPE=<value>`|`DTYP_8`、`DTYP_16`、`DTYP_32`|第二笔目标 transaction 的 DTYPE|
+|`+ORDER_ITYPE=<value>`|`LDST_S`、`LDST_V`、`LDSTE_S`、`LDSTE_V`|普通 transaction 使用的地址 topology|
+|`+ORDER_SPACE=<value>`|`SPACE_LOC`、`SPACE_WRP`、`SPACE_BLK`|目标地址空间|
+|`+ORDER_THREAD=<n>`|0～`THD_N-1`|唯一 active thread|
+|`+ORDER_WPID=<n>`|0～`WARP_N-1`|绝对 WARP ID|
+|`+ORDER_WPNUM=<n>`|1、2、4|BLK WARP 数；非 BLK 必须为1|
+|`+ORDER_VTRANS_FIRST=<n>`|0、1|第一笔是否为 VTRANS|
+
+当前生成器有意只开放已经定义最终结果判定的 profile：normal exact 要求两笔 DTYPE 相同；
+normal partial 要求 `DTYP32→DTYP16 + SPACE_LOC + LDST_S`；VTRANS profile 要求
+`M_WRITE_THEN_WRITE + PARTIAL + DTYP16/16 + SPACE_LOC + contiguous`。其他组合会在发送
+stimulus 前 fatal，不能把无效 TC 静默降级成另一个场景。
+
+完整矩阵由 `shm_ordered_access.lst` 聚合。每个 alias 独立产生日志、waveform 和 coverage；
+单次仿真只要求当前 kind/overlap/gid coverage cell 命中，完整 closure 以 merge 后报告为准。
+
+## 7. 调试开关
 
 |Plusarg|格式|作用|
 |---|---|---|
@@ -117,7 +144,7 @@ scoreboard timeout 为 0，只按预期最大总运行时间调整 `TEST_DRAIN_T
 
 `file_debug` 名称区分大小写。生成文件属于仿真产物，不应提交到源码或文档目录。
 
-## 7. 常用 UVM/VCS plusarg
+## 8. 常用 UVM/VCS plusarg
 
 下列参数由 UVM 或 VCS 读取，不是项目自定义字段，但运行 `ut_shm` tests 时经常一起使用：
 
@@ -128,9 +155,9 @@ scoreboard timeout 为 0，只按预期最大总运行时间调整 `TEST_DRAIN_T
 |`+UVM_TOPOLOGY`|无值开关|在 end-of-elaboration 打印 UVM topology|
 |`+ntb_random_seed=<n>`|`+ntb_random_seed=12345`|设置 VCS 随机种子，便于复现|
 
-## 8. 使用示例
+## 9. 使用示例
 
-### 8.1 完全大随机 normal traffic
+### 9.1 完全大随机 normal traffic
 
 不配置任何 `CREQ_*`，所有 normal domain 都保持开放：
 
@@ -143,7 +170,7 @@ scoreboard timeout 为 0，只按预期最大总运行时间调整 `TEST_DRAIN_T
 +ntb_random_seed=12345
 ```
 
-### 8.2 定向 indexed V2M/BLK
+### 9.2 定向 indexed V2M/BLK
 
 ```text
 +UVM_TESTNAME=shm_unit_test
@@ -157,7 +184,7 @@ scoreboard timeout 为 0，只按预期最大总运行时间调整 `TEST_DRAIN_T
 +CREQ_ATYPE_G=GAUTO_DW
 ```
 
-### 8.3 高 external busy 和较长 drain
+### 9.3 高 external busy 和较长 drain
 
 ```text
 +UVM_TESTNAME=shm_unit_test
@@ -168,7 +195,7 @@ scoreboard timeout 为 0，只按预期最大总运行时间调整 `TEST_DRAIN_T
 +TEST_DRAIN_TIMEOUT_CYCLES=50000
 ```
 
-### 8.4 根 Makefile smoke
+### 9.4 根 Makefile smoke
 
 在支持 VCS 的远端仓库根目录执行：
 
@@ -178,7 +205,7 @@ make smoke SIM_ARGS='+UVM_TESTNAME=shm_unit_test +TRANS_NUM=0 +UVM_VERBOSITY=UVM
 
 若把 `TRANS_NUM` 改为非零，仍然只有接入真实 design 的运行结果才能作为 DUT 行为证据。
 
-### 8.5 TC 文件片段
+### 9.5 TC 文件片段
 
 ```text
 my_indexed_blk_case: shm_unit_test

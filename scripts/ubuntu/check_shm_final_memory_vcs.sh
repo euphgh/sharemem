@@ -34,7 +34,8 @@ mkdir -p -- "$build_dir"
     "$build_dir/simv" -l test.log
     if ! grep -Eq 'UVM_ERROR[[:space:]]*:[[:space:]]*0' test.log ||
        ! grep -Eq 'UVM_FATAL[[:space:]]*:[[:space:]]*0' test.log ||
-       ! grep -Fq '[SHM_FINAL_MEMORY_COMPARE_TEST] ORDER-SCB-001..005: PASS' test.log; then
+       ! grep -Fq '[SHM_FINAL_MEMORY_COMPARE_TEST] ORDER-SCB-001..005 and ORDER-COV exact/partial matrix: PASS' \
+           test.log; then
         printf '错误：最终 memory compare 组件测试未通过\n' >&2
         tail -n 100 -- test.log >&2
         exit 1

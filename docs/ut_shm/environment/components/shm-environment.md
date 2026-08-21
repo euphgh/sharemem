@@ -12,7 +12,7 @@ scoreboard，并把 tb top
 - 获取并校验 environment config、shmins/VLM business interface 和共享 cycle interface；
 - 创建 shmins 和统一 VLM 两个 agent；
 - 在完整 active 模式下创建 `shm_reference`、`shm_scoreboard` 和 transaction lifecycle
-  checker，以及第一批双 gid `shm_address_coverage`；
+  checker，以及 `shm_address_coverage`、`shm_ordered_access_coverage`；
 - 下发 agent config、business vif 和共享 `clk_vif`；
 - 建立 creq、raw ack、scoreboard completion、期望写、实际写和 MEM read service 的
   TLM 连接；
@@ -28,6 +28,7 @@ scoreboard，并把 tb top
 |`ut_shm/env/shm_environment.svh`|environment build/connect 实现|
 |`ut_shm/env/shm_environment_config.svh`|顶层环境、agent、timeout 和 drain 配置对象|
 |`ut_shm/env/shm_address_coverage.svh`|只读采样 reference 派生逻辑/物理地址和 M2V gid 关系|
+|`ut_shm/env/shm_ordered_access_coverage.svh`|只读识别同 thread 相邻请求的物理 byte overlap，并在最终 memory 收敛后采样顺序覆盖率|
 |`ut_shm/env/shm_transaction_lifecycle_checker.svh`|accepted creq、ack 与数据完成关联|
 |`ut_shm/env/shm_env_package.sv`|按依赖顺序 include agent、reference、scoreboard 和 environment|
 |`ut_shm/tb/shm_ut_connect.svh`|从 tb top 向 Config DB 发布 virtual interface|
@@ -60,8 +61,8 @@ Environment 按以下顺序建立依赖：
 4. 把统一 VLM vif 和 cycle source 写入 VLM config；
 5. 分别向两个 agent 设置 `cfg` 和需要的 vif；
 6. 创建两个 agent；
-7. 当 `shm_is_active==UVM_ACTIVE` 时创建 reference、scoreboard、lifecycle checker 和
-   address coverage，并向需要配置的组件下发 environment config。
+7. 当 `shm_is_active==UVM_ACTIVE` 时创建 reference、scoreboard、lifecycle checker、
+   address coverage 和 ordered-access coverage，并向需要配置的组件下发 environment config。
 
 缺少 config、子 config 或 virtual interface 都使用带有明确 ID 的 `UVM_FATAL`，避免
 环境在半连接状态继续运行。主要 ID 包括 `SHM_ENV_NO_CFG`、
@@ -79,6 +80,7 @@ Environment 按以下顺序建立依赖：
 |统一 VLM agent blocking transport port|scoreboard `mem_imp`|两端实例都存在且 MEM gid/match 有效|
 |reference expected-write analysis port|scoreboard reference analysis export|两端实例都存在|
 |reference expected-write analysis port|address coverage analysis export|两端实例都存在|
+|reference expected-write analysis port|ordered-access coverage analysis export|两端实例都存在|
 |scoreboard completion port|lifecycle completion imp|两端实例都存在|
 
 Reservation agent 不通过 environment TLM 与 scoreboard 相连。它直接读取 reservation
@@ -102,7 +104,8 @@ response。`wait_for_idle()`
 `compare_final_memory()` 只在 environment idle 时调用 scoreboard，把 reference 的
 `ref_banks` 与 actual `rtl_banks` 按 touched physical byte 比较。`check_final_memory()`
 提供带 testcase label 的报告入口，environment 的 `check_phase()` 还会无条件执行一次
-最终检查。它不建立第三份 expected memory，也不把 transient memory 差异当成错误。
+最终检查。该入口同时把收敛结果交给 ordered-access coverage，只有最终一致的 pending pair
+才进入 coverage。它不建立第三份 expected memory，也不把 transient memory 差异当成错误。
 
 当前只有初始 reset 启动门控，运行中 reset 的统一清理尚未实现，见 `ENV-001`。
 
@@ -148,5 +151,7 @@ elaboration、link 和 0-transaction UVM run，结果为 `UVM_CASE_PASS` 且 0 e
 - `ENV-002`：公开配置仍能表达当前不支持的 passive 组合。
 - 第一批 `shm_address_coverage` 已接入 reference fanout；正式 RTL coverage报告得到
   `address_cg=89.88%`、`m2v_gid_cg=91.67%`，仍需分析并补齐未命中bin/cross。
+- `shm_ordered_access_coverage` 已接入同一 reference fanout；四类顺序关系的 exact/partial、
+  gid 0/1 组件矩阵和完整空 design 集成已通过，正式 RTL 逐 bin 结果仍待归档。
 
 问题详情和验收方法见[验证实现状态](../../verification-status.md)。

@@ -6,8 +6,9 @@
 [验证实现状态](../ut_shm/verification-status.md)，规定同一 thread 的 M-read/M-write
 顺序、V-write 顺序、跨 transaction 地址安全检查及其验收方法。
 
-本计划优先增加能够在真实 RTL 上直接暴露顺序错误的定向 case。普通随机 sequence 的
-跨 transaction 防冲突属于低优先级扩展，不阻塞首批定向验证。
+四个最小顺序 case 已经通过真实 RTL。当前阶段在不改变顺序 contract 的前提下，扩展
+dtype、thread、gid、space、topology 和 partial-byte overlap，并建立可回溯的 functional
+coverage。普通随机 sequence 的跨 transaction 防冲突仍属于低优先级扩展。
 
 ## 1. 目标与范围
 
@@ -119,8 +120,35 @@ A.v_write_set intersect (B.m_read_set union B.m_write_set)
 |overlap|单 byte 完全重合|多 byte 完全/部分 overlap|
 |topology|contiguous|strided、indexed、VTRANS M-write|
 
-每个基础 test 独立注册到 TC，便于一个顺序关系失败时单独保存 waveform 和 coverage。新增
-`shm_ordered_access.lst` 聚合四个 test，首轮不直接加入 `shm.lst`。
+每个基础 test 独立注册到 TC，便于一个顺序关系失败时单独保存 waveform 和 coverage。
+`shm_ordered_access.lst` 首轮只聚合四个基础 test，P1 再加入九个扩展 alias；该列表不直接
+加入 `shm.lst`。
+
+### 3.3 P1 扩展矩阵
+
+P1 使用一个参数化 `shm_ordered_access_matrix_test` class，由 TC 中九个具名 alias 各运行一个
+cell。类型、overlap、dtype、topology、space、thread 和 WARP 配置都由必填 plusarg 传入；
+缺少字段、拼写错误或当前生成器不支持的组合必须在 stimulus 前 fatal。每次仿真只检查本
+cell 对应的 coverage counter，完整矩阵由 LST 结果和 merge 后 coverage 判断。
+
+每个 cell 的 setup 与 target pair 之间 drain，target pair 必须背靠背发布，target 完成后立即
+比较最终 memory。exact cell 使用至少两个 active element；strided WRP/BLK 使用 element
+1/2，保持 element 0 masked。
+
+|Cell|关系|DTYPE|thread/gid|space/topology|overlap|主要目标|
+|---|---|---|---|---|---|---|
+|`ORDER-EXT-EXACT-MRMW`|M-read → M-write|16|15 / 0|WRP / contiguous，wpid 3|exact|高 thread、低 gid、多 byte read-before-write|
+|`ORDER-EXT-EXACT-MWMR`|M-write → M-read|32|15 / 0|BLK / indexed，wpid 3、wpnum 4|exact|BLK group 与 indexed 多元素|
+|`ORDER-EXT-EXACT-MWMW`|M-write → M-write|16|15 / 0|WRP / strided，wpid 3|exact|strided element 1/2 最终覆盖|
+|`ORDER-EXT-EXACT-VWVW`|V-write → V-write|32|15 / 0|BLK / indexed，wpid 3、wpnum 4|exact|不同 M source、相同 V destination|
+|`ORDER-EXT-PARTIAL-MRMW`|M-read → M-write|32 → 16|15 / 1|LOC / contiguous，wpid 4|partial|后两 byte overlap，read 保留旧值|
+|`ORDER-EXT-PARTIAL-MWMR`|M-write → M-read|32 → 16|15 / 1|LOC / contiguous，wpid 4|partial|读取第一次写入的高两 byte|
+|`ORDER-EXT-PARTIAL-MWMW`|M-write → M-write|32 → 16|15 / 1|LOC / contiguous，wpid 4|partial|最终值由旧低两 byte 与新高两 byte组成|
+|`ORDER-EXT-PARTIAL-VWVW`|V-write → V-write|32 → 16|15 / 1|LOC / contiguous，wpid 4|partial|第二次写回只覆盖目的高两 byte|
+|`ORDER-EXT-VTRANS`|M-write → M-write|16|15 / 1|LOC / VTRANS → contiguous，wpid 4|partial|VTRANS 目标 byte 被后续普通 V2M 覆盖|
+
+九个 alias 与四个基础 case 合并后必须覆盖 thread 0/15、gid 0/1、wpid 3/4、DTYP8/16/32、
+LOC/WRP/BLK、contiguous/strided/indexed/VTRANS，以及四种顺序关系的 exact/partial overlap。
 
 ## 4. Directed batch 激励基础设施
 
@@ -269,6 +297,28 @@ utility 中。不得建立第三份 expected value memory。
 |`ORDER-MEM-005`|同一 byte 多次覆盖|返回截止周期前最后一次写值|
 |`ORDER-MEM-006`|同一 bank 连续 read|按请求顺序、固定 `RPORT_DLY` 返回|
 
+### 7.5 Ordered-access functional coverage
+
+`shm_ordered_access_coverage` 订阅 reference 已完成物理地址重建的 transaction。它只比较
+连续接受、同一 thread 的访问，并把命中的 pair 暂存到下一次 final-memory check：
+
+1. 从实际 M-read/M-write/V-write byte 集合识别四种顺序关系；
+2. 以两个访问集合是否完全相等区分 exact 和 partial overlap；
+3. 记录 first/second dtype、thread、overlap gid、space、topology 和 VTRANS；
+4. 只有 `ref_banks/rtl_banks` 最终比较通过后才把 pending pair 采入 coverage；
+5. final mismatch 是 coverage illegal bin，同时仍由环境报告数据错误；
+6. 每次 final check 清除 pair history，setup 和 target batch 不会被错误拼接。
+
+必需 cross 为：
+
+- order kind × exact/partial × converged；
+- order kind × gid 0/1 × converged；
+- order kind × thread 0/15 × converged。
+
+DTYPE、space、topology 和 VTRANS 采用独立 coverpoint，避免建立没有 closure 价值的大规模
+笛卡尔积。组件测试必须定向喂入四种 kind 的 exact/partial、gid 0/1，并确认每个 counter
+只增加一次；真实 RTL coverage 则由基础四项和 P1 矩阵共同关闭 required bins。
+
 ## 8. 普通随机 sequence 的后续保护
 
 普通 `m2v.tc` 和 `v2m.tc` 当前使用较大的 transaction delay，首批不修改
@@ -300,7 +350,7 @@ completion feedback。它可能比精确 outstanding 状态更保守，但不会
 |7|P0|`ut_shm/tests/shm_directed_base_test.svh`|增加 batch 构造、发送和 final-memory compare API|
 |8|P0|`ut_shm/tests/`|增加四个真实 RTL 顺序 test|
 |9|P0|test package、TC、独立 LST|登记 `shm_ordered_access.lst`，暂不加入主列表|
-|10|P1|coverage、testpoint、status 和 regression 文档|记录实际组件/RTL/coverage 证据|
+|10|P1|ordered coverage、扩展 test、testpoint、status 和 regression 文档|完成第 3.3 节矩阵并记录逐 bin 证据|
 |11|P2|`shmins_mst_unit_sequence.svh`|实现最近 `OTF_N` 笔的随机 sequence hazard 滑动窗口|
 
 必须先完成 `FFD_CYC` 和 final bank compare 的组件门禁，再把四个顺序 test 的通过结果作为
@@ -361,33 +411,47 @@ RTL 功能证据。空 design 只能证明编译、elaboration 和 package 集�
     - [x] 未增加第三份 expected value memory
     - [x] 实现 BANK/GID/BADDR/expected/actual mismatch 诊断
     - [x] `ORDER-SCB-001`～`005` 组件测试通过
-- [ ] P0：增加真实 RTL 定向 Case
-  - [ ] `ORDER-M-001`：M-read → M-write
+- [x] P0：增加真实 RTL 定向 Case
+  - [x] `ORDER-M-001`：M-read → M-write
     - [x] testcase、TC 和最终结果判定完成
     - [x] 空 design 编译通过
-    - [ ] 正式 design 运行通过
-  - [ ] `ORDER-M-002`：M-write → M-read
+    - [x] 正式 design 运行通过
+  - [x] `ORDER-M-002`：M-write → M-read
     - [x] testcase、TC 和最终结果判定完成
     - [x] 空 design 编译通过
-    - [ ] 正式 design 运行通过
-  - [ ] `ORDER-M-003`：M-write → M-write
+    - [x] 正式 design 运行通过
+  - [x] `ORDER-M-003`：M-write → M-write
     - [x] testcase、TC 和最终结果判定完成
     - [x] 空 design 编译通过
-    - [ ] 正式 design 运行通过
-  - [ ] `ORDER-V-001`：V-write → V-write
+    - [x] 正式 design 运行通过
+  - [x] `ORDER-V-001`：V-write → V-write
     - [x] testcase、TC 和最终结果判定完成
     - [x] 空 design 编译通过
-    - [ ] 正式 design 运行通过
-  - [ ] `shm_ordered_access.lst`
+    - [x] 正式 design 运行通过
+  - [x] `shm_ordered_access.lst`
     - [x] 四个基础 test 全部登记
-    - [ ] 正式 design 独立列表通过
-    - [ ] `shm.lst` 无新增回归
+    - [x] 正式 design 独立列表通过
+    - [x] `shm.lst` 无新增回归
 - [ ] P1：覆盖率与扩展矩阵
   - [ ] 增加顺序类型、overlap class、gid 和 final-result coverage
+    - [x] 实现 reference-observed pair classifier 和 pending sample
+    - [x] 实现 final-memory convergence gate
+    - [x] 增加 exact/partial 与 gid 0/1 的组件 counter 门禁
+    - [x] 远端组件测试通过
+    - [ ] 正式 RTL coverage required bins 命中
   - [ ] 扩展 `DTYP16/32` 和 partial byte overlap
+    - [x] testcase 与显式最终 byte 判定完成
+    - [x] 空 design 编译通过
+    - [ ] 正式 design 运行通过
   - [ ] 扩展 thread 15、gid 0/1 和 wpid 3/4
+    - [x] testcase 与 coverage counter 门禁完成
+    - [x] 空 design 编译通过
+    - [ ] 正式 design 运行通过
   - [ ] 扩展 WRP、BLK、strided、indexed 和 VTRANS M-write
-  - [ ] 更新 testpoints、verification status、regression 和 coverage 文档
+    - [x] testcase 与最终 memory 判定完成
+    - [x] 空 design 编译通过
+    - [ ] 正式 design 运行通过
+  - [x] 更新 testpoints、verification status、regression 和 coverage 文档
 - [ ] P2：普通随机 sequence 的跨 transaction 防冲突
   - [ ] 保存最近最多 `OTF_N` 笔 transaction 地址摘要
   - [ ] candidate 只与前 `OTF_N` 笔做双向 V-write/M-access 检查
@@ -406,6 +470,14 @@ RTL 功能证据。空 design 只能证明编译、elaboration 和 package 集�
 - `make .SHELLFLAGS=-ec smoke`：`TRANS_NUM=0` 空 design 路径通过，最终为
   `UVM_ERROR: 0`、`UVM_FATAL: 0`。
 
-以上结果不构成 `ORDER-M-001`～`003` 或 `ORDER-V-001` 的 RTL 功能证据。下一步应在正式
-design 上运行独立 `shm_ordered_access.lst`；四项全部通过后再运行原 `shm.lst`，并据实
-更新上方完成状态。
+2026-08-21 用户确认 `ORDER-M-001`～`003`、`ORDER-V-001`、独立
+`shm_ordered_access.lst` 和原 `shm.lst` 均已在正式 design 上通过。P0 顺序功能证据已经
+建立。
+
+同日完成 P1 非 DUT 门禁：`scripts/ubuntu/check_shm_final_memory_vcs.sh` 定向覆盖四种
+order kind 的 exact/partial、gid 0/1，结果为 `UVM_ERROR: 0`、`UVM_FATAL: 0`；根目录
+`make .SHELLFLAGS=-ec compile` 和 `make .SHELLFLAGS=-ec smoke` 均通过。下一步只把正式
+RTL 的九个扩展 cell 结果和 `ordered_access_cg` 逐 bin 报告作为 P1 功能证据。
+
+P1 matrix 随后拆为一个参数化 test class 和九个 TC alias；组件测试继续在一次仿真中覆盖
+全部 synthetic coverage cell。拆分后重新通过相同组件门禁和完整空 design compile/smoke。

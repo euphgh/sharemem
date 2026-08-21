@@ -12,6 +12,12 @@ waiver 判断验证是否收敛。逐功能点的目标 bin/cross 见
 - `shm_address_coverage`：逻辑/物理地址边界及 M2V read/write gid；
 - `vlm_reservation_coverage`：reservation admission、ownership 和 MEM match outcome。
 
+顺序扩展阶段新增第四类 collector：
+
+- `shm_ordered_access_coverage`：从 reference 实际物理 byte 集合识别四种同 thread 顺序关系，
+  覆盖 exact/partial、gid、thread、dtype、space、topology、VTRANS，并以最终 memory 收敛
+  作为采样门禁。
+
 2026-08-18 用户提供的正式 design coverage summary 共包含9个 covergroup：
 
 |Covergroup|Score|
@@ -28,8 +34,9 @@ waiver 判断验证是否收敛。逐功能点的目标 bin/cross 见
 
 这组结果关闭 thread-mask/VTRANS 直接关联的 coverage 目标，并建立其余领域的首个数字
 基线。非100% group仍必须分析未命中 bin/cross；报告中尚不存在的 ack、FFD_CYC、reset、
-scoreboard乱序等 coverage仍属于缺口。全局问题见 `COV-001`，reservation coverage扩展见
-`RSV-002`。
+scoreboard lifecycle 等 coverage仍属于缺口。新的 `ordered_access_cg` 已实现，四种顺序
+关系的 exact/partial 和 gid 0/1 组件采样门禁已通过，但尚无正式 design score；全局问题见
+`COV-001`，reservation coverage扩展见 `RSV-002`。
 
 ## 2. Functional coverage
 

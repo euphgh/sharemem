@@ -65,6 +65,37 @@ class shm_directed_base_test extends shm_base_test;
       byte unsigned data_byte);
 
   //----------------------------------------------------------------------------
+  // @brief Builds one deterministic single-element item for any normal topology.
+  //
+  // @param item_name UVM object instance name.
+  // @param rw V2M or M2V request direction.
+  // @param dtype Element byte width.
+  // @param itype Contiguous, strided, or indexed address topology.
+  // @param space Address-space mapping.
+  // @param wpid Absolute WARP selector or BLK group selector.
+  // @param wpnum Number of WARP entries encoded by SPACE_BLK.
+  // @param inv_size Interleave-size encoding.
+  // @param thread_idx Sole active thread.
+  // @param maddr Sole active element MADDR.
+  // @param requested_vaddr Exact M2V BADDR, or -1 for automatic generation.
+  // @param data_value Little-endian V2M element payload in the low 32 bits.
+  // @return Fully packed and validated production topology item.
+  //----------------------------------------------------------------------------
+  extern protected function shmins_sequence_item build_single_element_item(
+      string item_name,
+      creq_rw_e rw,
+      creq_dtype_e dtype,
+      creq_itype_e itype,
+      creq_space_e space,
+      int unsigned wpid,
+      int unsigned wpnum,
+      int unsigned inv_size,
+      int unsigned thread_idx,
+      longint unsigned maddr,
+      longint signed requested_vaddr,
+      logic [31:0] data_value);
+
+  //----------------------------------------------------------------------------
   // @brief Builds one legal byte transaction with retained inactive sentinels.
   //
   // The item is first generated with all threads active so every thread owns a
@@ -180,21 +211,63 @@ function shmins_contiguous_sequence_item shm_directed_base_test::build_single_by
     longint unsigned maddr,
     longint signed requested_vaddr,
     byte unsigned data_byte);
+  shmins_sequence_item base_item;
   shmins_contiguous_sequence_item item;
+
+  base_item = build_single_element_item(item_name, rw, DTYP_8, LDST_S, space, wpid, wpnum,
+                                        inv_size, thread_idx, maddr, requested_vaddr,
+                                        data_byte);
+  if (!$cast(item, base_item)) begin
+    `uvm_fatal("SHM_DIRECTED_BYTE_CAST", $sformatf("%s was not contiguous", item_name))
+  end
+  return item;
+endfunction : build_single_byte_item
+
+function shmins_sequence_item shm_directed_base_test::build_single_element_item(
+    string item_name,
+    creq_rw_e rw,
+    creq_dtype_e dtype,
+    creq_itype_e itype,
+    creq_space_e space,
+    int unsigned wpid,
+    int unsigned wpnum,
+    int unsigned inv_size,
+    int unsigned thread_idx,
+    longint unsigned maddr,
+    longint signed requested_vaddr,
+    logic [31:0] data_value);
+  shmins_sequence_item item;
+  shmins_contiguous_sequence_item contiguous_item;
+  int unsigned byte_width;
   int unsigned warp_base;
 
-  if (thread_idx >= THD_N || wpid >= WARP_N || maddr >= (longint'(1) << MADDR_W)) begin
-    `uvm_fatal("SHM_DIRECTED_ITEM_ARGUMENT",
-               $sformatf("thread=%0d wpid=%0d maddr=0x%0h", thread_idx, wpid, maddr))
+  if (thread_idx >= THD_N || wpid >= WARP_N || maddr >= (longint'(1) << MADDR_W) ||
+      !(itype inside {LDST_S, LDST_V, LDSTE_S, LDSTE_V})) begin
+    `uvm_fatal("SHM_DIRECTED_ELEMENT_ARGUMENT",
+               $sformatf("thread=%0d wpid=%0d maddr=0x%0h itype=%0d",
+                         thread_idx, wpid, maddr, itype))
+  end
+  if (rw == SHM_V2M && itype == LDSTE_S && space inside {SPACE_WRP, SPACE_BLK}) begin
+    `uvm_fatal("SHM_DIRECTED_ELEMENT_STRIDED",
+               "single element zero cannot be active for V2M strided WRP/BLK")
   end
 
-  item = shmins_contiguous_sequence_item::type_id::create(item_name);
+  case (itype)
+    LDST_S, LDST_V: item = shmins_contiguous_sequence_item::type_id::create(item_name);
+    LDSTE_S: item = shmins_strided_sequence_item::type_id::create(item_name);
+    LDSTE_V: item = shmins_indexed_sequence_item::type_id::create(item_name);
+    default: item = null;
+  endcase
+  if (item == null) begin
+    `uvm_fatal("SHM_DIRECTED_ELEMENT_CREATE", $sformatf("failed to create %s", item_name))
+  end
+
   item.creq_rw = rw;
-  item.creq_dtype = DTYP_8;
+  item.creq_dtype = dtype;
   item.creq_atype_w = ATYP_32;
   item.creq_atype_s = ATYP_U;
   item.creq_atype_g = GAUTO_1B;
-  item.creq_itype = LDST_S;
+  item.creq_itype = itype;
   item.creq_ack_en = 1'b1;
   item.creq_inv_size = inv_size;
   item.creq_space = space;
@@ -208,6 +281,7 @@ function shmins_contiguous_sequence_item shm_directed_base_test::build_single_by
   item.creq_base[MADDR_W-1:0] = maddr[MADDR_W-1:0];
   item.delay_cycle = 0;
   item.elem_cnt_max = item.data_elem_max();
+  byte_width = item.data_byte_w();
 
   foreach (item.creq_prio[index]) begin
     item.creq_prio[index] = '0;
@@ -216,18 +290,24 @@ function shmins_contiguous_sequence_item shm_directed_base_test::build_single_by
     item.creq_vmsk[index] = '0;
     item.creq_vdat[index] = '0;
   end
-  item.creq_len[thread_idx] = 1;
+  item.creq_len[thread_idx] = byte_width;
   item.elem_num[thread_idx] = 1;
   item.creq_vmsk[thread_idx][0] = 1'b1;
-  item.creq_vdat[thread_idx][7:0] = data_byte;
+  for (int unsigned byte_lane = 0; byte_lane < byte_width; byte_lane++) begin
+    item.creq_vdat[thread_idx][byte_lane] = data_value[byte_lane * 8 +: 8];
+  end
 
   foreach (item.elem_maddr[index, elem_idx]) begin
-    item.start_maddr[index] = 0;
     item.elem_maddr[index][elem_idx] = 0;
     item.offs_elem[index][elem_idx] = 0;
   end
-  item.start_maddr[thread_idx] = maddr;
   item.elem_maddr[thread_idx][0] = maddr;
+  if ($cast(contiguous_item, item)) begin
+    foreach (contiguous_item.start_maddr[index]) begin
+      contiguous_item.start_maddr[index] = 0;
+    end
+    contiguous_item.start_maddr[thread_idx] = maddr;
+  end
 
   if (!item.populate_element_addresses()) begin
     `uvm_fatal("SHM_DIRECTED_ADDRESS_BACKFILL",
@@ -253,7 +333,7 @@ function shmins_contiguous_sequence_item shm_directed_base_test::build_single_by
   item.validate_transaction();
   item.item_to_rtl();
   return item;
-endfunction : build_single_byte_item
+endfunction : build_single_element_item
 
 function shmins_contiguous_sequence_item shm_directed_base_test::build_masked_byte_item(
     string item_name,
