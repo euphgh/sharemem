@@ -30,6 +30,7 @@
 |任务|阅读入口|后续目标文档|
 |---|---|---|
 |理解 DUT|[DUT 概览](spec/dut-overview.md)|[地址模型](spec/address-model.md) → [creq/ack](spec/creq-ack-interface.md)或 [MEM/VLM](spec/mem-vlm-interface.md)|
+|设计上游请求调度|[creq 读写顺序契约](spec/creq-ordering-contract.md)|[creq/ack](spec/creq-ack-interface.md) → [地址模型](spec/address-model.md)|
 |修改地址映射或 reference|[地址模型](spec/address-model.md) → [数据流与数据模型](environment/data-flow-and-models.md)|[Reference](environment/components/shm-reference.md)|
 |修改 scoreboard|[总体架构](environment/architecture.md) → [数据流与数据模型](environment/data-flow-and-models.md)|[Scoreboard](environment/components/shm-scoreboard.md) → [Testpoint](plan/testpoints.md)|
 |修改 VLM memory agent|[MEM/VLM 接口](spec/mem-vlm-interface.md) → [总体架构](environment/architecture.md)|[VLM memory agent](environment/components/vlm-memory-agent.md)|

@@ -2,7 +2,8 @@
 
 本文从外部接口说明 `RpuShmTop` 做什么，以及 ut_shm 采用哪些参数和术语。地址公式
 放在[地址模型](address-model.md)，各端口的逐周期规则分别由
-[creq/ack 接口](creq-ack-interface.md)和 [MEM/VLM 接口](mem-vlm-interface.md)定义。
+[creq/ack 接口](creq-ack-interface.md)和 [MEM/VLM 接口](mem-vlm-interface.md)定义；上游
+请求之间的读写依赖由 [creq 读写顺序契约](creq-ordering-contract.md)定义。
 
 ## 1. 模块职责
 
@@ -157,3 +158,8 @@ creq release 和 ack 都没有规定最大延迟；测试环境可以配置超�
 但该超时不是 DUT 协议的一部分。MEM 重叠读写返回值由 `FFD_CYC` 定义：读请求在
 `T0` 被接受时，可见截止到 `T0+FFD_CYC-1` 接受的写；详细逐周期规则见
 [MEM/VLM 接口](mem-vlm-interface.md)。
+
+对上游而言，RTL 只保证同一 thread 的 M-read/M-write、M-write/M-write 和
+V-write/V-write 满足 creq 接收顺序的架构结果。V-write 与 M-read/M-write，以及不同
+thread 之间会影响结果的物理 byte overlap，必须由上游避免或等待前一笔 ack 后串行发布；
+完整矩阵见 [creq 读写顺序契约](creq-ordering-contract.md)。

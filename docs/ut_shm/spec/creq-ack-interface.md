@@ -2,8 +2,10 @@
 
 本文定义 creq 的接收、credit/release、字段编码以及 vack/mack 完成应答。地址生成和
 三种 address space 的映射公式见[地址模型](address-model.md)；MEM 与 reservation
-行为见 [MEM/VLM 接口](mem-vlm-interface.md)。所有信号均在 `clk` 上升沿采样，端口
-方向以 `RpuShmTop` 为参考。
+行为见 [MEM/VLM 接口](mem-vlm-interface.md)。上游调度还必须遵守
+[creq 读写顺序契约](creq-ordering-contract.md)，不能从 credit、release 或内部 MEM
+次序推导额外的事务完成关系。所有信号均在 `clk` 上升沿采样，端口方向以
+`RpuShmTop` 为参考。
 
 ## 1. 端口
 
@@ -116,7 +118,8 @@ reservation gid，并直接使用 `creq_vaddr` 作为写回 BADDR，不得再次
 
 合法 M2V 请求还必须保证全部有效 m-read byte 与全部有效 v-write byte 在物理
 `<bank_id, gid, BADDR>` 上没有 byte overlap。只处于同一个 32-Byte beat 而 byte 地址
-不同不构成冲突。DUT 对违反该输入条件的行为未定义。
+不同不构成冲突。跨 creq 的 V-write/M-access 关系以及同 thread 的顺序保证见
+[creq 读写顺序契约](creq-ordering-contract.md)。DUT 对违反这些输入条件的行为未定义。
 
 `creq_prio` 会影响 DUT 生成 MEM 请求的先后顺序，但不改变任何请求的地址、数据或
 最终结果。验证模型不应根据 priority 改变期望值。

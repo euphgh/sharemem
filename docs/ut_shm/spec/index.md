@@ -11,11 +11,13 @@ UVM 组件的内部实现；需要了解 monitor、driver 或 checker 时，从
 |[dut-overview.md](dut-overview.md)|DUT 职责、双 gid BANK 拓扑、参数和接口分组|双 gid contract 已发布|
 |[address-model.md](address-model.md)|MADDR、逻辑 bank/warp/laddr、物理 gid/BADDR 和两层映射|双 gid contract 已发布|
 |[creq-ack-interface.md](creq-ack-interface.md)|creq、M2V vaddr/hazard、credit/release、vack 和 mack|双 gid contract 已发布|
+|[creq-ordering-contract.md](creq-ordering-contract.md)|RTL 保证的同 thread 顺序与上游必须避免的跨访问依赖|已发布|
 |[mem-vlm-interface.md](mem-vlm-interface.md)|MEM、带 gid reservation/busy、端口冲突和 gid恢复|双 gid contract 已发布|
 
 ## 阅读顺序
 
 先读 [DUT 概览](dut-overview.md)，再用[地址模型](address-model.md)建立地址概念。
-输入请求相关工作继续读 [creq/ack 接口](creq-ack-interface.md)；MEM 数据端口或
-reservation 工作读 [MEM/VLM 接口](mem-vlm-interface.md)。两份接口文档都引用地址
-模型，不各自维护一套地址公式。
+输入请求相关工作继续读 [creq/ack 接口](creq-ack-interface.md)；上游请求调度还必须读
+[creq 读写顺序契约](creq-ordering-contract.md)。MEM 数据端口或 reservation 工作读
+[MEM/VLM 接口](mem-vlm-interface.md)。这些接口文档都引用地址模型，不各自维护一套
+地址公式。
