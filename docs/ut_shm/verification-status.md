@@ -35,6 +35,9 @@
 - 当前双 gid spec 是目标协议；物理 storage key 是 `<bank_id,gid,BADDR>`，MEM transaction
   的 gid 由唯一到期 reservation record 恢复。
 - SHMINS 使用生成式 post-randomize sequence item，支持 V2M、M2V、VTRANS 和三种 space。
+- Directed queue 已支持发送前的跨 transaction V-write/M-access byte hazard 检查；
+  scoreboard 已支持 drain 后的 touched-byte `ref_banks/rtl_banks` 最终比较。四个最小顺序
+  RTL case 已编译，正式 design 结果仍按 [TP-DATA-004](plan/testpoints.md) 跟踪。
 - 真实设计回归和覆盖率的最新结论不在本文重复，统一以
   [测试与回归](plan/testcases-and-regression.md) 和 [覆盖率与收敛](plan/coverage-and-closure.md) 为准。
 
@@ -86,7 +89,8 @@
 
 - 当前实现：已具备 request、mask、VTRANS、X/Z、地址、M2V gid、reservation admission 和 MEM match 等覆盖组；当前数据统一记录在
   [覆盖率与收敛](plan/coverage-and-closure.md)。
-- 剩余缺口：ACK、异常/边界时序、reset、scoreboard lifecycle，以及现有未满覆盖组的逐 bin 分析尚未闭环。
+- 剩余缺口：ACK、异常/边界时序、reset、scoreboard lifecycle、ordered-access 类型与最终
+  收敛结果，以及现有未满覆盖组的逐 bin 分析尚未闭环。
 - 影响：回归通过只能证明已执行用例未报错，不能证明测试计划中的关键交叉已命中。
 - 验收条件：为开放 testpoint 建立 coverage mapping，逐项关闭 uncovered bin，或记录可审查的 waiver。
 - 关联 testpoint：[测试点总表](plan/testpoints.md) 中所有尚未 closure 的条目。

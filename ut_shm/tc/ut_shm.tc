@@ -41,3 +41,4 @@ INCLUDE: m2v/ev_blk.tc
 INCLUDE: p0_directed.tc
 INCLUDE: shmins_mask_directed.tc
 INCLUDE: shmins_dontcare_x.tc
+INCLUDE: shm_ordered_access.tc

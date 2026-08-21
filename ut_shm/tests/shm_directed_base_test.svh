@@ -107,6 +107,26 @@ class shm_directed_base_test extends shm_base_test;
   //----------------------------------------------------------------------------
   extern protected task send_directed_item(shmins_sequence_item item);
 
+  //----------------------------------------------------------------------------
+  // @brief Atomically validates and sends one ordered directed-item batch.
+  //
+  // @param items Fully prepared items in required creq acceptance order.
+  // @param inter_item_delay_cycles Complete idle cycles between adjacent items.
+  //----------------------------------------------------------------------------
+  extern protected task send_directed_items(ref shmins_sequence_item items[$],
+                                            input int unsigned inter_item_delay_cycles = 0);
+
+  //----------------------------------------------------------------------------
+  // @brief Checks one final physical byte in both reference and actual memories.
+  //
+  // @param label Stable testcase diagnostic label.
+  // @param physical_addr BANK, gid, and BADDR to inspect.
+  // @param expected Expected architectural byte value.
+  //----------------------------------------------------------------------------
+  extern protected function void check_final_memory_byte(string label,
+                                                         shm_physical_addr_t physical_addr,
+                                                         byte unsigned expected);
+
   `uvm_component_utils(shm_directed_base_test)
 endclass : shm_directed_base_test
 
@@ -314,11 +334,38 @@ function void shm_directed_base_test::check_single_byte_mapping(
 endfunction : check_single_byte_mapping
 
 task shm_directed_base_test::send_directed_item(shmins_sequence_item item);
+  shmins_sequence_item items[$];
+
+  items.push_back(item);
+  send_directed_items(items);
+endtask : send_directed_item
+
+task shm_directed_base_test::send_directed_items(ref shmins_sequence_item items[$],
+                                                 input int unsigned inter_item_delay_cycles = 0);
   shm_directed_item_sequence item_sequence;
 
-  item_sequence = shm_directed_item_sequence::type_id::create({item.get_name(), "_sequence"});
-  item_sequence.set_request(item);
+  item_sequence = shm_directed_item_sequence::type_id::create("directed_batch_sequence");
+  item_sequence.set_requests(items, inter_item_delay_cycles);
   item_sequence.start(shm_env.shmins_mst_agt.sequencer);
-endtask : send_directed_item
+endtask : send_directed_items
+
+function void shm_directed_base_test::check_final_memory_byte(string label,
+                                                              shm_physical_addr_t physical_addr,
+                                                              byte unsigned expected);
+  byte unsigned reference_value;
+  byte unsigned actual_value;
+
+  reference_value = shm_env.shm_ref.ref_banks[physical_addr.bank_id][physical_addr.gid].read(
+      physical_addr.baddr);
+  actual_value = shm_env.shm_scb.rtl_banks[physical_addr.bank_id][physical_addr.gid].read(
+      physical_addr.baddr);
+  if (reference_value != expected || actual_value != expected) begin
+    `uvm_fatal("SHM_DIRECTED_FINAL_BYTE",
+               $sformatf({"%s BANK=%0d GID=%0d BADDR=0x%0h expected=0x%02x ",
+                          "reference=0x%02x actual=0x%02x"},
+                         label, physical_addr.bank_id, physical_addr.gid,
+                         physical_addr.baddr, expected, reference_value, actual_value))
+  end
+endfunction : check_final_memory_byte
 
 `endif // INC_SHM_DIRECTED_BASE_TEST_SVH

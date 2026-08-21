@@ -15,6 +15,7 @@
 |`rtl_wrvlm_analysis_fifo`|actual export 后端|解耦实际写比较|
 |`completion_analysis_port`|transaction lifecycle checker|发布每笔 reference 的 data completion 分类和 cycle|
 |`rtl_banks[BANK_N][GID_N]`|scoreboard 所有|保存 DUT 已兑现 write 的实际 memory model|
+|`touched_waddrs`|reference byte map|保存本 epoch 被 reference 写过的物理 byte key，不复制 expected data|
 
 核心匹配状态为：
 
@@ -107,7 +108,7 @@ expected/matched/expired/unresolved byte 数。两个 timeout 紧接着按 BANK/
 `T0+FFD_CYC-1` 周期 write 已提交后调用 read transport，并在 `T0+RPORT_DLY` 返回数据。
 当前支持 `FFD_CYC>=1`；`FFD_CYC=0` 仍归入 `VMEM-001`。
 
-## 7. `check_phase`
+## 7. 最终 memory 比较与 `check_phase`
 
 测试结束时 scoreboard 检查：
 
@@ -117,6 +118,17 @@ expected/matched/expired/unresolved byte 数。两个 timeout 紧接着按 BANK/
 
 `wmap_expired` 不要求为空，因为被覆盖的旧值允许从未实际出现。`ref_record_q` 的中间
 诊断状态也不能替代 `wmap_final` 的最终一致性检查。
+
+环境在稳定 idle 后调用 `shm_scoreboard.compare_final_memory()`，逐项遍历
+`touched_waddrs` 并直接比较 reference 所有的 `ref_banks` 与 scoreboard 所有的
+`rtl_banks`。该集合只保存 `<bank,gid,BADDR>`，expected byte 始终在比较时从
+`ref_banks` 读取，因此没有建立第三份 expected memory。Mismatch 逐 byte 打印 BANK、
+GID、BADDR、reference 和 actual。
+
+`shm_environment.check_phase()` 总会执行一次该比较；定向 test 也可在
+`wait_for_idle()` 后调用 `check_final_memory()` 提前得到同一诊断。若 environment 尚未
+idle，显式入口先打印 pending state，不把瞬态内容误判为最终 memory。当前比较范围是
+本仿真 epoch 中 reference 实际触及的 byte，未触及且保持初始化值的地址不遍历。
 
 ## 8. MEM beat 地址检查边界
 
@@ -151,10 +163,12 @@ byte 命中 `wmap_final` 或仍合法的 `wmap_expired`。因此普通 V2M 的�
 |`ut_shm/env/vlm2aa.svh`|实际 MEM transaction 到 byte map 的转换|
 |`ut_shm/env/shm_physical_map_util.svh`|把 flattened wmap/wmmap 格式化为 BANK/GID/BADDR 层次|
 |`ut_shm/util/sv-collection/`|set、associative array 和 queue 的集合运算工具|
+|`examples/shm_reference_compile/final_memory_compare_tb.sv`|最终 memory 正反例组件矩阵|
 
-`ut_shm/tests/shm_unit_test.svh` 提供完整数据路径集成测试。当前没有针对交叠 creq 乱序
-兑现、只出现旧值而没有最终值、未知实际地址、completion 分类或 timeout 配置的
-独立 scoreboard 测试；新增算法时应先用小规模 byte map 定向场景固定这些边界。
+`ut_shm/tests/shm_unit_test.svh` 提供完整数据路径集成测试。最终 memory compare 已由
+`ORDER-SCB-001`～`005` 固定单/多 byte、反序最终值和双 gid 边界；交叠 creq 的正式
+RTL 顺序结果由独立 `shm_ordered_access.lst` 验证。未知实际地址、completion 分类和
+timeout 配置仍缺独立 scoreboard 测试。
 
 ## 11. 开发 contract
 

@@ -16,7 +16,7 @@ scoreboard，并把 tb top
 - 下发 agent config、business vif 和共享 `clk_vif`；
 - 建立 creq、raw ack、scoreboard completion、期望写、实际写和 MEM read service 的
   TLM 连接；
-- 为 testcase 提供 clock-based `is_idle()` 和 `wait_for_idle()`。
+- 为 testcase 提供 clock-based `is_idle()`、`wait_for_idle()` 和最终 memory compare 入口。
 
 它不生成 creq、不实现地址映射、不维护 memory 内容，也不执行 reservation 或数据
 检查。这些行为分别属于 sequence/agent、reference、scoreboard 和 reservation agent。
@@ -99,6 +99,11 @@ response。`wait_for_idle()`
 
 `shm_unit_test` 已用 `wait_for_idle()` 替代固定 `#200ns` test tail。
 
+`compare_final_memory()` 只在 environment idle 时调用 scoreboard，把 reference 的
+`ref_banks` 与 actual `rtl_banks` 按 touched physical byte 比较。`check_final_memory()`
+提供带 testcase label 的报告入口，environment 的 `check_phase()` 还会无条件执行一次
+最终检查。它不建立第三份 expected memory，也不把 transient memory 差异当成错误。
+
 当前只有初始 reset 启动门控，运行中 reset 的统一清理尚未实现，见 `ENV-001`。
 
 ## 7. 调试观察点
@@ -119,9 +124,10 @@ response。`wait_for_idle()`
 针对 Config DB 缺失、unsupported passive 组合或运行中 reset 清理的 environment 定向
 测试；这些场景分别由 `ENV-002` 和 `ENV-001` 的验收项追踪。
 
-2026-08-14 在远端执行根目录 `make smoke`，空 design 完成 parse、elaboration、link 和
-0-transaction UVM run，结果为 `UVM_CASE_PASS` 且 0 error/fatal。该结果只证明新增 coverage
-和定向 sequence 的 package/include/TLM 连接正确，不作为 DUT 行为证据。
+2026-08-20 在远端执行根目录 `make .SHELLFLAGS=-ec smoke`，空 design 完成 parse、
+elaboration、link 和 0-transaction UVM run，结果为 `UVM_CASE_PASS` 且 0 error/fatal。
+该结果覆盖最终 memory `check_phase` 的空事务路径，只证明 package/include/TLM 连接
+正确，不作为 DUT 行为证据。
 
 ## 9. 开发 contract
 

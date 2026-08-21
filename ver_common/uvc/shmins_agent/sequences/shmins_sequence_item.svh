@@ -58,6 +58,17 @@ class shmins_sequence_item extends uvm_sequence_item;
     shm_physical_addr_t physical_addr;
   } shmins_address_result_t;
 
+  // One interpreted byte access retained for cross-transaction diagnostics.
+  typedef struct {
+    int unsigned        thread_idx;
+    int unsigned        elem_idx;
+    int unsigned        byte_lane;
+    shm_physical_addr_t physical_addr;
+  } shmins_byte_access_t;
+
+  // Physical-byte key to one representative interpreted access.
+  typedef shmins_byte_access_t shmins_byte_access_map_t[longint unsigned];
+
   // Solver-generated request control fields.
   rand creq_rw_e      creq_rw       = SHM_V2M;
   rand creq_dtype_e   creq_dtype    = DTYP_32;
@@ -340,6 +351,46 @@ class shmins_sequence_item extends uvm_sequence_item;
   // @return Composite key containing BANK, gid, and BADDR.
   //----------------------------------------------------------------------------
   extern function longint unsigned make_physical_byte_key(shm_physical_addr_t physical_addr);
+
+  //----------------------------------------------------------------------------
+  // @brief Collects every active M-side read or write byte in this transaction.
+  //
+  // @param accesses Replaced with physical-byte-keyed M-side accesses.
+  // @return Number of unique physical bytes collected.
+  //----------------------------------------------------------------------------
+  extern function int unsigned collect_m_access_bytes(ref shmins_byte_access_map_t accesses);
+
+  //----------------------------------------------------------------------------
+  // @brief Collects every active M2V V-side writeback byte in this transaction.
+  //
+  // @param accesses Replaced with physical-byte-keyed V-side write accesses.
+  // @return Number of unique physical bytes collected, or zero for V2M.
+  //----------------------------------------------------------------------------
+  extern function int unsigned collect_v_write_bytes(ref shmins_byte_access_map_t accesses);
+
+  //----------------------------------------------------------------------------
+  // @brief Counts byte overlap whose cross-transaction order is unspecified.
+  //
+  // @param other Transaction paired with this transaction.
+  // @return Number of unique bytes in either V-write/M-access intersection.
+  //----------------------------------------------------------------------------
+  extern function int unsigned unordered_cross_transaction_overlap_count(shmins_sequence_item other);
+
+  //----------------------------------------------------------------------------
+  // @brief Reports whether either V-write/M-access intersection is non-empty.
+  //
+  // @param other Transaction paired with this transaction.
+  // @return 1 when the pair is unsafe to issue concurrently.
+  //----------------------------------------------------------------------------
+  extern function bit has_unordered_cross_transaction_overlap(shmins_sequence_item other);
+
+  //----------------------------------------------------------------------------
+  // @brief Formats every unordered V-write/M-access overlap in one item pair.
+  //
+  // @param other Transaction paired with this transaction.
+  // @return Multi-line direction, thread, BANK, gid, and BADDR diagnostics.
+  //----------------------------------------------------------------------------
+  extern function string cross_transaction_overlap_sprint(shmins_sequence_item other);
 
   //----------------------------------------------------------------------------
   // @brief Backfills logical and physical address arrays from generated MADDRs.
@@ -841,6 +892,145 @@ endfunction : legal_space_maddr_check
 function longint unsigned shmins_sequence_item::make_physical_byte_key(shm_physical_addr_t physical_addr);
   return shm_util_package::physical_byte_key(physical_addr);
 endfunction : make_physical_byte_key
+
+function int unsigned shmins_sequence_item::collect_m_access_bytes(ref shmins_byte_access_map_t accesses);
+  accesses.delete();
+  for (int thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
+    for (int elem_idx = 0; elem_idx < thread_elem_cnt(thread_idx) && elem_idx < ELEM_MAX_N; elem_idx++) begin
+      if (!is_active_element(thread_idx, elem_idx)) begin
+        continue;
+      end
+      for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
+        shmins_byte_access_t access;
+        longint unsigned key;
+
+        access.thread_idx = thread_idx;
+        access.elem_idx = elem_idx;
+        access.byte_lane = byte_lane;
+        access.physical_addr = elem_physical_addr[thread_idx][elem_idx];
+        access.physical_addr.baddr += shm_baddr_t'(byte_lane);
+        key = make_physical_byte_key(access.physical_addr);
+        if (!accesses.exists(key)) begin
+          accesses[key] = access;
+        end
+      end
+    end
+  end
+  return accesses.size();
+endfunction : collect_m_access_bytes
+
+function int unsigned shmins_sequence_item::collect_v_write_bytes(ref shmins_byte_access_map_t accesses);
+  accesses.delete();
+  if (creq_rw != SHM_M2V) begin
+    return 0;
+  end
+
+  for (int thread_idx = 0; thread_idx < THD_N; thread_idx++) begin
+    for (int elem_idx = 0; elem_idx < thread_elem_cnt(thread_idx) && elem_idx < ELEM_MAX_N; elem_idx++) begin
+      if (!is_active_element(thread_idx, elem_idx)) begin
+        continue;
+      end
+      for (int byte_lane = 0; byte_lane < data_byte_w(); byte_lane++) begin
+        shmins_byte_access_t access;
+        longint unsigned key;
+
+        access.thread_idx = thread_idx;
+        access.elem_idx = elem_idx;
+        access.byte_lane = byte_lane;
+        access.physical_addr.bank_id = shm_bank_id_t'(thread_idx);
+        access.physical_addr.gid = shm_gid_t'(int'(creq_wpid) / WARP_PER_GID);
+        access.physical_addr.baddr =
+            shm_baddr_t'(int'(creq_vaddr) + elem_idx * data_byte_w() + byte_lane);
+        key = make_physical_byte_key(access.physical_addr);
+        if (!accesses.exists(key)) begin
+          accesses[key] = access;
+        end
+      end
+    end
+  end
+  return accesses.size();
+endfunction : collect_v_write_bytes
+
+function int unsigned shmins_sequence_item::unordered_cross_transaction_overlap_count(
+    shmins_sequence_item other);
+  shmins_byte_access_map_t this_m_accesses;
+  shmins_byte_access_map_t this_v_writes;
+  shmins_byte_access_map_t other_m_accesses;
+  shmins_byte_access_map_t other_v_writes;
+  bit overlap_bytes[longint unsigned];
+
+  if (other == null) begin
+    return 0;
+  end
+  void'(collect_m_access_bytes(this_m_accesses));
+  void'(collect_v_write_bytes(this_v_writes));
+  void'(other.collect_m_access_bytes(other_m_accesses));
+  void'(other.collect_v_write_bytes(other_v_writes));
+  foreach (this_v_writes[key]) begin
+    if (other_m_accesses.exists(key)) begin
+      overlap_bytes[key] = 1'b1;
+    end
+  end
+  foreach (this_m_accesses[key]) begin
+    if (other_v_writes.exists(key)) begin
+      overlap_bytes[key] = 1'b1;
+    end
+  end
+  return overlap_bytes.size();
+endfunction : unordered_cross_transaction_overlap_count
+
+function bit shmins_sequence_item::has_unordered_cross_transaction_overlap(shmins_sequence_item other);
+  return unordered_cross_transaction_overlap_count(other) != 0;
+endfunction : has_unordered_cross_transaction_overlap
+
+function string shmins_sequence_item::cross_transaction_overlap_sprint(shmins_sequence_item other);
+  shmins_byte_access_map_t this_m_accesses;
+  shmins_byte_access_map_t this_v_writes;
+  shmins_byte_access_map_t other_m_accesses;
+  shmins_byte_access_map_t other_v_writes;
+  string result;
+
+  if (other == null) begin
+    return "other transaction is null\n";
+  end
+  void'(collect_m_access_bytes(this_m_accesses));
+  void'(collect_v_write_bytes(this_v_writes));
+  void'(other.collect_m_access_bytes(other_m_accesses));
+  void'(other.collect_v_write_bytes(other_v_writes));
+
+  foreach (this_v_writes[key]) begin
+    if (other_m_accesses.exists(key)) begin
+      shmins_byte_access_t lhs = this_v_writes[key];
+      shmins_byte_access_t rhs = other_m_accesses[key];
+      result = {result,
+                $sformatf({"this(%s).V-write thread=%0d elem=%0d lane=%0d intersects ",
+                           "other(%s).M-access thread=%0d elem=%0d lane=%0d at ",
+                           "BANK=%0d GID=%0d BADDR=0x%0h\n"},
+                          creq_rw.name(), lhs.thread_idx, lhs.elem_idx, lhs.byte_lane,
+                          other.creq_rw.name(), rhs.thread_idx, rhs.elem_idx, rhs.byte_lane,
+                          lhs.physical_addr.bank_id, lhs.physical_addr.gid,
+                          lhs.physical_addr.baddr)};
+    end
+  end
+  foreach (this_m_accesses[key]) begin
+    if (other_v_writes.exists(key)) begin
+      shmins_byte_access_t lhs = this_m_accesses[key];
+      shmins_byte_access_t rhs = other_v_writes[key];
+      result = {result,
+                $sformatf({"this(%s).M-access thread=%0d elem=%0d lane=%0d intersects ",
+                           "other(%s).V-write thread=%0d elem=%0d lane=%0d at ",
+                           "BANK=%0d GID=%0d BADDR=0x%0h\n"},
+                          creq_rw.name(), lhs.thread_idx, lhs.elem_idx, lhs.byte_lane,
+                          other.creq_rw.name(), rhs.thread_idx, rhs.elem_idx, rhs.byte_lane,
+                          lhs.physical_addr.bank_id, lhs.physical_addr.gid,
+                          lhs.physical_addr.baddr)};
+    end
+  end
+  if (result == "") begin
+    result = "no unordered V-write/M-access byte overlap\n";
+  end
+  return result;
+endfunction : cross_transaction_overlap_sprint
 
 function bit shmins_sequence_item::populate_element_addresses();
   foreach (elem_logical_addr[thread_idx, elem_idx]) begin

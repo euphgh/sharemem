@@ -17,6 +17,7 @@ usage() {
   mask-monitor 编译并运行 thread-mask monitor/XZ 组件测试
   dontcare-x 编译并运行 don’t-care X utility 精确 slice 组件测试
   dontcare-driver 编译并运行 don’t-care X driver/monitor 四态保真测试
+  ordered-batch 编译并运行跨事务 hazard 与 directed batch 组件测试
   all      依次执行全部 SHMINS 组件目标
   clean    删除本 example 的 build 目录
 
@@ -39,7 +40,7 @@ case "$target" in
         usage
         exit 0
         ;;
-    compile | copy | lifecycle | dual-gid-address | mask-monitor | dontcare-x | dontcare-driver | all | clean)
+    compile | copy | lifecycle | dual-gid-address | mask-monitor | dontcare-x | dontcare-driver | ordered-batch | all | clean)
         ;;
     *)
         printf '错误：未知目标：%s\n' "$target" >&2
@@ -324,6 +325,38 @@ run_dontcare_driver_test() {
     )
 }
 
+run_ordered_batch_test() {
+    local simv="$mask_monitor_dir/build/ordered_batch_simv"
+    local ordered_tb="$mask_monitor_dir/ordered_batch_tb.sv"
+
+    if ! command -v -- "$vcs_bin" >/dev/null 2>&1; then
+        printf '错误：找不到 VCS 可执行文件：%s\n' "$vcs_bin" >&2
+        exit 2
+    fi
+    if [[ ! -f "$collection_package" || ! -f "$utility_package" ||
+          ! -f "$clock_interface" || ! -f "$shmins_interface" ||
+          ! -f "$sequence_item_package" || ! -f "$ordered_tb" ]]; then
+        printf '错误：缺少 SHMINS ordered batch 测试输入\n' >&2
+        exit 2
+    fi
+
+    mkdir -p -- "$mask_monitor_dir/build"
+    printf 'Ubuntu VCS：编译并运行 SHMINS ordered batch 组件测试\n'
+    (
+        cd -- "$mask_monitor_dir/build"
+        "$vcs_bin" -full64 -sverilog -ntb_opts "$uvm_version" -timescale=1ns/1ps \
+            "+incdir+$collection_dir" "+incdir+$repo_root/ut_shm/util" \
+            "+incdir+$sequence_dir" "+incdir+$shmins_agent_dir" \
+            "+incdir+$memory_agent_dir" "+incdir+$environment_dir" \
+            "$collection_package" "$utility_package" "$clock_interface" \
+            "$shmins_interface" "$sequence_item_package" "$ordered_tb" "$@" \
+            -top shmins_ordered_batch_tb -o "$simv" -l ordered_batch_compile.log
+        "$simv" -l ordered_batch_test.log
+        check_uvm_test_log ordered_batch_test.log \
+            '[SHMINS_ORDERED_BATCH_TEST] ORDER-HAZ-001..010 and ORDER-SEQ-001..004: PASS'
+    )
+}
+
 case "$target" in
     compile)
         compile_empty_design "$@"
@@ -346,6 +379,9 @@ case "$target" in
     dontcare-driver)
         run_dontcare_driver_test "$@"
         ;;
+    ordered-batch)
+        run_ordered_batch_test "$@"
+        ;;
     all)
         compile_empty_design "$@"
         run_copy_test "$@"
@@ -354,6 +390,7 @@ case "$target" in
         run_mask_monitor_test "$@"
         run_dontcare_x_test "$@"
         run_dontcare_driver_test "$@"
+        run_ordered_batch_test "$@"
         ;;
     clean)
         rm -rf -- "$build_dir"

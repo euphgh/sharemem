@@ -1,0 +1,4 @@
+shm_m_read_then_write_order_test   : RUN=1
+shm_m_write_then_read_order_test   : RUN=1
+shm_m_write_then_write_order_test  : RUN=1
+shm_v_write_then_write_order_test  : RUN=1

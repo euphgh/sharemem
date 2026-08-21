@@ -33,6 +33,7 @@ Agent 从 Config DB 获取 `shmins_mst_agent_config` 和 `shmins_vif`。默认�
 |`ver_common/uvc/shmins_agent/sequences/shmins_indexed_sequence_item.svh`|LDSTE_V 地址生成|
 |`ver_common/uvc/shmins_agent/sequences/shmins_vtrans_sequence_item.svh`|继承 contiguous 的 VTRANS 请求|
 |`ver_common/uvc/shmins_agent/sequences/shmins_dontcare_x_util.svh`|在已验证 item 上注入合法 don’t-care X/Z|
+|`ver_common/uvc/shmins_agent/sequences/shm_directed_item_sequence.svh`|原子校验并顺序发送 directed item queue|
 
 ## 3. Transaction 与 `creq_typ`
 
@@ -61,6 +62,12 @@ SPACE_BLK 的 MADDR 是当前 WARP group 内的相对编码，范围为
 `[0, C*BANK_N*creq_wpnum)`。公共第一层 helper 必须用 `creq_wpid/creq_wpnum` 生成 group
 base，再加 MADDR 中的 `warp_offs`；不得从 MADDR 高位恢复 `warp_group`。
 
+公共 transaction 还能把 active element 按 dtype 展开为 physical byte set：M 访问由
+`elem_physical_addr` 产生，普通 M2V 的 V-write 由 thread、wpid/gid、`creq_vaddr` 和
+element index 产生。Directed batch 用这两类集合禁止跨 transaction 的 V-write/M-access
+overlap，同时允许需要验证的 M/M 和 V-write/V-write overlap。比较 key 始终包含完整
+`<bank_id,gid,BADDR>`。
+
 ## 4. Sequence 配置
 
 `shmins_mst_unit_sequence` 支持以下大写 plusarg：
@@ -86,6 +93,11 @@ allowed-value domain；出现的字段通过 `set_fix_*()` 缩小为 singleton�
 VTRANS 使用独立 dtype/atype/itype domain，并由 `shmins_vtrans_sequence_item` 强制 V2M、
 SPACE_LOC、16 个 element、全 element mask 和全 thread mask。Normal 配置不覆盖 VTRANS
 配置，两类请求可以在同一个 sequence 中混合生成。
+
+`shm_directed_item_sequence` 接受 testcase 已完整构造的 item queue，在发送前一次性检查
+所有 item 和所有 pair；任何非法 pair 都不会发布部分 batch。合法 queue 被 clone 后按
+原顺序发送，既不重新 randomize 也不修改 caller payload。统一 delay 表示相邻 accepted
+creq 之间完整的空闲周期数；原 `set_request()` 单 item API 保留。
 
 ## 5. Driver 和 credit
 
@@ -170,6 +182,11 @@ copy/VTRANS 和 don’t-care utility 精确 slice 测试位于
 生成 element-0 mask，V2M/M2V 共 24 个叶子 case 已随扩容后的 109-case 主列表
 通过真实 DUT regression，`SHMINS-007` 已关闭。其余缺口由验证实现状态中的
 开放项追踪。
+
+跨 transaction hazard 与 queue transport 的 `ORDER-HAZ-001`～`010`、
+`ORDER-SEQ-001`～`004` 位于 `examples/shmins_monitor_compile/ordered_batch_tb.sv`，已于
+2026-08-20 在远端 VCS 通过。真实顺序行为由 `ut_shm/tests/` 下四个 ordered-access test
+和独立 `shm_ordered_access.lst` 验收，组件结果不能替代 DUT 功能证据。
 
 ## 10. 开发 contract
 

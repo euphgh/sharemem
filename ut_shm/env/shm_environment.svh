@@ -28,6 +28,7 @@ class shm_environment extends uvm_env;
     extern function new(string name = "shm_environment", uvm_component parent = null);
     extern virtual function void build_phase(uvm_phase phase);
     extern virtual function void connect_phase(uvm_phase phase);
+    extern virtual function void check_phase(uvm_phase phase);
 
     //-------------------------------------------------------------------------
     // @brief Returns whether transaction data, ack, and reservation state is idle.
@@ -51,6 +52,21 @@ class shm_environment extends uvm_env;
     // @return Multi-line scoreboard and lifecycle diagnostic state.
     //-------------------------------------------------------------------------
     extern function string pending_state_sprint();
+
+    //-------------------------------------------------------------------------
+    // @brief Compares reference and actual memory after the environment drains.
+    //
+    // @param diagnostic Empty on success; otherwise contains idle or byte mismatch details.
+    // @return 1 when the environment is idle and every touched byte matches.
+    //-------------------------------------------------------------------------
+    extern function bit compare_final_memory(output string diagnostic);
+
+    //-------------------------------------------------------------------------
+    // @brief Reports a final-memory mismatch with an optional caller label.
+    //
+    // @param caller_label Test or phase label prepended to mismatch diagnostics.
+    //-------------------------------------------------------------------------
+    extern function void check_final_memory(string caller_label = "environment check_phase");
 
     `uvm_component_utils_begin(shm_environment)
         `uvm_field_int(shm_env_id, UVM_ALL_ON)
@@ -210,5 +226,31 @@ function string shm_environment::pending_state_sprint();
     end
     return result;
 endfunction : pending_state_sprint
+
+function bit shm_environment::compare_final_memory(output string diagnostic);
+    diagnostic = "";
+    if (shm_ref == null || shm_scb == null) begin
+        diagnostic = "reference or scoreboard is not present";
+        return 1'b0;
+    end
+    if (!is_idle()) begin
+        diagnostic = {"environment is not idle:\n", pending_state_sprint()};
+        return 1'b0;
+    end
+    return shm_scb.compare_final_memory(shm_ref.ref_banks, diagnostic);
+endfunction : compare_final_memory
+
+function void shm_environment::check_final_memory(string caller_label = "environment check_phase");
+    string diagnostic;
+
+    if (!compare_final_memory(diagnostic)) begin
+        `uvm_error("SHM_FINAL_MEMORY_MISMATCH", {caller_label, ":\n", diagnostic})
+    end
+endfunction : check_final_memory
+
+function void shm_environment::check_phase(uvm_phase phase);
+    super.check_phase(phase);
+    check_final_memory();
+endfunction : check_phase
 
 `endif // INC_SHM_ENVIRONMENT_SVH

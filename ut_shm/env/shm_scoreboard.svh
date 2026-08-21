@@ -23,6 +23,7 @@ class shm_scoreboard extends uvm_scoreboard;
     typedef vlm2aa::baddr_t baddr_t;
 
     typedef set_array_util#(baddr_t, PHYSICAL_BANK_N) waddr_util;
+    typedef waddr_util::elem_util waddr_elem_util;
     typedef waddr_util::set_t waddr_set_t[PHYSICAL_BANK_N];
     // Cycle map type.
     typedef aa_array_util#(PHYSICAL_BANK_N, baddr_t, shm_cycle_t) tmap_util;
@@ -38,6 +39,9 @@ class shm_scoreboard extends uvm_scoreboard;
 
     wmap_t wmap_final;
     wmmap_t wmap_expired;
+
+    // Physical bytes written by at least one reference transaction in this epoch.
+    waddr_set_t touched_waddrs;
 
     class ref_record_t;
         shm_wtrans_item tr;
@@ -146,6 +150,16 @@ class shm_scoreboard extends uvm_scoreboard;
     // @return Multi-line reference, FIFO, cycle, and expected-map summary.
     //-------------------------------------------------------------------------
     extern function string pending_state_sprint();
+
+    //-------------------------------------------------------------------------
+    // @brief Compares every touched byte in reference and actual memory.
+    //
+    // @param reference_banks Reference-owned architectural memory handles.
+    // @param diagnostic Empty on success; otherwise lists every mismatched byte.
+    // @return 1 when all touched BANK/GID/BADDR bytes have equal values.
+    //-------------------------------------------------------------------------
+    extern function bit compare_final_memory(svt_mem reference_banks[BANK_N][GID_N],
+                                             output string diagnostic);
 
     //-------------------------------------------------------------------------
     // @brief Formats each pending record and expands its unresolved byte map.
@@ -270,6 +284,9 @@ task shm_scoreboard::collect_ref();
     forever begin
         shm_wtrans_item tr;
         ref_wrvlm_analysis_fifo.get(tr);
+        foreach (tr.wmap[physical_bank, baddr]) begin
+            void'(waddr_elem_util::insert(touched_waddrs[physical_bank], baddr));
+        end
         compare_with_old_trans(tr);
         begin
             ref_record_t new_ref_record = new(tr);
@@ -279,6 +296,35 @@ task shm_scoreboard::collect_ref();
         publish_completion_events();
     end
 endtask
+
+function bit shm_scoreboard::compare_final_memory(svt_mem reference_banks[BANK_N][GID_N],
+                                                  output string diagnostic);
+    int unsigned mismatch_count = 0;
+
+    diagnostic = "";
+    for (int unsigned physical_bank = 0; physical_bank < PHYSICAL_BANK_N; physical_bank++) begin
+        int unsigned bank = physical_bank / GID_N;
+        int unsigned gid = physical_bank % GID_N;
+
+        foreach (touched_waddrs[physical_bank][index]) begin
+            baddr_t baddr = touched_waddrs[physical_bank][index];
+            byte unsigned reference_value = reference_banks[bank][gid].read(baddr);
+            byte unsigned actual_value = rtl_banks[bank][gid].read(baddr);
+
+            if (reference_value != actual_value) begin
+                mismatch_count++;
+                diagnostic = {diagnostic,
+                              $sformatf({"BANK=%0d GID=%0d BADDR=0x%0h ",
+                                         "reference=0x%02x actual=0x%02x\n"},
+                                        bank, gid, baddr, reference_value, actual_value)};
+            end
+        end
+    end
+    if (mismatch_count != 0) begin
+        diagnostic = {$sformatf("final memory mismatch bytes=%0d\n", mismatch_count), diagnostic};
+    end
+    return mismatch_count == 0;
+endfunction : compare_final_memory
 
 function bit shm_scoreboard::is_finished_ref_trans(int index);
     shm_wtrans_item curr_trans = ref_record_q[index].tr;

@@ -17,4 +17,8 @@ package shm_test_package;
     `include "shm_tmsk_directed_test.svh"
     `include "shm_vtrans_full_mask_test.svh"
     `include "shm_payload_dontcare_x_test.svh"
+    `include "shm_m_read_then_write_order_test.svh"
+    `include "shm_m_write_then_read_order_test.svh"
+    `include "shm_m_write_then_write_order_test.svh"
+    `include "shm_v_write_then_write_order_test.svh"
 endpackage : shm_test_package

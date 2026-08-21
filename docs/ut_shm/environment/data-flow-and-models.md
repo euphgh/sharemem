@@ -202,6 +202,11 @@ model。二者使用相同的地址范围和初始化策略，但推进时机不
 相同的 `i << 4` 初始化参数。测试依赖两边初始内容一致；修改初始化方法时必须同时修改
 reference 和 scoreboard，或抽取成一份共享初始化策略。
 
+Scoreboard 另保存 reference 实际触及的 physical byte key 集合，但不复制 expected data。
+Environment drain 后按该集合直接比较 `ref_banks` 与 `rtl_banks`，从而发现中间写都曾命中
+final/expired、但最后停在旧值的错误顺序。Mismatch key 包含 BANK、gid 和完整 BADDR；
+未触及的初始化地址不参与遍历。
+
 ## 6. Reservation 数据流
 
 统一 VLM agent 原子观察 reservation 请求和 MEM request，并主动驱动 busy、组织 MEM

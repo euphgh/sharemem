@@ -341,45 +341,45 @@ RTL 功能证据。空 design 只能证明编译、elaboration 和 package 集�
 ## 11. 完成状态
 
 - [ ] P0：建立可信的顺序验证基础设施
-  - [ ] 跨 transaction physical byte hazard
-    - [ ] 实现 M-access/V-write byte 集合 helper
-    - [ ] 实现双向 V-write/M-access overlap 检查和诊断
-    - [ ] `ORDER-HAZ-001`～`010` 组件测试通过
-  - [ ] Directed batch sequence
-    - [ ] 实现 item queue、delay 和发送前原子校验
-    - [ ] `send_directed_items()` 接入 directed base test
-    - [ ] 原 `send_directed_item()` API 和既有 tests 无回归
-    - [ ] `ORDER-SEQ-001`～`004` 组件测试通过
+  - [x] 跨 transaction physical byte hazard
+    - [x] 实现 M-access/V-write byte 集合 helper
+    - [x] 实现双向 V-write/M-access overlap 检查和诊断
+    - [x] `ORDER-HAZ-001`～`010` 组件测试通过
+  - [x] Directed batch sequence
+    - [x] 实现 item queue、delay 和发送前原子校验
+    - [x] `send_directed_items()` 接入 directed base test
+    - [x] 原 `send_directed_item()` API 和既有 tests 无回归
+    - [x] `ORDER-SEQ-001`～`004` 组件测试通过
   - [ ] `FFD_CYC` memory read snapshot
     - [x] 实现 `FFD_CYC>=1` 截止周期 snapshot 和 `RPORT_DLY` 固定周期返回
     - [x] 消除正参数窗口同周期读写的 testbench process-order 依赖
     - [x] `ORDER-MEM-001`～`006` 正参数组件矩阵通过
     - [x] `VMEM-001/TP-MEM-003` 状态按正参数证据更新
     - [ ] 支持并验证 `FFD_CYC=0`
-  - [ ] 最终 memory 一致性
-    - [ ] 实现 drain 后 `ref_banks/rtl_banks` 直接比较
-    - [ ] 未增加第三份 expected value memory
-    - [ ] 实现 BANK/GID/BADDR/expected/actual mismatch 诊断
-    - [ ] `ORDER-SCB-001`～`005` 组件测试通过
+  - [x] 最终 memory 一致性
+    - [x] 实现 drain 后 `ref_banks/rtl_banks` 直接比较
+    - [x] 未增加第三份 expected value memory
+    - [x] 实现 BANK/GID/BADDR/expected/actual mismatch 诊断
+    - [x] `ORDER-SCB-001`～`005` 组件测试通过
 - [ ] P0：增加真实 RTL 定向 Case
   - [ ] `ORDER-M-001`：M-read → M-write
-    - [ ] testcase、TC 和最终结果判定完成
-    - [ ] 空 design 编译通过
+    - [x] testcase、TC 和最终结果判定完成
+    - [x] 空 design 编译通过
     - [ ] 正式 design 运行通过
   - [ ] `ORDER-M-002`：M-write → M-read
-    - [ ] testcase、TC 和最终结果判定完成
-    - [ ] 空 design 编译通过
+    - [x] testcase、TC 和最终结果判定完成
+    - [x] 空 design 编译通过
     - [ ] 正式 design 运行通过
   - [ ] `ORDER-M-003`：M-write → M-write
-    - [ ] testcase、TC 和最终结果判定完成
-    - [ ] 空 design 编译通过
+    - [x] testcase、TC 和最终结果判定完成
+    - [x] 空 design 编译通过
     - [ ] 正式 design 运行通过
   - [ ] `ORDER-V-001`：V-write → V-write
-    - [ ] testcase、TC 和最终结果判定完成
-    - [ ] 空 design 编译通过
+    - [x] testcase、TC 和最终结果判定完成
+    - [x] 空 design 编译通过
     - [ ] 正式 design 运行通过
   - [ ] `shm_ordered_access.lst`
-    - [ ] 四个基础 test 全部登记
+    - [x] 四个基础 test 全部登记
     - [ ] 正式 design 独立列表通过
     - [ ] `shm.lst` 无新增回归
 - [ ] P1：覆盖率与扩展矩阵
@@ -394,3 +394,18 @@ RTL 功能证据。空 design 只能证明编译、elaboration 和 package 集�
   - [ ] 实现 bounded retry、窗口淘汰和冲突诊断
   - [ ] 增加窗口首笔、满窗口、淘汰和 retry 组件测试
   - [ ] 评估是否需要启用到普通 `m2v.tc/v2m.tc`
+
+### 11.1 当前验证证据
+
+2026-08-20 已完成以下非 DUT 门禁：
+
+- `scripts/ubuntu/check_shmins_sequence_vcs.sh all`：完整 SHMINS 组件集通过，其中
+  `ORDER-HAZ-001`～`010`、`ORDER-SEQ-001`～`004` 均输出 PASS；
+- `scripts/ubuntu/check_shm_final_memory_vcs.sh`：`ORDER-SCB-001`～`005` 全部通过；
+- `make .SHELLFLAGS=-ec compile`：四个新 test 与完整环境完成远端 VCS 编译和 elaboration；
+- `make .SHELLFLAGS=-ec smoke`：`TRANS_NUM=0` 空 design 路径通过，最终为
+  `UVM_ERROR: 0`、`UVM_FATAL: 0`。
+
+以上结果不构成 `ORDER-M-001`～`003` 或 `ORDER-V-001` 的 RTL 功能证据。下一步应在正式
+design 上运行独立 `shm_ordered_access.lst`；四项全部通过后再运行原 `shm.lst`，并据实
+更新上方完成状态。

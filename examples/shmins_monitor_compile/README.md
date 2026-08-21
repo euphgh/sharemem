@@ -27,3 +27,12 @@ catcher 降级。全零 sample 不会由 monitor 发布；测试直接调用 cov
 `driver_monitor_tb.sv` 还通过 `dontcare-driver` target 验证三笔 transaction 经过生产
 sequencer、driver、interface 和 monitor 后仍保留精确四态值，并检查
 `delay_cycle=0/1` 的 accept cycle。
+
+`ordered_batch_tb.sv` 通过 `ordered-batch` target 验证跨 transaction physical-byte
+hazard 和 directed queue transport。它覆盖双向 V-write/M-access 冲突、M/M 与 V/V
+合法 overlap、不同 gid 隔离、DTYP16 partial-byte overlap、零/一周期 item 间隔，以及
+非法 batch 在发布任何请求前被拒绝。通过标志为：
+
+```text
+[SHMINS_ORDERED_BATCH_TEST] ORDER-HAZ-001..010 and ORDER-SEQ-001..004: PASS
+```
